@@ -75,6 +75,23 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .cat-row:hover .cat-ic{opacity:1}
 .cat-row .cat-ic i{cursor:pointer;font-style:normal;font-size:13px}
 
+/* ===== EDIT PROFILE ===== */
+.profile-card{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:30px 34px;position:relative}
+.logo-up{position:relative;width:150px;margin-bottom:24px}
+.logo-circle{width:150px;height:150px;border-radius:50%;background:#e8f1fd;border:2px solid #cfe0fa;display:grid;place-items:center;text-align:center;color:#7a92c0;font-size:22px;font-weight:600;overflow:hidden}
+.logo-circle img{width:100%;height:100%;object-fit:cover}
+.logo-edit{position:absolute;right:6px;bottom:6px;width:38px;height:38px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);display:grid;place-items:center;cursor:pointer;font-size:15px}
+.profile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px 40px}
+.pf-h{font-size:19px;font-weight:700;color:#333;margin-bottom:18px}
+.pf-fld{margin-bottom:18px;display:flex;flex-direction:column;gap:8px}
+.pf-fld label{color:#666;font-size:14px}.pf-fld label b{color:var(--red)}
+.pf-fld input,.pf-fld select,.pf-fld textarea{border:1px solid var(--line);border-radius:8px;padding:13px 12px;outline:none;font-size:14px;font-family:inherit}
+.pf-fld input:focus,.pf-fld select:focus,.pf-fld textarea:focus{border-color:var(--blue)}
+.pf-fld textarea{min-height:120px;resize:vertical}
+.sign-up{border:1px dashed #cfd4dc;border-radius:8px;padding:26px;text-align:center;color:#8a8f9a;cursor:pointer;font-size:14px}
+.profile-foot{display:flex;justify-content:flex-end;gap:14px;margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
+.profile-foot .btn{border-radius:26px;padding:13px 34px;font-size:15px}
+
 /* ===== DATE FILTER ===== */
 .date-filter{display:flex;align-items:center;gap:8px;font-size:13px;color:#555}
 .date-filter input{border:1px solid var(--line);border-radius:8px;padding:8px;outline:none}
@@ -303,6 +320,7 @@ table.inv-tbl .ttl td{border-top:1px solid #dfe2e8}
   .im-row1{flex-wrap:wrap;gap:14px}
   .items-layout{flex-direction:column}
   .cat-panel{width:100%}
+  .profile-grid{grid-template-columns:1fr}
   .item-modal{width:96vw}
   .tb-center{display:none}
 }

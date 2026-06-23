@@ -4,7 +4,7 @@ let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)) }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
-function defaults(){ return {business:{name:'',phone:'',logo:''},parties:[],items:[],sales:[],purchases:[],
+function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'',category:'',address:'',pincode:'',signature:''},parties:[],items:[],sales:[],purchases:[],
   expenses:[],payments:[],banks:[],categories:['General'],counters:{sale:1}}; }
 function ensure(){ const d=defaults(); for(const k in d){ if(store[k]===undefined) store[k]=d[k]; } if(!store.business) store.business=d.business; }
 function id(){ return Math.random().toString(36).slice(2,9) }
@@ -60,7 +60,7 @@ function render(view){
   const map={home:vWelcome,parties:vParties,items:vItems,sale:vHome,purchase:vPurchase,reports:vReports,
     settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,
     bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,
-    barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,estimate:vEstimate};
+    barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,estimate:vEstimate,profile:vProfile};
   (map[view]||vGeneric(view))();
 }
 
@@ -453,6 +453,52 @@ function vEstimate(){ content.innerHTML=`<div class="page-head"><h2>Estimate / Q
   <div class="panel">${emptyMini('📄','No estimates yet')}</div>`; }
 function emptyMini(ic,t){ return `<div class="empty" style="padding:50px;text-align:center;color:#8a8f9a"><div style="font-size:44px">${ic}</div><div style="margin-top:8px">${t}</div></div>`; }
 
+/* EDIT PROFILE (My Company) */
+const BTYPES=['Retail','Wholesale','Distributor','Service','Manufacturing','Others'];
+const BCATS=['Accounting & CA','Interior Designer','Automobiles/ Auto parts','Salon & Spa','Liquor Store','Book / Stationary store','Construction Materials & Equipment','Repairing/ Plumbing/ Electrician','Chemicals & Fertilizers','Computer Equipments & Softwares','Electrical & Electronics Equipments','Fashion Accessory/ Cosmetics','Hardware Store','Industrial Machinery & Equipment','Mobile & Accessories','Nursery/ Plants','Petroleum Bulk Stations & Terminals/ Pumps','Restaurant/ Hotel','Footwear','Paper & Paper Products','Sweet Shop/ Bakery','Gifts & Toys','Laundry/ Washing/ Dry clean','Coaching & Training','Others'];
+function vProfile(){
+  const b=store.business;
+  content.innerHTML=`<div class="page-head"><h2>Edit Profile</h2></div>
+  <div class="profile-card">
+    <div class="logo-up">
+      <div class="logo-circle" id="pf_logo">${b.logo?`<img src="${b.logo}">`:'Add<br>Logo'}</div>
+      <label class="logo-edit">✏️<input type="file" accept="image/*" id="pf_logofile" onchange="pfLogo(this)" hidden></label>
+    </div>
+    <div class="profile-grid">
+      <div class="pf-col">
+        <h3 class="pf-h">Business Details</h3>
+        <div class="pf-fld"><label>Business Name<b>*</b></label><input id="pf_name" value="${b.name||''}"></div>
+        <div class="pf-fld"><label>Phone Number</label><input id="pf_phone" value="${b.phone||''}"></div>
+        <div class="pf-fld"><label>Email ID</label><input id="pf_email" value="${b.email||''}" placeholder="Enter Email ID"></div>
+      </div>
+      <div class="pf-col">
+        <h3 class="pf-h">More Details</h3>
+        <div class="pf-fld"><label>Business Type</label>
+          <select id="pf_btype"><option value="">Select Business Type</option>${BTYPES.map(t=>`<option ${b.btype===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="pf-fld"><label>Business Category</label>
+          <select id="pf_cat"><option value="">Select Business Category</option>${BCATS.map(c=>`<option ${b.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="pf-fld"><label>Pincode</label><input id="pf_pin" value="${b.pincode||''}" placeholder="Enter Pincode"></div>
+      </div>
+      <div class="pf-col">
+        <div class="pf-fld"><label>Business Address</label><textarea id="pf_addr" placeholder="Enter Business Address">${b.address||''}</textarea></div>
+        <div class="pf-fld"><label>Add Signature</label>
+          <label class="sign-up">☁️<br>Upload Signature${b.signature?' ✓':''}<input type="file" accept="image/*" id="pf_signfile" onchange="pfSign(this)" hidden></label></div>
+      </div>
+    </div>
+    <div class="profile-foot"><button class="btn btn-outline" onclick="nav('home')">Cancel</button>
+      <button class="btn btn-red" onclick="saveProfile()">Save Changes</button></div>
+  </div>`;
+}
+function pfLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ store.business.logo=e.target.result; persist(); document.getElementById('pf_logo').innerHTML=`<img src="${e.target.result}">`; toast('Logo added'); }; r.readAsDataURL(f); }
+function pfSign(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{ store.business.signature=e.target.result; persist(); toast('Signature added'); }; r.readAsDataURL(f); }
+function saveProfile(){ const b=store.business;
+  b.name=document.getElementById('pf_name').value.trim(); b.phone=document.getElementById('pf_phone').value.trim();
+  b.email=document.getElementById('pf_email').value.trim(); b.btype=document.getElementById('pf_btype').value;
+  b.category=document.getElementById('pf_cat').value; b.pincode=document.getElementById('pf_pin').value.trim();
+  b.address=document.getElementById('pf_addr').value.trim(); persist();
+  if(b.name) document.getElementById('bizName').textContent=b.name; toast('Profile saved'); }
+
 /* SETTINGS + LOGO */
 function vSettings(){
   content.innerHTML=`<div class="page-head"><h2>Settings</h2></div>
@@ -497,5 +543,6 @@ document.querySelectorAll('#itemModal .im-tab').forEach(t=>t.onclick=()=>{
 /* ============ INIT ============ */
 ensure(); persist();
 buildMenu();
+document.querySelector('.mycompany').onclick=()=>{ menuEl.querySelectorAll('.mi,.smi').forEach(x=>x.classList.remove('active')); nav('profile'); };
 if(store.business.name) document.getElementById('bizName').textContent=store.business.name;
 nav('home');
