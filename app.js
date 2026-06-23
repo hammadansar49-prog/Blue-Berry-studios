@@ -117,7 +117,14 @@ function vHome(){
       <div class="invoice-paper">
         <div class="inv-tag">Live Preview</div>
         <div class="inv-top-row">
-          <label class="hlogo" id="h_logo">${store.business.logo?`<img src="${store.business.logo}">`:'＋<br>Add Logo'}<input type="file" accept="image/*" id="h_logofile" onchange="hLogo(this)" hidden></label>
+          <div class="hlogo-wrap">
+            <div class="hlogo" id="h_logo" onclick="hLogoClick()">${store.business.logo?`<img src="${store.business.logo}">`:'＋<br>Add Logo'}</div>
+            <input type="file" accept="image/*" id="h_logofile" onchange="hLogo(this)" hidden>
+            <div class="logo-menu" id="h_logomenu">
+              <div onclick="hChangeLogo()">🖼️ Change Logo</div>
+              <div class="del" onclick="hDeleteLogo()">🗑️ Delete Logo</div>
+            </div>
+          </div>
           <div class="inv-head"><div class="ti">Invoice</div><div class="inv-tax">TAX INVOICE</div></div>
         </div>
         <div class="inv-meta"><div><b>Bill To</b><br><span class="muted" id="hp_cust">Enter Customer Name</span></div>
@@ -134,8 +141,16 @@ function vHome(){
   hPreview();
 }
 function hCalc(){ const a=pf('h_amt'),r=pf('h_recv'); document.getElementById('h_bal').textContent='Rs '+(a-r).toFixed(2); hPreview(); }
+function hLogoClick(){
+  if(store.business.logo){ document.getElementById('h_logomenu').classList.toggle('show'); }
+  else document.getElementById('h_logofile').click();
+}
+function hChangeLogo(){ document.getElementById('h_logomenu').classList.remove('show'); document.getElementById('h_logofile').value=''; document.getElementById('h_logofile').click(); }
+function hDeleteLogo(){ store.business.logo=''; persist(); document.getElementById('h_logomenu').classList.remove('show');
+  document.getElementById('h_logo').innerHTML='＋<br>Add Logo'; toast('Logo deleted'); }
 function hLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
-  r.onload=e=>{ store.business.logo=e.target.result; persist(); document.getElementById('h_logo').innerHTML=`<img src="${e.target.result}"><input type="file" accept="image/*" id="h_logofile" onchange="hLogo(this)" hidden>`; toast('Logo added'); }; r.readAsDataURL(f); }
+  r.onload=e=>{ store.business.logo=e.target.result; persist(); document.getElementById('h_logo').innerHTML=`<img src="${e.target.result}">`; toast('Logo saved'); }; r.readAsDataURL(f); }
+document.addEventListener('click',e=>{ const m=document.getElementById('h_logomenu'); if(m&&m.classList.contains('show')&&!e.target.closest('.hlogo-wrap')) m.classList.remove('show'); });
 function hPreview(){
   const cust=document.getElementById('h_cust').value.trim(), amt=pf('h_amt'), recv=pf('h_recv');
   document.getElementById('hp_cust').textContent=cust||'Enter Customer Name';

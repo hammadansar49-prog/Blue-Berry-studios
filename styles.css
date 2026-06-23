@@ -146,6 +146,12 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .invoice-paper{background:#fff;border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.1);padding:24px;position:relative}
 .inv-tag{position:absolute;top:14px;right:-6px;background:var(--yellow);color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:3px}
 .inv-top-row{display:flex;align-items:center;gap:16px;margin-bottom:10px}
+.hlogo-wrap{position:relative;flex-shrink:0}
+.logo-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);border:1px solid var(--line);padding:6px;z-index:25;min-width:170px}
+.logo-menu.show{display:block}
+.logo-menu div{padding:11px 14px;cursor:pointer;border-radius:6px;font-size:14px}
+.logo-menu div:hover{background:var(--bg)}
+.logo-menu .del{color:var(--red)}
 .hlogo{width:80px;height:80px;border-radius:8px;background:#eef4ff;border:1px dashed #b9cdf0;display:grid;place-items:center;text-align:center;color:#7a92c0;font-size:12px;font-weight:600;cursor:pointer;overflow:hidden;flex-shrink:0}
 .hlogo img{width:100%;height:100%;object-fit:cover}
 .inv-top-row .inv-head{flex:1;text-align:center}
