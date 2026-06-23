@@ -62,7 +62,8 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
 .biz-header{padding:18px 26px;font-size:18px;font-weight:500;color:#9aa0ab;display:flex;align-items:center;gap:8px}
 .biz-header .dot{color:var(--red);font-size:10px}
-.content{flex:1;overflow-y:auto;padding:0 26px 26px}
+.content{flex:1;overflow-y:auto;padding:0 26px 12px;display:flex;flex-direction:column}
+.content>.welcome-screen,.content>.empty-page,.content>.home-wrap{flex:1}
 
 /* ===== ITEMS LAYOUT ===== */
 .items-layout{display:flex;gap:16px;align-items:flex-start}
@@ -93,8 +94,8 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .hub-go{color:var(--red);font-weight:600;font-size:13px;margin-top:10px}
 
 /* ===== WELCOME ===== */
-.welcome-screen{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);min-height:580px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.welcome-screen .wel-logo{font-size:80px;margin-bottom:18px}
+.welcome-screen{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
+.welcome-screen .wel-logo{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#5b8def);color:#fff;font-weight:800;font-size:32px;display:grid;place-items:center;margin-bottom:22px;letter-spacing:1px}
 .welcome-screen h1{font-size:38px;font-weight:800;color:#222}
 .welcome-screen h1 .bb{color:var(--red)}
 .wel-by{margin-top:18px;font-size:20px}
@@ -102,7 +103,7 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .wel-by .n{color:#111;font-weight:800}
 
 /* ===== HOME / FIRST SALE ===== */
-.home-wrap{display:flex;gap:0;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);min-height:560px}
+.home-wrap{display:flex;gap:0;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);min-height:auto}
 .home-left{flex:1;padding:34px 40px}
 .home-left h1{font-size:26px;font-weight:800;margin-bottom:8px}
 .home-left .lead{color:#8a8f9a;margin-bottom:26px;font-size:15px}
@@ -141,7 +142,7 @@ table.pinv td{padding:7px;color:#888;border-bottom:1px solid #eee}
 .inv-tot .tr.hl{background:var(--purple);color:#fff;padding:6px 8px;margin:2px -8px}
 
 /* ===== EMPTY STATES ===== */
-.empty-page{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);min-height:560px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px}
+.empty-page{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);min-height:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px}
 .empty-page h2{font-size:24px;font-weight:800;margin-bottom:14px}
 .empty-page p{color:#8a8f9a;max-width:480px;line-height:1.6;font-size:15px}
 .empty-ill{font-size:120px;margin:30px 0;opacity:.9}
@@ -168,7 +169,7 @@ table.data td{padding:13px 18px;border-bottom:1px solid var(--line)}
 .btn-outline-grey{background:#fff;color:#9aa0ab;border:1px solid var(--line)}
 
 /* ===== ITEM MODAL ===== */
-.modal-overlay{position:fixed;inset:0;background:rgba(20,22,30,.45);display:none;align-items:flex-start;justify-content:center;padding:60px 16px;z-index:80;overflow:auto}
+.modal-overlay{position:fixed;inset:0;background:rgba(20,22,30,.45);display:none;align-items:center;justify-content:center;padding:24px 14px;z-index:80;overflow:auto}
 .modal-overlay.show{display:flex}
 .modal{background:#fff;border-radius:14px;width:460px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .item-modal{width:1000px;max-width:96vw}
@@ -200,11 +201,11 @@ table.data td{padding:13px 18px;border-bottom:1px solid var(--line)}
 .im-foot{display:flex;justify-content:flex-end;gap:14px;padding:16px 26px;border-top:1px solid var(--line)}
 
 /* ===== CREATE INVOICE MODAL ===== */
-.sale-modal{background:#fff;border-radius:12px;width:1180px;max-width:98vw;box-shadow:0 20px 60px rgba(0,0,0,.3);border:2px solid var(--yellow)}
-.sm-head{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--line)}
+.sale-modal{background:#fff;border-radius:12px;width:1180px;max-width:98vw;max-height:94vh;box-shadow:0 20px 60px rgba(0,0,0,.3);border:2px solid var(--yellow);display:flex;flex-direction:column;overflow:hidden}
+.sm-head{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--line);flex-shrink:0}
 .sm-head h3{font-size:20px;font-weight:700}
-.sm-body{display:flex}
-.sm-left{flex:1;padding:24px 28px;min-width:0}
+.sm-body{display:flex;flex:1;min-height:0}
+.sm-left{flex:1;padding:24px 28px;min-width:0;overflow-y:auto}
 .sm-cust{display:flex;gap:34px}
 .sm-fld{flex:1}
 .sm-fld label{display:block;color:#444;font-size:14px;margin-bottom:8px}
@@ -236,7 +237,7 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .cl-bal{text-align:right;font-weight:600;color:#333;margin-bottom:18px}.cl-bal b{margin-left:6px}
 .sm-total{background:#eef4fc;border-radius:8px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;font-size:20px;font-weight:800}
 /* right preview */
-.sm-right{width:470px;background:#f1f3f7;padding:22px;border-left:1px solid var(--line)}
+.sm-right{width:470px;background:#f1f3f7;padding:22px;border-left:1px solid var(--line);overflow-y:auto;flex-shrink:0}
 .inv-card{background:#fff;border-radius:8px;border:1px solid #e3e6ec;padding:22px}
 .inv-title{text-align:center;font-size:24px;font-weight:800;color:#333;margin-bottom:16px}
 .inv-co{display:flex;gap:16px;align-items:center;margin-bottom:6px}
@@ -281,3 +282,59 @@ table.inv-tbl .ttl td{border-top:1px solid #dfe2e8}
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#222;color:#fff;padding:12px 22px;border-radius:8px;opacity:0;transition:.3s;z-index:99}
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ================= RESPONSIVE ================= */
+/* Laptop / small desktop */
+@media(max-width:1200px){
+  .sm-right{width:400px}
+  .home-right{width:440px}
+  .hub-grid{grid-template-columns:repeat(2,1fr)}
+  .cards{grid-template-columns:repeat(2,1fr)}
+}
+/* Tablet */
+@media(max-width:992px){
+  .sidebar{width:220px}
+  .home-wrap{flex-direction:column}
+  .home-right{width:auto}
+  .home-left{padding:24px}
+  .sm-body{flex-direction:column}
+  .sm-right{width:auto;border-left:0;border-top:1px solid var(--line)}
+  .sm-cust{flex-direction:column;gap:16px}
+  .im-row1{flex-wrap:wrap;gap:14px}
+  .items-layout{flex-direction:column}
+  .cat-panel{width:100%}
+  .item-modal{width:96vw}
+  .tb-center{display:none}
+}
+/* Mobile */
+@media(max-width:680px){
+  .titlebar{padding:0 6px}
+  .tb-left{gap:10px}.tb-menu{display:none}.tb-logo{display:flex}
+  .sidebar{width:62px}
+  .side-search{justify-content:center;font-size:0;padding:11px 0}
+  .side-search .collapse{display:none}
+  .mi{padding:13px 0;justify-content:center;gap:0}
+  .mi .ic{font-size:20px}
+  .mi span:not(.ic),.mi .plus,.mi .chev{display:none}
+  .submenu .smi{padding-left:14px;font-size:12px}
+  .smi .plus{display:none}
+  .side-bottom{padding:8px 6px}
+  .mycompany{margin:8px -6px -8px;padding:14px 8px;font-size:0;justify-content:center}
+  .mycompany .mc-ic{font-size:20px}.mycompany .mc-arr{display:none}
+  .biz-header{padding:14px 16px;font-size:16px}
+  .content{padding:0 12px 12px}
+  .cards,.hub-grid{grid-template-columns:1fr}
+  .sec-row{flex-direction:column;gap:20px}
+  .cust-field input,.rs-input,.im-input,.im-cat{width:100%}
+  .inv-top{grid-template-columns:1fr}
+  .page-head{flex-direction:column;align-items:flex-start;gap:10px}
+  .date-filter{flex-wrap:wrap}
+  .sm-head h3{font-size:16px}
+  .sm-total{font-size:17px;padding:14px 16px}
+  .cl-inp input{width:110px}
+  .save-red{padding:13px 30px;font-size:15px}
+  .credit-corner{position:static;text-align:center;padding:8px}
+  .welcome-screen h1{font-size:26px}
+  table.data{font-size:13px}
+  table.data th,table.data td{padding:10px}
+}

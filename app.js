@@ -77,7 +77,7 @@ function renderHub(gi){
 /* ============ WELCOME ============ */
 function vWelcome(){
   content.innerHTML=`<div class="welcome-screen">
-    <div class="wel-logo">🫐</div>
+    <div class="wel-logo">BB</div>
     <h1>Welcome to <span class="bb">Blue Berry studios</span></h1>
     <div class="wel-by"><span class="d">design by</span> <span class="n">HAMMAD ANSAR</span></div>
   </div>`;
