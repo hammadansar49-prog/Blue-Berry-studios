@@ -169,6 +169,19 @@
   </div>
 </div>
 
+<!-- ============ INVOICE VIEW / PRINT MODAL ============ -->
+<div class="modal-overlay" id="invViewModal">
+  <div class="invview-modal">
+    <div class="iv-head"><h3>Invoice Preview</h3><button class="x" onclick="closeModal('invViewModal')">✕</button></div>
+    <div class="iv-body" id="iv_body"><!-- invoice html --></div>
+    <div class="iv-foot">
+      <button class="btn btn-outline" onclick="closeModal('invViewModal')">Close</button>
+      <button class="btn btn-outline-blue" onclick="downloadInvoice()">⬇️ Download</button>
+      <button class="btn btn-red" onclick="printInvoice()">🖨️ Print</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ ADD PARTY MODAL ============ -->
 <div class="modal-overlay" id="partyModal">
   <div class="party-modal">

@@ -217,8 +217,71 @@ function quickSale(){
   if(!p){ p={id:id(),name:cust,phone,type:'customer',balance:0}; store.parties.push(p); }
   p.balance += total-recv;
   if(recv>0) store.payments.push({id:id(),dir:'in',party:cust,amount:recv,mode:'Cash',date:dispDate()});
-  persist(); toast(recv>0?'Invoice + payment saved!':'Invoice created!'); nav('sale');
+  persist(); toast(recv>0?'Invoice + payment saved!':'Invoice created!');
+  showInvoiceView(store.sales[store.sales.length-1]);
 }
+/* ===== INVOICE VIEW + PRINT ===== */
+let viewInv=null;
+function buildInvoiceHTML(s){
+  const b=store.business, st=store.settings||{};
+  const rows=(s.rows&&s.rows.length)?s.rows:[{item:'Sale',qty:1,price:s.total}];
+  const sub=rows.reduce((a,r)=>a+r.qty*r.price,0);
+  const data=encodeURIComponent(`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)} | ${b.phone||''}`);
+  return `<div class="print-invoice">
+    <div class="pi-top">
+      <div class="pi-logo">${b.logo?`<img src="${b.logo}">`:'LOGO'}</div>
+      <div class="pi-co"><div class="pi-name">${b.name||'My Company'}</div>
+        <div class="pi-sub">${b.address||''}</div><div class="pi-sub">Phone: ${b.phone||'-'}</div></div>
+      <div class="pi-title">INVOICE</div>
+    </div>
+    <div class="pi-meta">
+      <div><b>Bill To</b><br>${s.party}<br>${s.phone?'+92 '+s.phone:''}</div>
+      <div style="text-align:right"><b>Invoice No:</b> ${s.no}<br><b>Date:</b> ${s.date}</div>
+    </div>
+    <table class="pi-tbl"><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.item}</td><td class="r">${r.qty}</td><td class="r">${rs(r.price)}</td><td class="r">${rs(r.qty*r.price)}</td></tr>`).join('')}</tbody></table>
+    <div class="pi-bottom">
+      <div class="pi-words"><b>Amount in words:</b><br>${words(s.total)} Rupees only
+        ${st.showQR!==false?`<br><img class="pi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${data}">`:''}</div>
+      <div class="pi-tot">
+        <div class="tr"><span>Sub Total</span><span>${rs(sub)}</span></div>
+        <div class="tr g"><span>Total</span><span>${rs(s.total)}</span></div>
+        <div class="tr"><span>Received</span><span>${rs(s.received)}</span></div>
+        <div class="tr"><span><b>${s.total-s.received<0?'Return':'Balance Due'}</b></span><span><b>${rs(Math.abs(s.total-s.received))}</b></span></div>
+      </div>
+    </div>
+    ${st.showTerms!==false?`<div class="pi-terms"><b>Terms &amp; Conditions:</b> ${st.terms||'Thanks for doing business with us!'}</div>`:''}
+    ${st.showSign!==false?`<div class="pi-sign">For ${b.name||'My Company'}<br><br>Authorised Signatory</div>`:''}
+  </div>`;
+}
+function showInvoiceView(s){ viewInv=s; document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s); showModal('invViewModal'); }
+function printInvoice(){
+  const w=window.open('','_blank','width=820,height=900');
+  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
+  w.document.close(); w.focus(); setTimeout(()=>{ w.print(); },300);
+}
+function downloadInvoice(){
+  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style></head><body>${buildInvoiceHTML(viewInv)}<script>window.onload=()=>window.print()<\/script></body></html>`); w.document.close();
+}
+function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
+.print-invoice{max-width:760px;margin:auto}
+.pi-top{display:flex;align-items:center;gap:16px;border-bottom:2px solid #333;padding-bottom:14px;margin-bottom:14px}
+.pi-logo{width:80px;height:80px;background:#8a8f96;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;overflow:hidden}
+.pi-logo img{width:100%;height:100%;object-fit:cover}
+.pi-co{flex:1}.pi-name{font-size:24px;font-weight:800}.pi-sub{color:#666;font-size:13px}
+.pi-title{font-size:26px;font-weight:800;color:#333}
+.pi-meta{display:flex;justify-content:space-between;font-size:14px;margin-bottom:16px}
+.pi-tbl{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px}
+.pi-tbl th{background:#eef0f3;padding:9px;text-align:left;border:1px solid #dcdfe5}
+.pi-tbl td{padding:9px;border:1px solid #eef0f3}
+.pi-tbl .r{text-align:right}
+.pi-bottom{display:flex;justify-content:space-between;gap:20px;font-size:14px}
+.pi-qr{margin-top:10px;border:1px solid #eee}
+.pi-tot{min-width:260px}
+.pi-tot .tr{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee}
+.pi-tot .tr.g{background:#eef0f3;font-weight:700;padding:7px 6px}
+.pi-terms{margin-top:18px;font-size:13px;color:#444;border-top:1px solid #eee;padding-top:12px}
+.pi-sign{text-align:right;margin-top:24px;font-size:13px;font-weight:600}`; }
 
 /* ============ CREATE INVOICE MODAL ============ */
 let saleRows=[];
