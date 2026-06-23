@@ -1,9 +1,10 @@
 :root{
-  --navy:#1b1f3b; --navy2:#262b4d; --navy-active:#2c3257; --navy-line:#2e3358;
-  --red:#ef3e4a; --red-dark:#d62f3b;
-  --yellow:#f5a623; --cream:#fdf0d6;
-  --blue:#2f80ed; --purple:#9b90e0;
-  --ink:#2b2f38; --muted:#8a8f9a; --line:#e6e8ec; --bg:#f6f7f9;
+  --navy:#3a4252; --navy2:#454d60; --navy-active:#4e576b; --navy-line:#2e3340;
+  --red:#e0413e; --red-dark:#c5332f;
+  --gold:#f0b429; --gold-dark:#e0a82e; --gold-light:#fbe6a8;
+  --yellow:#f0b429; --cream:#fbe6a8;
+  --blue:#2f6df6; --purple:#9b90e0;
+  --ink:#2d2d2d; --muted:#8a8f9a; --line:#e9ebf0; --bg:#f1f2f5;
 }
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',system-ui,sans-serif}
 body{background:var(--bg);color:var(--ink);font-size:14px}
@@ -38,7 +39,7 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .mi .plus{margin-left:auto;color:#aeb2cc;font-size:18px;font-weight:600}
 .mi .chev{margin-left:auto;color:#aeb2cc;font-size:12px;transition:.2s}
 .mi.open .chev{transform:rotate(180deg)}
-.submenu{display:none;background:#15182f}
+.submenu{display:none;background:#313845}
 .submenu.show{display:block}
 .smi{display:flex;align-items:center;justify-content:space-between;padding:12px 22px 12px 56px;font-size:14px;color:#b9bcd4;cursor:pointer;border-left:3px solid transparent}
 .smi:hover{background:var(--navy2)}
@@ -119,7 +120,7 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .rs-input{border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;width:280px;overflow:hidden}
 .rs-input .rs{padding:11px 12px;color:#6b7280;border-right:1px solid var(--line)}
 .rs-input input{border:0;outline:none;text-align:right;padding:11px 12px;flex:1;font-size:15px}
-.balance-bar{background:#eaf7ef;border-radius:8px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;font-weight:700;margin-top:6px}
+.balance-bar{background:#dfeee4;border-radius:8px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;font-weight:700;margin-top:6px}
 .balance-bar .amt{color:#1aa260;font-size:18px}
 .create-btn{display:block;margin:26px auto 0;background:#c9ccd6;color:#fff;border:0;border-radius:24px;padding:14px 30px;font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;gap:8px}
 .home-right{width:540px;background:linear-gradient(180deg,#eef0f6,#e7eaf2);padding:30px 34px;position:relative}
