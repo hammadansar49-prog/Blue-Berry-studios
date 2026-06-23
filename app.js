@@ -5,7 +5,7 @@ function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){retur
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)) }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
 function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'',category:'',address:'',pincode:'',signature:''},parties:[],items:[],sales:[],purchases:[],
-  expenses:[],payments:[],banks:[],categories:['General'],counters:{sale:1},
+  expenses:[],payments:[],banks:[],refunds:[],categories:['General'],counters:{sale:1},
   settings:{currency:'Rs',decimals:0,theme:'#e0413e',invPrefix:'INV-',showTax:true,showDiscount:true,showLogo:true,showQR:true,showSign:true,showTerms:true,terms:'Thanks for doing business with us!',taxRate:0,enableShipping:false,negativeStock:true}}; }
 function ensure(){ const d=defaults(); for(const k in d){ if(store[k]===undefined) store[k]=d[k]; } if(!store.business) store.business=d.business; }
 function id(){ return Math.random().toString(36).slice(2,9) }
@@ -226,7 +226,10 @@ function buildInvoiceHTML(s){
   const b=store.business, st=store.settings||{};
   const rows=(s.rows&&s.rows.length)?s.rows:[{item:'Sale',qty:1,price:s.total}];
   const sub=rows.reduce((a,r)=>a+r.qty*r.price,0);
-  const data=encodeURIComponent(`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)} | ${b.phone||''}`);
+  const slipText=`SLIP ${s.no}\n${b.name||'My Company'}\nBranch: ${b.address||'Main Branch'}\nPhone: ${b.phone||'-'}\nDate: ${s.date}\nCustomer: ${s.party}\n`+
+    rows.map(r=>`${r.item} x${r.qty} = ${rs(r.qty*r.price)}`).join('\n')+`\nTOTAL: ${rs(s.total)}`;
+  const data=encodeURIComponent(slipText);
+  const bcode=`https://barcodeapi.org/api/128/${encodeURIComponent(s.no)}`;
   return `<div class="print-invoice">
     <div class="pi-top">
       <div class="pi-logo">${b.logo?`<img src="${b.logo}">`:'LOGO'}</div>
@@ -242,7 +245,10 @@ function buildInvoiceHTML(s){
       <tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.item}</td><td class="r">${r.qty}</td><td class="r">${rs(r.price)}</td><td class="r">${rs(r.qty*r.price)}</td></tr>`).join('')}</tbody></table>
     <div class="pi-bottom">
       <div class="pi-words"><b>Amount in words:</b><br>${words(s.total)} Rupees only
-        ${st.showQR!==false?`<br><img class="pi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${data}">`:''}</div>
+        ${st.showQR!==false?`<div class="pi-codes">
+          <div class="pi-qrwrap"><img class="pi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${data}"><span>Scan: full slip + branch info</span></div>
+          <div class="pi-bcwrap"><img class="pi-barcode" src="${bcode}" alt="${s.no}"><span>Scan to open this slip (returns)</span></div>
+        </div>`:''}</div>
       <div class="pi-tot">
         <div class="tr"><span>Sub Total</span><span>${rs(sub)}</span></div>
         <div class="tr g"><span>Total</span><span>${rs(s.total)}</span></div>
@@ -254,7 +260,29 @@ function buildInvoiceHTML(s){
     ${st.showSign!==false?`<div class="pi-sign">For ${b.name||'My Company'}<br><br>Authorised Signatory</div>`:''}
   </div>`;
 }
-function showInvoiceView(s){ viewInv=s; document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s); showModal('invViewModal'); }
+function showInvoiceView(s){ viewInv=s; document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s);
+  const rf=document.getElementById('iv_refund'); if(rf){ rf.style.display=s.refunded?'none':''; if(s.refunded){ document.getElementById('iv_body').insertAdjacentHTML('afterbegin','<div class="refunded-stamp">REFUNDED</div>'); } }
+  showModal('invViewModal'); }
+function refundInvoice(){
+  const s=viewInv; if(s.refunded) return toast('Already refunded');
+  if(!confirm(`Refund invoice ${s.no} for ${rs(s.total)}? Stock will be restored and money recorded as refund.`)) return;
+  s.refunded=true;
+  (s.rows||[]).forEach(r=>{ const it=store.items.find(x=>x.name===r.item); if(it) it.stock+=r.qty; });
+  const p=store.parties.find(x=>x.name===s.party); if(p) p.balance-=(s.total-s.received);
+  store.refunds.push({id:id(),no:s.no,party:s.party,date:dispDate(),amount:s.total,orig:s.no});
+  if(s.received>0) store.payments.push({id:id(),dir:'out',party:s.party,amount:s.received,mode:'Cash',date:dispDate(),note:'Refund '+s.no});
+  persist(); toast('Refund done — sales recalculated'); closeModal('invViewModal'); nav('sale');
+}
+function replaceInvoice(){
+  const s=viewInv;
+  if(!confirm(`Start replacement for ${s.no}? Original stays, and a NEW slip opens for new products.`)) return;
+  s.replaced=true;
+  (s.rows||[]).forEach(r=>{ const it=store.items.find(x=>x.name===r.item); if(it) it.stock+=r.qty; }); // returned items back to stock
+  persist(); closeModal('invViewModal');
+  replaceFor=s.party;
+  openSale(); document.getElementById('s_cust').value=s.party; toast('Add new products for replacement');
+}
+let replaceFor=null;
 function printInvoice(){
   const w=window.open('','_blank','width=820,height=900');
   w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
@@ -500,16 +528,18 @@ function vSale(){
       <button class="btn-big red" onclick="openSale()">＋ Add Your First Sale Invoice</button></div>`;
     return;
   }
-  content.innerHTML=`<div class="page-head"><h2>Sale Invoices</h2><button class="btn btn-red" onclick="openSale()">+ Add Sale</button></div>`;
-  txnAppend('sales','Sale Invoices');
-}
-function txnAppend(key){ const d=document.createElement('div'); content.appendChild(d);
-  const rows=[...store[key]].reverse();
-  d.innerHTML=`<div class="panel"><table class="data"><thead><tr><th>No.</th><th>Party</th><th>Date</th><th class="right">Amount</th><th class="right">Balance</th><th>Status</th></tr></thead><tbody>
-    ${rows.map(s=>`<tr><td class="bold">${s.no}</td><td>${s.party}</td><td>${s.date}</td><td class="right">${rs(s.total)}</td>
-      <td class="right bold">${rs(s.total-s.received)}</td><td>${s.total-s.received<=0?'<span class="pill paid">Paid</span>':'<span class="pill due">Unpaid</span>'}</td></tr>`).join('')}
+  const rows=[...store.sales].reverse();
+  content.innerHTML=`<div class="page-head"><h2>Sale Invoices</h2><button class="btn btn-red" onclick="openSale()">+ Add Sale</button></div>
+    <div class="scan-box">🔎 <input id="scan_inv" placeholder="Scan returned slip / type invoice no (e.g. INV-01) and press Enter" onkeydown="if(event.key==='Enter')findSlip(this.value)">
+      <button class="btn btn-outline" onclick="findSlip(document.getElementById('scan_inv').value)">Open Slip</button></div>
+    <div class="panel"><table class="data"><thead><tr><th>No.</th><th>Party</th><th>Date</th><th class="right">Amount</th><th class="right">Balance</th><th>Status</th></tr></thead><tbody>
+    ${rows.map(s=>`<tr style="cursor:pointer" onclick="openSlip('${s.id}')"><td class="bold" style="color:var(--blue)">${s.no}</td><td>${s.party}</td><td>${s.date}</td><td class="right">${rs(s.total)}</td>
+      <td class="right bold">${rs(s.total-s.received)}</td><td>${s.refunded?'<span class="pill due">Refunded</span>':s.replaced?'<span class="pill partial">Replaced</span>':s.total-s.received<=0?'<span class="pill paid">Paid</span>':'<span class="pill due">Unpaid</span>'}</td></tr>`).join('')}
     </tbody></table></div>`;
 }
+function openSlip(sid){ const s=store.sales.find(x=>x.id===sid); if(s) showInvoiceView(s); }
+function findSlip(no){ no=(no||'').trim(); if(!no)return; const s=store.sales.find(x=>x.no.toLowerCase()===no.toLowerCase());
+  if(s){ showInvoiceView(s); } else toast('No slip found for '+no); }
 function vPurchase(){
   if(!store.purchases.length){
     content.innerHTML=`<div class="empty-page">
@@ -558,8 +588,9 @@ function toISO(d){ if(d.includes('-')&&d.length===10&&d[2]==='-'){ const p=d.spl
 function applyRep(){ repFrom=document.getElementById('rep_from').value; repTo=document.getElementById('rep_to').value; drawRep(); }
 function clearRep(){ repFrom=''; repTo=''; vReports(); }
 function drawRep(){
-  const sales=store.sales.filter(s=>inRange(s.date)), purch=store.purchases.filter(p=>inRange(p.date)), exp=store.expenses.filter(e=>inRange(e.date));
-  const ts=sales.reduce((a,b)=>a+b.total,0), tp=purch.reduce((a,b)=>a+b.total,0), te=exp.reduce((a,b)=>a+b.amount,0);
+  const sales=store.sales.filter(s=>inRange(s.date)&&!s.refunded), purch=store.purchases.filter(p=>inRange(p.date)), exp=store.expenses.filter(e=>inRange(e.date));
+  const refs=(store.refunds||[]).filter(r=>inRange(r.date));
+  const ts=sales.reduce((a,b)=>a+b.total,0), tp=purch.reduce((a,b)=>a+b.total,0), te=exp.reduce((a,b)=>a+b.amount,0), tr=refs.reduce((a,b)=>a+b.amount,0);
   const body=document.getElementById('rep_body'); if(!body)return;
   const tbl=(head,rows)=>rows.length?`<div class="panel"><table class="data"><thead><tr>${head.map((h,i)=>`<th class="${i>0?'right':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`:emptyMini('📊','No data for selected dates');
   let html='';
@@ -580,9 +611,9 @@ function drawRep(){
       const all=[...sales.map(s=>({t:'Sale',n:s.party,d:s.date,a:s.total})),...purch.map(p=>({t:'Purchase',n:p.party,d:p.date,a:-p.total})),...exp.map(e=>({t:'Expense',n:e.cat,d:e.date,a:-e.amount}))];
       html=tbl(['Type','Name','Date','Amount'],all.map(x=>`<tr><td class="bold">${x.t}</td><td>${x.n}</td><td>${x.d}</td><td class="right" style="color:${x.a>=0?'#1aa260':'var(--red)'}">${rs(x.a)}</td></tr>`)); break;
     default:
-      html=`<div class="cards"><div class="card"><div class="lbl">Sales</div><div class="val" style="color:#1aa260">${rs(ts)}</div></div>
+      html=`<div class="cards"><div class="card"><div class="lbl">Net Sales</div><div class="val" style="color:#1aa260">${rs(ts)}</div></div>
         <div class="card"><div class="lbl">Purchase</div><div class="val">${rs(tp)}</div></div>
-        <div class="card"><div class="lbl">Expenses</div><div class="val" style="color:var(--red)">${rs(te)}</div></div>
+        <div class="card"><div class="lbl">Refunds</div><div class="val" style="color:var(--red)">${rs(tr)}</div></div>
         <div class="card"><div class="lbl">Net Profit</div><div class="val" style="color:${ts-tp-te>=0?'#1aa260':'var(--red)'}">${rs(ts-tp-te)}</div></div></div>`;
   }
   body.innerHTML=html;

@@ -398,6 +398,16 @@ textarea.pm-in{min-height:110px;resize:vertical}
 .btn-blue{background:var(--blue);color:#fff;border-radius:8px;padding:11px 30px}
 .btn-outline-blue{background:#fff;color:var(--blue);border:1px solid var(--blue);border-radius:8px;padding:11px 26px}
 
+/* ===== SCAN BOX ===== */
+.scan-box{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.scan-box input{flex:1;border:1px solid var(--line);border-radius:8px;padding:11px 12px;outline:none}
+/* invoice codes */
+.print-invoice .pi-codes{display:flex;gap:24px;margin-top:12px}
+.print-invoice .pi-qrwrap,.print-invoice .pi-bcwrap{text-align:center;font-size:11px;color:#666}
+.print-invoice .pi-barcode{height:64px;max-width:200px}
+.print-invoice .pi-qrwrap span,.print-invoice .pi-bcwrap span{display:block;margin-top:4px}
+.refunded-stamp{position:sticky;top:0;background:var(--red);color:#fff;text-align:center;font-weight:800;letter-spacing:4px;padding:8px;border-radius:6px;margin-bottom:12px}
+
 /* ===== INVOICE VIEW MODAL ===== */
 .invview-modal{background:#fff;border-radius:14px;width:840px;max-width:96vw;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .iv-head{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--line)}
