@@ -417,15 +417,28 @@ function txn(key,title){
 }
 
 /* ============ REPORTS ============ */
-let repFrom='', repTo='';
+let repFrom='', repTo='', repSel='Sale';
+const REPORTS={
+  'Transaction report':['Sale','Purchase','Day book','All Transactions','Profit And Loss','Bill Wise Profit','Cash flow','Trial Balance Report','Balance Sheet'],
+  'Party report':['Party Statement','Party wise Profit & Loss','All parties','Party Report By Item','Sale Purchase By Party'],
+  'Item/Stock report':['Item Wise Profit And Loss','Low Stock Summary','Stock Detail','Item Detail','Item Wise Discount'],
+  'Business Status':['Bank Statement','Discount Report'],
+  'Taxes':['Tax Report','Tax Rate report'],
+  'Expense report':['Expense','Expense Category Report']
+};
 function vReports(){
-  content.innerHTML=`<div class="page-head"><h2>Reports</h2>
-    <div class="date-filter">From <input type="date" id="rep_from" value="${repFrom}" onchange="applyRep()">
-      To <input type="date" id="rep_to" value="${repTo}" onchange="applyRep()">
-      <button class="btn btn-outline" onclick="clearRep()">All</button></div></div>
-    <div id="rep_body"></div>`;
+  content.innerHTML=`<div class="rep-layout">
+    <div class="rep-menu">${Object.entries(REPORTS).map(([g,arr])=>`
+      <div class="rep-grp">${g}</div>${arr.map(r=>`<div class="rep-item ${r===repSel?'active':''}" onclick="pickRep('${r}')">${r}</div>`).join('')}`).join('')}</div>
+    <div class="rep-main">
+      <div class="page-head"><h2 id="rep_title">${repSel}</h2>
+        <div class="date-filter">From <input type="date" id="rep_from" value="${repFrom}" onchange="applyRep()">
+        To <input type="date" id="rep_to" value="${repTo}" onchange="applyRep()">
+        <button class="btn btn-outline" onclick="clearRep()">All</button></div></div>
+      <div id="rep_body"></div></div></div>`;
   drawRep();
 }
+function pickRep(r){ repSel=r; vReports(); }
 function inRange(dateStr){ if(!repFrom&&!repTo)return true; const d=toISO(dateStr);
   if(repFrom&&d<repFrom)return false; if(repTo&&d>repTo)return false; return true; }
 function toISO(d){ if(d.includes('-')&&d.length===10&&d[2]==='-'){ const p=d.split('-'); return p[2]+'-'+p[1]+'-'+p[0]; } return d; }
@@ -434,15 +447,32 @@ function clearRep(){ repFrom=''; repTo=''; vReports(); }
 function drawRep(){
   const sales=store.sales.filter(s=>inRange(s.date)), purch=store.purchases.filter(p=>inRange(p.date)), exp=store.expenses.filter(e=>inRange(e.date));
   const ts=sales.reduce((a,b)=>a+b.total,0), tp=purch.reduce((a,b)=>a+b.total,0), te=exp.reduce((a,b)=>a+b.amount,0);
-  document.getElementById('rep_body').innerHTML=`
-    <div class="cards"><div class="card"><div class="lbl">Sales</div><div class="val" style="color:#1aa260">${rs(ts)}</div></div>
-      <div class="card"><div class="lbl">Purchase</div><div class="val">${rs(tp)}</div></div>
-      <div class="card"><div class="lbl">Expenses</div><div class="val" style="color:var(--red)">${rs(te)}</div></div>
-      <div class="card"><div class="lbl">Net Profit</div><div class="val" style="color:${ts-tp-te>=0?'#1aa260':'var(--red)'}">${rs(ts-tp-te)}</div></div></div>
-    <div class="panel"><div class="panel-head" style="padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700">Sale Transactions ${repFrom||repTo?'(filtered)':''}</div>
-      ${sales.length?`<table class="data"><thead><tr><th>No.</th><th>Party</th><th>Date</th><th class="right">Amount</th></tr></thead><tbody>
-      ${[...sales].reverse().map(s=>`<tr><td class="bold">${s.no}</td><td>${s.party}</td><td>${s.date}</td><td class="right">${rs(s.total)}</td></tr>`).join('')}
-      </tbody></table>`:emptyMini('📊','No data for selected dates')}</div>`;
+  const body=document.getElementById('rep_body'); if(!body)return;
+  const tbl=(head,rows)=>rows.length?`<div class="panel"><table class="data"><thead><tr>${head.map((h,i)=>`<th class="${i>0?'right':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`:emptyMini('📊','No data for selected dates');
+  let html='';
+  switch(repSel){
+    case 'Sale':
+      html=tbl(['No.','Party','Date','Amount','Balance'],[...sales].reverse().map(s=>`<tr><td class="bold">${s.no}</td><td>${s.party}</td><td>${s.date}</td><td class="right">${rs(s.total)}</td><td class="right">${rs(s.total-s.received)}</td></tr>`)); break;
+    case 'Purchase':
+      html=tbl(['No.','Party','Date','Amount'],[...purch].reverse().map(p=>`<tr><td class="bold">${p.no}</td><td>${p.party}</td><td>${p.date}</td><td class="right">${rs(p.total)}</td></tr>`)); break;
+    case 'Expense': case 'Expense Category Report':
+      html=tbl(['Category','Note','Date','Amount'],[...exp].reverse().map(e=>`<tr><td class="bold">${e.cat}</td><td class="muted">${e.note||'-'}</td><td>${e.date}</td><td class="right">${rs(e.amount)}</td></tr>`)); break;
+    case 'All parties': case 'Party Statement': case 'Party wise Profit & Loss':
+      html=tbl(['Party','Phone','Type','Balance'],store.parties.map(p=>`<tr><td class="bold">${p.name}</td><td class="muted">${p.phone||'-'}</td><td>${p.type}</td><td class="right">${rs(p.balance)}</td></tr>`)); break;
+    case 'Stock Detail': case 'Item Detail': case 'Item Wise Profit And Loss':
+      html=tbl(['Item','Code','Sale','Purchase','Stock','Value'],store.items.map(i=>`<tr><td class="bold">${i.name}</td><td class="muted">${i.code||'-'}</td><td class="right">${rs(i.price)}</td><td class="right">${rs(i.pprice)}</td><td class="right">${i.stock||0}</td><td class="right">${rs((i.stock||0)*i.price)}</td></tr>`)); break;
+    case 'Low Stock Summary':
+      html=tbl(['Item','Stock','Status'],store.items.filter(i=>(i.stock||0)<10).map(i=>`<tr><td class="bold">${i.name}</td><td class="right">${i.stock||0}</td><td class="right"><span class="pill due">Low</span></td></tr>`)); break;
+    case 'Day book': case 'All Transactions':
+      const all=[...sales.map(s=>({t:'Sale',n:s.party,d:s.date,a:s.total})),...purch.map(p=>({t:'Purchase',n:p.party,d:p.date,a:-p.total})),...exp.map(e=>({t:'Expense',n:e.cat,d:e.date,a:-e.amount}))];
+      html=tbl(['Type','Name','Date','Amount'],all.map(x=>`<tr><td class="bold">${x.t}</td><td>${x.n}</td><td>${x.d}</td><td class="right" style="color:${x.a>=0?'#1aa260':'var(--red)'}">${rs(x.a)}</td></tr>`)); break;
+    default:
+      html=`<div class="cards"><div class="card"><div class="lbl">Sales</div><div class="val" style="color:#1aa260">${rs(ts)}</div></div>
+        <div class="card"><div class="lbl">Purchase</div><div class="val">${rs(tp)}</div></div>
+        <div class="card"><div class="lbl">Expenses</div><div class="val" style="color:var(--red)">${rs(te)}</div></div>
+        <div class="card"><div class="lbl">Net Profit</div><div class="val" style="color:${ts-tp-te>=0?'#1aa260':'var(--red)'}">${rs(ts-tp-te)}</div></div></div>`;
+  }
+  body.innerHTML=html;
 }
 
 /* ============ GENERIC EMPTY ============ */
