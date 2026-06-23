@@ -5,7 +5,7 @@ function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){retur
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)) }
 function seed(){ const d={business:{name:''},parties:[],items:[],sales:[],purchases:[],counters:{sale:1}}; localStorage.setItem(KEY,JSON.stringify(d)); return d; }
 function id(){ return Math.random().toString(36).slice(2,9) }
-const rs = n => '₹'+Number(n||0).toLocaleString('en-IN');
+const rs = n => 'Rs '+Number(n||0).toLocaleString('en-IN');
 
 /* ============ MENU CONFIG ============ */
 const MENU=[
@@ -48,8 +48,17 @@ function nav(view,el){
   render(view);
 }
 function render(view){
-  const map={home:vHome,parties:vParties,items:vItems,sale:vHome,purchase:vPurchase,reports:vReports};
+  const map={home:vWelcome,parties:vParties,items:vItems,sale:vHome,purchase:vPurchase,reports:vReports};
   (map[view]||vGeneric(view))();
+}
+
+/* ============ WELCOME ============ */
+function vWelcome(){
+  content.innerHTML=`<div class="welcome-screen">
+    <div class="wel-logo">🫐</div>
+    <h1>Welcome to <span class="bb">Blue Berry studios</span></h1>
+    <div class="wel-by"><span class="d">design by</span> <span class="n">HAMMAD ANSAR</span></div>
+  </div>`;
 }
 
 /* ============ HOME (FIRST SALE) ============ */
@@ -89,13 +98,13 @@ function vHome(){
         <div class="inv-meta"><div><b>Bill To</b><br><span class="muted">Enter Customer Name</span></div>
           <div class="r"><b style="color:#333">Invoice Details</b><br>Invoice No. #1<br>Date : ${dispDate()}</div></div>
         <table class="pinv"><thead><tr><th>#</th><th>Item name</th><th>Qty</th><th>Price/ Unit</th><th>Amt</th></tr></thead>
-          <tbody><tr><td>1</td><td>Item 1</td><td>2</td><td>₹500</td><td>₹1000</td></tr>
-          <tr><td>2</td><td>Item 2</td><td>1</td><td>₹500</td><td>₹500</td></tr>
-          <tr><td></td><td><b>Total</b></td><td>3</td><td></td><td><b>₹1500</b></td></tr></tbody></table>
+          <tbody><tr><td>1</td><td>Item 1</td><td>2</td><td>Rs 500</td><td>Rs 1000</td></tr>
+          <tr><td>2</td><td>Item 2</td><td>1</td><td>Rs 500</td><td>Rs 500</td></tr>
+          <tr><td></td><td><b>Total</b></td><td>3</td><td></td><td><b>Rs 1500</b></td></tr></tbody></table>
         <div class="inv-bottom"><div class="inv-words"><b>Amount In Words -</b><br><span class="muted">One Thousand Five Hundred Rupees only</span></div>
-          <div class="inv-tot"><div class="tr"><span>Sub Total</span><span>₹1500</span></div>
-            <div class="tr hl"><span>Total</span><span>₹1500</span></div>
-            <div class="tr"><span><b>Balance Due</b></span><span>₹1500</span></div></div></div>
+          <div class="inv-tot"><div class="tr"><span>Sub Total</span><span>Rs 1500</span></div>
+            <div class="tr hl"><span>Total</span><span>Rs 1500</span></div>
+            <div class="tr"><span><b>Balance Due</b></span><span>Rs 1500</span></div></div></div>
       </div>
     </div>
   </div>`;
@@ -152,7 +161,9 @@ function recalcSale(){
   if(pf('s_discp')>0) document.getElementById('s_disc').value=t.disc.toFixed(0);
   document.getElementById('s_tax').value=t.tax.toFixed(0);
   document.getElementById('s_sub').textContent=t.sub;
-  document.getElementById('s_bal').textContent=t.balance;
+  const balEl=document.getElementById('s_bal');
+  if(t.balance<0){ balEl.innerHTML='<span style="color:#1aa260">Return to Customer: '+Math.abs(t.balance)+'</span>'; }
+  else balEl.textContent=t.balance;
   document.getElementById('s_total').textContent=t.total;
   drawInv();
 }
@@ -169,8 +180,11 @@ function drawInv(){
   document.getElementById('p_sub').textContent=f(t.sub);
   document.getElementById('p_total').textContent=f(t.total);
   document.getElementById('p_recv').textContent=f(t.recv);
-  document.getElementById('p_balance').textContent=f(t.balance);
+  document.getElementById('p_balance').textContent = t.balance<0 ? 'Return '+f(Math.abs(t.balance)) : f(t.balance);
   document.getElementById('p_words').textContent=words(t.total)+' Rupees only';
+  const co=store.business.name||'My Company', ph=store.business.phone||'3341100761';
+  const data=encodeURIComponent(`Invoice from ${co} | Total Rs ${t.total} | Contact ${ph}`);
+  document.getElementById('p_qr').src=`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${data}`;
 }
 function words(n){ n=Math.round(n); if(n===0)return 'Zero';
   const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
