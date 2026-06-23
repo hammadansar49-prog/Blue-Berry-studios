@@ -96,7 +96,7 @@
       <div class="sm-right">
         <div class="inv-card">
           <div class="inv-title">Invoice</div>
-          <div class="inv-co"><div class="logo-box">LOGO</div>
+          <div class="inv-co"><div class="logo-box" id="p_logo">LOGO</div>
             <div class="co-info"><div class="co-name" id="p_co">My Company</div><div class="co-phone">Phone: <b id="p_cophone">3341100761</b></div></div></div>
           <div class="inv-band">Invoice Details:</div>
           <div class="inv-det"><div>Invoice No.: <b>1</b></div><div>Date: <b id="p_date"></b></div></div>
@@ -140,12 +140,12 @@
     <div class="im-body">
       <div class="im-row1">
         <div class="float-field"><label>Item Name *</label><input id="i_name"></div>
-        <select class="im-cat"><option>Category</option></select>
+        <select class="im-cat" id="i_cat"></select>
         <button class="im-unit">Select Unit</button>
         <button class="im-img">⊞ Add Item Image</button>
       </div>
       <div class="im-row2">
-        <div class="code-field"><input placeholder="Item Code"><button class="assign">Assign Code</button></div>
+        <div class="code-field"><input id="i_code" placeholder="Item Code"><button class="assign" onclick="assignCode()">Assign Code</button></div>
       </div>
       <div class="im-tabs"><span class="im-tab active">Pricing</span><span class="im-tab">Stock</span></div>
       <div class="im-section">
