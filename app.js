@@ -475,9 +475,36 @@ function drawRep(){
   body.innerHTML=html;
 }
 
-/* ============ GENERIC EMPTY ============ */
-function vGeneric(view){ return ()=>{ content.innerHTML=`<div class="empty-page"><div class="empty-ill">📋</div>
-  <h2>${view.charAt(0).toUpperCase()+view.slice(1)}</h2><p>This section works just like Vyapar. Add your first record to get started.</p></div>`; }; }
+/* ============ GENERIC SECTIONS ============ */
+const META={
+  estimate:{ic:'📄',t:'Estimate / Quotation',d:'Create estimates & quotations and convert them to invoices.',btn:'＋ Add Estimate',act:'openSale'},
+  saleorder:{ic:'📝',t:'Sale Order',d:'Take advance orders from customers and track them.',btn:'＋ Add Sale Order',act:'openSale'},
+  challan:{ic:'🚚',t:'Delivery Challan',d:'Send goods with a delivery challan before billing.',btn:'＋ Add Delivery Challan',act:'openSale'},
+  salereturn:{ic:'↩️',t:'Sale Return / Cr. Note',d:'Record returned goods and credit notes.',btn:'＋ Add Sale Return',act:'openSale'},
+  purchaseorder:{ic:'🧾',t:'Purchase Order',d:'Create purchase orders for your suppliers.',btn:'＋ Add Purchase Order',act:'openSale'},
+  purchasereturn:{ic:'↩️',t:'Purchase Return / Dr. Note',d:'Record goods returned to suppliers.',btn:'＋ Add Purchase Return',act:'openSale'},
+  marketing:{ic:'📣',t:'Marketing Tools',d:'Send greetings, offers and reminders to customers via WhatsApp.',btn:'Explore Tools'},
+  onlinestore:{ic:'🛒',t:'Online Store',d:'Create your own online store and sell your items online.',btn:'Set Up Store'},
+  backup:{ic:'💾',t:'Backup to Computer',d:'Save a backup of all your data to your computer.',btn:'Create Backup',act:'doBackup'},
+  autobackup:{ic:'🔁',t:'Auto Backup',d:'Automatically back up your data every day.',btn:'Enable Auto Backup'},
+  share:{ic:'📤',t:'Share Data',d:'Share your business data with your accountant or partner.',btn:'Share Now'},
+  importparties:{ic:'👥',t:'Import Parties',d:'Bulk import customers & suppliers from Excel/CSV.',btn:'Choose File'},
+  bulkupdate:{ic:'✏️',t:'Bulk Update Items',d:'Update prices and stock for many items at once.',btn:'Start Bulk Update'},
+  exporttally:{ic:'📊',t:'Export to Tally',d:'Export your data in Tally compatible format.',btn:'Export'},
+  exportitems:{ic:'📦',t:'Export Items',d:'Export your item list to Excel.',btn:'Export Items'},
+  verifydata:{ic:'✅',t:'Verify My Data',d:'Check your data for any inconsistencies.',btn:'Verify Now'},
+  marketingtools:{ic:'📣',t:'Marketing Tools',d:'Grow your business with marketing tools.',btn:'Explore'}
+};
+function vGeneric(view){ return ()=>{
+  const m=META[view]||{ic:'📋',t:view.charAt(0).toUpperCase()+view.slice(1),d:'This section works just like Vyapar.',btn:''};
+  content.innerHTML=`<div class="empty-page"><div class="empty-ill">${m.ic}</div>
+    <h2>${m.t}</h2><p>${m.d}</p>
+    ${m.btn?`<button class="btn-big red" onclick="${m.act?m.act+'()':"toast('"+m.t+" (demo)')"}">${m.btn}</button>`:''}</div>`;
+}; }
+function doBackup(){
+  const data=JSON.stringify(store,null,2); const blob=new Blob([data],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bluberry-backup-'+new Date().toISOString().slice(0,10)+'.json'; a.click(); toast('Backup downloaded');
+}
 
 /* ============ EXTRA MODULES ============ */
 function vPaymentIn(){ moneyList('payments','in','Payment-In','Money received from customers') }
