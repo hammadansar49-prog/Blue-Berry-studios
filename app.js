@@ -48,7 +48,7 @@ function nav(view,el){
   render(view);
 }
 function render(view){
-  const map={home:vHome,parties:vParties,items:vItems,sale:vSale,purchase:vPurchase,reports:vReports};
+  const map={home:vHome,parties:vParties,items:vItems,sale:vHome,purchase:vPurchase,reports:vReports};
   (map[view]||vGeneric(view))();
 }
 
