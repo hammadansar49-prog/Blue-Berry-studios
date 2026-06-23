@@ -113,7 +113,7 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 /* ===== WELCOME ===== */
 .welcome-screen{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
 .welcome-screen .wel-logo{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#5b8def);color:#fff;font-weight:800;font-size:32px;display:grid;place-items:center;margin-bottom:22px;letter-spacing:1px}
-.welcome-screen h1{font-size:38px;font-weight:800;color:#222}
+.welcome-screen h1{font-family:'Pirata One','MedievalSharp',cursive;font-size:54px;font-weight:400;color:#222;letter-spacing:1px}
 .welcome-screen h1 .bb{color:var(--red)}
 .wel-by{margin-top:18px;font-size:20px}
 .wel-by .d{color:var(--red);font-weight:700}
