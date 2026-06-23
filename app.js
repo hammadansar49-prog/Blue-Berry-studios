@@ -5,10 +5,11 @@ function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){retur
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)) }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
 function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'',category:'',address:'',pincode:'',signature:''},parties:[],items:[],sales:[],purchases:[],
-  expenses:[],payments:[],banks:[],categories:['General'],counters:{sale:1}}; }
+  expenses:[],payments:[],banks:[],categories:['General'],counters:{sale:1},
+  settings:{currency:'Rs',decimals:0,theme:'#e0413e',invPrefix:'INV-',showTax:true,showDiscount:true,showLogo:true,showQR:true,showSign:true,showTerms:true,terms:'Thanks for doing business with us!',taxRate:0,enableShipping:false,negativeStock:true}}; }
 function ensure(){ const d=defaults(); for(const k in d){ if(store[k]===undefined) store[k]=d[k]; } if(!store.business) store.business=d.business; }
 function id(){ return Math.random().toString(36).slice(2,9) }
-const rs = n => 'Rs '+Number(n||0).toLocaleString('en-IN');
+const rs = n => { const s=(store.settings||{}); return (s.currency||'Rs')+' '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:s.decimals||0,maximumFractionDigits:s.decimals||0}); };
 
 /* ============ MENU CONFIG ============ */
 const MENU=[
@@ -244,6 +245,12 @@ function drawInv(){
   const co=store.business.name||'My Company', ph=store.business.phone||'3341100761';
   const data=encodeURIComponent(`Invoice from ${co} | Total Rs ${t.total} | Contact ${ph}`);
   document.getElementById('p_qr').src=`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${data}`;
+  // apply Settings show/hide
+  const s=store.settings||{}, q=sel=>document.querySelector(sel);
+  if(document.getElementById('p_logo')) document.getElementById('p_logo').style.display=s.showLogo===false?'none':'';
+  const qr=q('#saleModal .inv-qr'); if(qr) qr.style.display=s.showQR===false?'none':'';
+  const sign=q('#saleModal .inv-sign'); if(sign) sign.style.display=s.showSign===false?'none':'';
+  const terms=q('#saleModal .inv-terms'); if(terms){ terms.textContent=s.terms||'Thanks for doing business with us!'; }
 }
 function words(n){ n=Math.round(n); if(n===0)return 'Zero';
   const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -258,7 +265,7 @@ function saveSale(){
   const cust=document.getElementById('s_cust').value.trim(); if(!cust)return toast('Enter Customer Name');
   const rows=saleRows.filter(Boolean).filter(r=>r.item&&r.qty); if(!rows.length)return toast('Add at least one item');
   const t=saleTotals();
-  store.sales.push({id:id(),no:String(store.counters.sale).padStart(2,'0'),party:cust,phone:document.getElementById('s_phone').value,date:dispDate(),rows,total:t.total,received:t.recv});
+  store.sales.push({id:id(),no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone:document.getElementById('s_phone').value,date:dispDate(),rows,total:t.total,received:t.recv});
   store.counters.sale++;
   let p=store.parties.find(x=>x.name===cust);
   if(!p){ p={id:id(),name:cust,phone:document.getElementById('s_phone').value,type:'customer',balance:0}; store.parties.push(p); }
@@ -673,27 +680,72 @@ function saveProfile(){ const b=store.business;
   if(b.name) document.getElementById('bizName').textContent=b.name; toast('Profile saved'); }
 
 /* SETTINGS + LOGO */
+let setTab='general';
 function vSettings(){
-  content.innerHTML=`<div class="page-head"><h2>Settings</h2></div>
-    <div class="panel" style="padding:24px;max-width:520px">
+  const s=store.settings;
+  const tabs=[['general','General'],['transaction','Transaction'],['print','Invoice / Print'],['taxes','Taxes'],['party','Party & Item'],['backup','Backup & Data']];
+  const tg=(id,on,lbl)=>`<div class="set-row"><span>${lbl}</span><label class="sw"><input type="checkbox" id="${id}" ${on?'checked':''} onchange="applyLiveSettings()"><i></i></label></div>`;
+  let body='';
+  if(setTab==='general') body=`
+    <div class="set-grid">
       <div class="field"><label>Business Name</label><input id="set_name" value="${store.business.name||''}"></div>
       <div class="field"><label>Phone Number</label><input id="set_phone" value="${store.business.phone||''}"></div>
-      <div class="field"><label>Business Logo</label>
-        <div style="display:flex;align-items:center;gap:14px">
-          <div id="set_logo_prev" style="width:70px;height:70px;border:1px solid var(--line);border-radius:8px;display:grid;place-items:center;color:#aaa;overflow:hidden">${store.business.logo?`<img src="${store.business.logo}" style="width:100%;height:100%;object-fit:cover">`:'LOGO'}</div>
-          <input type="file" accept="image/*" id="set_logo" onchange="uploadLogo(this)"></div></div>
-      <button class="btn btn-red" onclick="saveSettings()">Save Settings</button>
-      <button class="btn btn-outline" onclick="resetAll()" style="margin-left:8px">Reset All Data</button>
+      <div class="field"><label>Email</label><input id="set_email" value="${store.business.email||''}"></div>
+      <div class="field"><label>Currency Symbol</label><select id="set_cur">${['Rs','PKR','$','AED'].map(c=>`<option ${s.currency===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Decimal Places</label><select id="set_dec">${[0,1,2].map(d=>`<option ${s.decimals===d?'selected':''}>${d}</option>`).join('')}</select></div>
+      <div class="field"><label>Theme Color</label><input type="color" id="set_theme" value="${s.theme}" onchange="applyLiveSettings()" style="height:44px;padding:4px"></div>
+    </div>`;
+  if(setTab==='transaction') body=`
+    <div class="field" style="max-width:300px"><label>Invoice Number Prefix</label><input id="set_prefix" value="${s.invPrefix}"></div>
+    ${tg('set_showDiscount',s.showDiscount,'Show Discount on invoice')}
+    ${tg('set_showTax',s.showTax,'Show Tax on invoice')}
+    ${tg('set_enableShipping',s.enableShipping,'Enable Shipping Address in Party')}`;
+  if(setTab==='print') body=`
+    ${tg('set_showLogo',s.showLogo,'Show Company Logo on invoice')}
+    ${tg('set_showQR',s.showQR,'Show QR Code on invoice')}
+    ${tg('set_showSign',s.showSign,'Show Signature on invoice')}
+    ${tg('set_showTerms',s.showTerms,'Show Terms & Conditions')}
+    <div class="field" style="margin-top:14px;max-width:500px"><label>Default Terms & Conditions</label><textarea id="set_terms" rows="3" style="border:1px solid var(--line);border-radius:8px;padding:12px">${s.terms}</textarea></div>`;
+  if(setTab==='taxes') body=`
+    <div class="field" style="max-width:300px"><label>Default Tax Rate (%)</label><input id="set_taxrate" type="number" value="${s.taxRate}"></div>
+    <p class="muted">This rate is pre-selected as GST/Tax on new invoices.</p>`;
+  if(setTab==='party') body=`
+    ${tg('set_negativeStock',s.negativeStock,'Allow negative stock (sell when out of stock)')}
+    <p class="muted" style="margin-top:14px">Manage item categories from the Items page (rename / delete with the pencil icon).</p>`;
+  if(setTab==='backup') body=`
+    <div class="set-actions">
+      <button class="btn btn-red" onclick="doBackup()">⬇️ Download Backup (.json)</button>
+      <label class="btn btn-outline" style="cursor:pointer">⬆️ Restore Backup<input type="file" accept=".json" hidden onchange="restoreBackup(this)"></label>
+      <button class="btn btn-outline" onclick="resetAll()" style="color:var(--red);border-color:var(--red)">🗑️ Reset All Data</button>
+    </div>
+    <p class="muted" style="margin-top:14px">Backups save everything (parties, items, invoices, settings). Restore replaces current data.</p>`;
+  content.innerHTML=`<div class="page-head"><h2>Settings</h2><button class="btn btn-red" onclick="saveSettings()">Save Settings</button></div>
+    <div class="set-wrap">
+      <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
+      <div class="set-body">${body}</div>
     </div>`;
 }
+function applyLiveSettings(){
+  const s=store.settings, g=id=>document.getElementById(id);
+  if(g('set_theme')) s.theme=g('set_theme').value;
+  ['showDiscount','showTax','enableShipping','showLogo','showQR','showSign','showTerms','negativeStock'].forEach(k=>{ const e=g('set_'+k); if(e) s[k]=e.checked; });
+  document.documentElement.style.setProperty('--red',s.theme);
+  document.documentElement.style.setProperty('--red-dark',s.theme);
+  persist();
+}
 function uploadLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
-  r.onload=e=>{ store.business.logo=e.target.result; persist();
-    document.getElementById('set_logo_prev').innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`; toast('Logo saved'); };
-  r.readAsDataURL(f); }
-function saveSettings(){ store.business.name=document.getElementById('set_name').value.trim();
-  store.business.phone=document.getElementById('set_phone').value.trim(); persist();
+  r.onload=e=>{ store.business.logo=e.target.result; persist(); toast('Logo saved'); }; r.readAsDataURL(f); }
+function saveSettings(){ const s=store.settings, g=id=>document.getElementById(id);
+  if(g('set_name')){ store.business.name=g('set_name').value.trim(); store.business.phone=g('set_phone').value.trim(); store.business.email=g('set_email').value.trim();
+    s.currency=g('set_cur').value; s.decimals=+g('set_dec').value; s.theme=g('set_theme').value; }
+  if(g('set_prefix')) s.invPrefix=g('set_prefix').value;
+  if(g('set_terms')) s.terms=g('set_terms').value;
+  if(g('set_taxrate')) s.taxRate=+g('set_taxrate').value;
+  applyLiveSettings();
   if(store.business.name) document.getElementById('bizName').textContent=store.business.name;
-  toast('Settings saved'); }
+  persist(); toast('Settings saved'); }
+function restoreBackup(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ try{ const d=JSON.parse(e.target.result); localStorage.setItem(KEY,JSON.stringify(d)); toast('Backup restored'); location.reload(); }catch(err){ toast('Invalid backup file'); } }; r.readAsText(f); }
 function resetAll(){ if(confirm('Delete ALL data and start fresh?')){ localStorage.removeItem(KEY); location.reload(); } }
 
 /* ============ HELPERS ============ */
@@ -715,6 +767,7 @@ document.querySelectorAll('#itemModal .im-tab').forEach(t=>t.onclick=()=>{
 
 /* ============ INIT ============ */
 ensure(); persist();
+if(store.settings&&store.settings.theme){ document.documentElement.style.setProperty('--red',store.settings.theme); document.documentElement.style.setProperty('--red-dark',store.settings.theme); }
 buildMenu();
 document.querySelector('.mycompany').onclick=()=>{ menuEl.querySelectorAll('.mi,.smi').forEach(x=>x.classList.remove('active')); nav('profile'); };
 document.querySelectorAll('#partyModal .pm-tab').forEach(t=>t.onclick=()=>partyTab(t.dataset.pt));
