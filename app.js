@@ -109,7 +109,8 @@ function vHome(){
       <div class="calc-row"><div class="lab">Received</div>
         <div class="rs-input"><span class="rs">Rs</span><input id="h_recv" value="0.00" oninput="hCalc()"></div></div>
       <div class="balance-bar"><span>Balance</span><span class="amt" id="h_bal">Rs 0.00</span></div>
-      <button class="create-btn" onclick="openSale()">🧾 Create Your First Invoice</button>
+      <button class="create-btn" onclick="quickSale()">🧾 Create Invoice &amp; Add Payment</button>
+      <div style="text-align:center;margin-top:12px"><span class="link" style="color:var(--blue);cursor:pointer" onclick="openSale()">+ Add multiple items (full invoice)</span></div>
     </div>
     <div class="home-right">
       <h2>1Cr Vyaparis have created invoices ⚡</h2>
@@ -132,13 +133,18 @@ function vHome(){
   </div>`;
 }
 function hCalc(){ const a=pf('h_amt'),r=pf('h_recv'); document.getElementById('h_bal').textContent='Rs '+(a-r).toFixed(2); }
-function firstInvoice(){
+function quickSale(){
   const cust=document.getElementById('h_cust').value.trim(), amt=pf('h_amt'), recv=pf('h_recv');
   if(!cust) return toast('Enter Customer Name');
   if(amt<=0) return toast('Enter Invoice Amount');
-  store.sales.push({id:id(),no:'01',party:cust,date:dispDate(),total:amt,received:recv});
-  if(!store.parties.find(p=>p.name===cust)) store.parties.push({id:id(),name:cust,type:'customer',balance:amt-recv});
-  persist(); toast('Invoice created!'); nav('sale');
+  const no=String(store.counters.sale).padStart(2,'0');
+  store.sales.push({id:id(),no,party:cust,phone:'',date:dispDate(),rows:[],total:amt,received:recv});
+  store.counters.sale++;
+  let p=store.parties.find(x=>x.name===cust);
+  if(!p){ p={id:id(),name:cust,phone:'',type:'customer',balance:0}; store.parties.push(p); }
+  p.balance += amt-recv;
+  if(recv>0) store.payments.push({id:id(),dir:'in',party:cust,amount:recv,mode:'Cash',date:dispDate()});
+  persist(); toast(recv>0?'Invoice + payment saved!':'Invoice created!'); nav('sale');
 }
 
 /* ============ CREATE INVOICE MODAL ============ */
