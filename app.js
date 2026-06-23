@@ -318,6 +318,7 @@ function openItem(){
   document.getElementById('i_pprice').value=''; document.getElementById('i_code').value='';
   document.getElementById('i_cat').value=''; document.getElementById('i_catlabel').textContent='Category';
   document.getElementById('i_catlabel').classList.add('ph');
+  document.getElementById('i_unit').value=''; document.getElementById('i_unitbtn').textContent='Select Unit';
   document.getElementById('i_catpanel').classList.remove('show');
   showModal('itemModal');
 }
@@ -334,10 +335,23 @@ function addNewCatInline(){
   if(!store.categories.includes(c)) store.categories.push(c); persist(); pickCat(c); toast('Category added');
 }
 function assignCode(){ document.getElementById('i_code').value='ITM'+String(store.items.length+1).padStart(4,'0'); }
+const UNITS=['None','BAGS (Bag)','BOTTLES (Btl)','BOX (Box)','BUNDLES (Bdl)','CANS (Can)','CARTONS (Ctn)','DOZENS (Dzn)','GRAMMES (Gm)','KILOGRAMS (Kg)','LITRE (Ltr)','METERS (Mtr)','MILLILITRE (Ml)','NUMBERS (Nos)','PACKS (Pac)','PAIRS (Prs)','PIECES (Pcs)','QUINTAL (Qtl)','ROLLS (Rol)','SQUARE FEET (Sqf)','SQUARE METERS (Sqm)'];
+function openUnit(){
+  const cur=document.getElementById('i_unit').value, base=cur.split('|')[0]||'None', sec=cur.split('|')[1]||'None';
+  formModal('Select Unit',`<div style="display:flex;gap:20px">
+    <div class="field" style="flex:1"><label style="color:var(--blue)">BASE UNIT</label>
+      <select id="u_base">${UNITS.map(u=>`<option ${u===base?'selected':''}>${u}</option>`).join('')}</select></div>
+    <div class="field" style="flex:1"><label style="color:var(--blue)">SECONDARY UNIT</label>
+      <select id="u_sec">${UNITS.map(u=>`<option ${u===sec?'selected':''}>${u}</option>`).join('')}</select></div></div>`,
+  ()=>{ const b=document.getElementById('u_base').value, s=document.getElementById('u_sec').value;
+    document.getElementById('i_unit').value=b+'|'+s;
+    document.getElementById('i_unitbtn').textContent = b==='None'?'Select Unit':b.replace(/ \(.*/,'');
+    closeModal('formModal'); }, 'SAVE');
+}
 function saveItem(again){
   const n=document.getElementById('i_name').value.trim(); if(!n)return toast('Enter Item Name');
   let code=document.getElementById('i_code').value.trim()||('ITM'+String(store.items.length+1).padStart(4,'0'));
-  store.items.push({id:id(),name:n,code,cat:document.getElementById('i_cat').value||'General',
+  store.items.push({id:id(),name:n,code,cat:document.getElementById('i_cat').value||'General',unit:document.getElementById('i_unit').value||'',
     price:+document.getElementById('i_price').value||0,pprice:+document.getElementById('i_pprice').value||0,stock:0});
   persist(); toast('Item saved');
   if(again){ ['i_name','i_price','i_pprice','i_code'].forEach(x=>document.getElementById(x).value=''); }
@@ -578,7 +592,7 @@ function pf(id){ return parseFloat(document.getElementById(id).value)||0 }
 function dispDate(){ const d=new Date(); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear(); }
 function showModal(id){ document.getElementById(id).classList.add('show') }
 function closeModal(id){ document.getElementById(id).classList.remove('show') }
-function formModal(t,html,onSave){ document.getElementById('formTitle').textContent=t; document.getElementById('formBody').innerHTML=html; document.getElementById('formSave').onclick=onSave; showModal('formModal'); }
+function formModal(t,html,onSave,label){ document.getElementById('formTitle').textContent=t; document.getElementById('formBody').innerHTML=html; document.getElementById('formSave').onclick=onSave; document.getElementById('formSave').textContent=label||'Save'; showModal('formModal'); }
 let tT; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2000); }
 
 /* item modal Product/Service toggle + tabs */
