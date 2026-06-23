@@ -301,8 +301,22 @@ function vItems(){
 function openItem(){
   document.getElementById('i_name').value=''; document.getElementById('i_price').value='';
   document.getElementById('i_pprice').value=''; document.getElementById('i_code').value='';
-  document.getElementById('i_cat').innerHTML=store.categories.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('i_cat').value=''; document.getElementById('i_catlabel').textContent='Category';
+  document.getElementById('i_catlabel').classList.add('ph');
+  document.getElementById('i_catpanel').classList.remove('show');
   showModal('itemModal');
+}
+function toggleCatDD(){ const p=document.getElementById('i_catpanel'); p.classList.toggle('show'); if(p.classList.contains('show')){ document.getElementById('i_catsearch').value=''; renderCatDD(); } }
+function renderCatDD(){
+  const q=(document.getElementById('i_catsearch').value||'').toLowerCase();
+  const list=store.categories.filter(c=>c.toLowerCase().includes(q));
+  document.getElementById('i_catlist').innerHTML=list.length?list.map(c=>`<div class="cat-item" onclick="pickCat('${c.replace(/'/g,"\\'")}')">${c}</div>`).join(''):`<div class="cat-item muted">No match</div>`;
+}
+function pickCat(c){ document.getElementById('i_cat').value=c; const l=document.getElementById('i_catlabel'); l.textContent=c; l.classList.remove('ph'); document.getElementById('i_catpanel').classList.remove('show'); }
+function addNewCatInline(){
+  const q=document.getElementById('i_catsearch').value.trim();
+  let c=q||prompt('New category name'); if(!c)return; c=c.charAt(0).toUpperCase()+c.slice(1);
+  if(!store.categories.includes(c)) store.categories.push(c); persist(); pickCat(c); toast('Category added');
 }
 function assignCode(){ document.getElementById('i_code').value='ITM'+String(store.items.length+1).padStart(4,'0'); }
 function saveItem(again){

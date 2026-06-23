@@ -207,6 +207,19 @@ table.data td{padding:13px 18px;border-bottom:1px solid var(--line)}
 .float-field label{position:absolute;top:-9px;left:12px;background:#fff;padding:0 6px;font-size:12px;color:var(--blue)}
 .float-field input{width:100%;border:1.5px solid var(--blue);border-radius:8px;padding:14px 12px;outline:none}
 .im-cat{border:1px solid var(--line);border-radius:8px;padding:14px 12px;color:#9aa0ab;min-width:200px}
+.cat-dd{position:relative;min-width:220px}
+.cat-dd-field{border:1px solid var(--line);border-radius:8px;padding:14px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.cat-dd-field #i_catlabel.ph{color:#9aa0ab}
+.cat-dd-field .caret{color:#888;font-size:12px}
+.cat-dd-panel{display:none;position:absolute;top:calc(100% + 6px);left:0;width:280px;background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);border:1px solid var(--line);padding:12px;z-index:20}
+.cat-dd-panel.show{display:block}
+.cat-search{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:#9aa0ab}
+.cat-search input{border:0;outline:none;flex:1;font-size:14px}
+.cat-search span{cursor:pointer}
+.cat-add{color:var(--blue);font-weight:600;padding:12px 4px;cursor:pointer;border-bottom:1px solid var(--line)}
+.cat-list{max-height:200px;overflow-y:auto;margin-top:4px}
+.cat-item{padding:11px 6px;cursor:pointer;border-radius:6px}
+.cat-item:hover{background:var(--bg)}
 .im-unit{border:0;background:#eaf2fe;color:var(--blue);border-radius:8px;padding:14px 22px;font-weight:600;cursor:pointer}
 .im-img{border:0;background:none;color:var(--blue);font-weight:600;cursor:pointer;margin-left:auto}
 .code-field{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:8px}
