@@ -283,13 +283,24 @@ function vParties(){
     </tbody></table></div>`;
 }
 function addParty(){
-  formModal('Add Party',`<div class="field"><label>Party Name *</label><input id="f_name"></div>
-    <div class="field"><label>Phone</label><input id="f_phone"></div>
-    <div class="field"><label>Type</label><select id="f_type"><option value="customer">Customer</option><option value="supplier">Supplier</option></select></div>
-    <div class="field"><label>Opening Balance</label><input id="f_bal" type="number" value="0"></div>`,
-  ()=>{ const n=document.getElementById('f_name').value.trim(); if(!n)return toast('Enter name');
-    store.parties.push({id:id(),name:n,phone:document.getElementById('f_phone').value,type:document.getElementById('f_type').value,balance:+document.getElementById('f_bal').value||0});
-    persist(); closeModal('formModal'); toast('Party added'); vParties(); });
+  ['pa_name','pa_phone','pa_email','pa_billing','pa_gst','pa_field1'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+  document.getElementById('pa_bal').value='0'; document.getElementById('pa_type').value='customer';
+  document.getElementById('pa_date').value=new Date().toISOString().slice(0,10);
+  partyTab('address');
+  showModal('partyModal');
+}
+function partyTab(t){
+  document.querySelectorAll('#partyModal .pm-tab').forEach(x=>x.classList.toggle('active',x.dataset.pt===t));
+  ['address','credit','more'].forEach(k=>document.getElementById('pt_'+k).style.display=k===t?'block':'none');
+}
+function saveParty(again){
+  const n=document.getElementById('pa_name').value.trim(); if(!n)return toast('Enter Party Name');
+  store.parties.push({id:id(),name:n,phone:document.getElementById('pa_phone').value,email:document.getElementById('pa_email').value,
+    billing:document.getElementById('pa_billing').value,gst:document.getElementById('pa_gst').value,
+    type:document.getElementById('pa_type').value,balance:+document.getElementById('pa_bal').value||0});
+  persist(); toast('Party saved');
+  if(again){ ['pa_name','pa_phone','pa_email','pa_billing','pa_gst'].forEach(i=>document.getElementById(i).value=''); document.getElementById('pa_bal').value='0'; }
+  else { closeModal('partyModal'); nav('parties'); }
 }
 
 /* ============ ITEMS ============ */
@@ -607,5 +618,6 @@ document.querySelectorAll('#itemModal .im-tab').forEach(t=>t.onclick=()=>{
 ensure(); persist();
 buildMenu();
 document.querySelector('.mycompany').onclick=()=>{ menuEl.querySelectorAll('.mi,.smi').forEach(x=>x.classList.remove('active')); nav('profile'); };
+document.querySelectorAll('#partyModal .pm-tab').forEach(t=>t.onclick=()=>partyTab(t.dataset.pt));
 if(store.business.name) document.getElementById('bizName').textContent=store.business.name;
 nav('home');

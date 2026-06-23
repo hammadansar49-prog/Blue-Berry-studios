@@ -169,6 +169,48 @@
   </div>
 </div>
 
+<!-- ============ ADD PARTY MODAL ============ -->
+<div class="modal-overlay" id="partyModal">
+  <div class="party-modal">
+    <div class="pm-head"><h3>Add Party</h3><div class="pm-head-r"><span class="gear">⚙</span><button class="x" onclick="closeModal('partyModal')">✕</button></div></div>
+    <div class="pm-body">
+      <div class="pm-top">
+        <div class="float-field"><label>Party Name *</label><input id="pa_name"></div>
+        <input class="pm-phone" id="pa_phone" placeholder="Phone Number">
+      </div>
+      <div class="pm-tabs">
+        <span class="pm-tab active" data-pt="address">Address</span>
+        <span class="pm-tab" data-pt="credit">Credit &amp; Balance <span class="newb">New</span></span>
+        <span class="pm-tab" data-pt="more">Additional Fields</span>
+      </div>
+      <div class="pm-tabc" id="pt_address">
+        <div class="pm-3col">
+          <input class="pm-in" id="pa_email" placeholder="Email ID">
+          <div><div class="pm-lbl">Billing Address</div><textarea class="pm-in" id="pa_billing" placeholder="Billing Address"></textarea>
+            <div class="pm-link2">👁 Show Detailed Address</div></div>
+          <div><div class="pm-lbl">Shipping Address</div><div class="pm-link2">＋ Enable Shipping Address</div></div>
+        </div>
+      </div>
+      <div class="pm-tabc" id="pt_credit" style="display:none">
+        <div class="pm-3col">
+          <div><div class="pm-lbl">Opening Balance</div><input class="pm-in" id="pa_bal" type="number" value="0"></div>
+          <div><div class="pm-lbl">As of Date</div><input class="pm-in" id="pa_date" type="date"></div>
+          <div><div class="pm-lbl">Type</div><select class="pm-in" id="pa_type"><option value="customer">To Receive (Customer)</option><option value="supplier">To Pay (Supplier)</option></select></div>
+        </div>
+      </div>
+      <div class="pm-tabc" id="pt_more" style="display:none">
+        <div class="pm-3col">
+          <input class="pm-in" id="pa_gst" placeholder="GSTIN / Tax No.">
+          <select class="pm-in" id="pa_state"><option value="">Select State</option><option>Punjab</option><option>Sindh</option><option>KPK</option><option>Balochistan</option></select>
+          <input class="pm-in" id="pa_field1" placeholder="Additional Field">
+        </div>
+      </div>
+    </div>
+    <div class="pm-foot"><button class="btn btn-outline-blue" onclick="saveParty(true)">Save &amp; New</button>
+      <button class="btn btn-blue" onclick="saveParty(false)">Save</button></div>
+  </div>
+</div>
+
 <!-- ============ GENERIC MODAL ============ -->
 <div class="modal-overlay" id="formModal">
   <div class="modal">

@@ -312,6 +312,28 @@ table.inv-tbl .ttl td{border-top:1px solid #dfe2e8}
 .save-red:hover{background:var(--red-dark)}
 .act-ic{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;font-size:16px}
 
+/* ===== ADD PARTY MODAL ===== */
+.party-modal{background:#fff;border-radius:14px;width:1020px;max-width:96vw;max-height:94vh;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
+.pm-head{display:flex;align-items:center;justify-content:space-between;padding:18px 26px;border-bottom:1px solid var(--line)}
+.pm-head h3{font-size:20px;font-weight:700}
+.pm-head-r{display:flex;align-items:center;gap:16px}
+.pm-body{padding:24px 30px;overflow-y:auto}
+.pm-top{display:flex;gap:24px;margin-bottom:22px}
+.pm-top .float-field{max-width:320px}
+.pm-phone{border:1px solid var(--line);border-radius:8px;padding:14px 12px;outline:none;width:300px}
+.pm-tabs{display:flex;gap:34px;border-bottom:1px solid var(--line);margin-bottom:22px}
+.pm-tab{padding:10px 2px;color:#9aa0ab;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:8px}
+.pm-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.newb{background:var(--red);color:#fff;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700}
+.pm-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px}
+.pm-lbl{font-weight:700;color:#333;margin-bottom:10px}
+.pm-in{width:100%;border:1px solid var(--line);border-radius:8px;padding:13px 12px;outline:none;font-family:inherit}
+textarea.pm-in{min-height:110px;resize:vertical}
+.pm-link2{color:var(--blue);font-weight:600;cursor:pointer;margin-top:10px;font-size:14px}
+.pm-foot{display:flex;justify-content:flex-end;gap:14px;padding:16px 26px;border-top:1px solid var(--line)}
+.btn-blue{background:var(--blue);color:#fff;border-radius:8px;padding:11px 30px}
+.btn-outline-blue{background:#fff;color:var(--blue);border:1px solid var(--blue);border-radius:8px;padding:11px 26px}
+
 /* generic modal */
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
 .modal-body{padding:20px}.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--line)}
