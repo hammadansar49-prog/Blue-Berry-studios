@@ -1,5 +1,5 @@
 :root{
-  --navy:#3a4252; --navy2:#454d60; --navy-active:#4e576b; --navy-line:#2e3340;
+  --navy:#1e2238; --navy2:#2a2f47; --navy-active:#2a3052; --navy-line:#2e3340;
   --red:#e0413e; --red-dark:#c5332f;
   --gold:#f0b429; --gold-dark:#e0a82e; --gold-light:#fbe6a8;
   --yellow:#f0b429; --cream:#fbe6a8;
@@ -39,7 +39,7 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .mi .plus{margin-left:auto;color:#aeb2cc;font-size:18px;font-weight:600}
 .mi .chev{margin-left:auto;color:#aeb2cc;font-size:12px;transition:.2s}
 .mi.open .chev{transform:rotate(180deg)}
-.submenu{display:none;background:#313845}
+.submenu{display:none;background:#161a2b}
 .submenu.show{display:block}
 .smi{display:flex;align-items:center;justify-content:space-between;padding:12px 22px 12px 56px;font-size:14px;color:#b9bcd4;cursor:pointer;border-left:3px solid transparent}
 .smi:hover{background:var(--navy2)}
