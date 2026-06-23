@@ -99,7 +99,7 @@ function vHome(){
         </div>
         <div style="flex:1">
           <div class="sec-h"><span class="cir">👤</span> Bill To :</div>
-          <div class="cust-field"><label>Customer Name<b>*</b></label><input id="h_cust"></div>
+          <div class="cust-field"><label>Customer Name<b>*</b></label><input id="h_cust" oninput="hPreview()"></div>
         </div>
       </div>
       <div class="add-sample" onclick="nav('items')">📦 Add Sample Item</div>
@@ -115,24 +115,38 @@ function vHome(){
     <div class="home-right">
       <h2>1Cr Vyaparis have created invoices ⚡</h2>
       <div class="invoice-paper">
-        <div class="inv-tag">Sample Invoice</div>
-        <div class="inv-head"><div class="ti">Invoice</div></div>
-        <div class="inv-tax">TAX INVOICE</div>
-        <div class="inv-meta"><div><b>Bill To</b><br><span class="muted">Enter Customer Name</span></div>
-          <div class="r"><b style="color:#333">Invoice Details</b><br>Invoice No. #1<br>Date : ${dispDate()}</div></div>
+        <div class="inv-tag">Live Preview</div>
+        <div class="inv-top-row">
+          <label class="hlogo" id="h_logo">${store.business.logo?`<img src="${store.business.logo}">`:'＋<br>Add Logo'}<input type="file" accept="image/*" id="h_logofile" onchange="hLogo(this)" hidden></label>
+          <div class="inv-head"><div class="ti">Invoice</div><div class="inv-tax">TAX INVOICE</div></div>
+        </div>
+        <div class="inv-meta"><div><b>Bill To</b><br><span class="muted" id="hp_cust">Enter Customer Name</span></div>
+          <div class="r"><b style="color:#333">Invoice Details</b><br>Invoice No. #${String(store.counters.sale).padStart(2,'0')}<br>Date : ${dispDate()}</div></div>
         <table class="pinv"><thead><tr><th>#</th><th>Item name</th><th>Qty</th><th>Price/ Unit</th><th>Amt</th></tr></thead>
-          <tbody><tr><td>1</td><td>Item 1</td><td>2</td><td>Rs 500</td><td>Rs 1000</td></tr>
-          <tr><td>2</td><td>Item 2</td><td>1</td><td>Rs 500</td><td>Rs 500</td></tr>
-          <tr><td></td><td><b>Total</b></td><td>3</td><td></td><td><b>Rs 1500</b></td></tr></tbody></table>
-        <div class="inv-bottom"><div class="inv-words"><b>Amount In Words -</b><br><span class="muted">One Thousand Five Hundred Rupees only</span></div>
-          <div class="inv-tot"><div class="tr"><span>Sub Total</span><span>Rs 1500</span></div>
-            <div class="tr hl"><span>Total</span><span>Rs 1500</span></div>
-            <div class="tr"><span><b>Balance Due</b></span><span>Rs 1500</span></div></div></div>
+          <tbody id="hp_rows"></tbody></table>
+        <div class="inv-bottom"><div class="inv-words"><b>Amount In Words -</b><br><span class="muted" id="hp_words">Zero Rupees only</span></div>
+          <div class="inv-tot"><div class="tr"><span>Sub Total</span><span id="hp_sub">Rs 0</span></div>
+            <div class="tr hl"><span>Total</span><span id="hp_total">Rs 0</span></div>
+            <div class="tr"><span><b>Balance Due</b></span><span id="hp_bal">Rs 0</span></div></div></div>
       </div>
     </div>
   </div>`;
+  hPreview();
 }
-function hCalc(){ const a=pf('h_amt'),r=pf('h_recv'); document.getElementById('h_bal').textContent='Rs '+(a-r).toFixed(2); }
+function hCalc(){ const a=pf('h_amt'),r=pf('h_recv'); document.getElementById('h_bal').textContent='Rs '+(a-r).toFixed(2); hPreview(); }
+function hLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=e=>{ store.business.logo=e.target.result; persist(); document.getElementById('h_logo').innerHTML=`<img src="${e.target.result}"><input type="file" accept="image/*" id="h_logofile" onchange="hLogo(this)" hidden>`; toast('Logo added'); }; r.readAsDataURL(f); }
+function hPreview(){
+  const cust=document.getElementById('h_cust').value.trim(), amt=pf('h_amt'), recv=pf('h_recv');
+  document.getElementById('hp_cust').textContent=cust||'Enter Customer Name';
+  document.getElementById('hp_rows').innerHTML = amt>0
+    ? `<tr><td>1</td><td>${cust||'Sale'} item</td><td>1</td><td>Rs ${amt}</td><td>Rs ${amt}</td></tr><tr><td></td><td><b>Total</b></td><td>1</td><td></td><td><b>Rs ${amt}</b></td></tr>`
+    : `<tr><td colspan="5" style="text-align:center;color:#bbb">Enter invoice amount</td></tr>`;
+  document.getElementById('hp_sub').textContent='Rs '+amt;
+  document.getElementById('hp_total').textContent='Rs '+amt;
+  document.getElementById('hp_bal').textContent='Rs '+(amt-recv);
+  document.getElementById('hp_words').textContent=words(amt)+' Rupees only';
+}
 function quickSale(){
   const cust=document.getElementById('h_cust').value.trim(), amt=pf('h_amt'), recv=pf('h_recv');
   if(!cust) return toast('Enter Customer Name');
