@@ -92,6 +92,24 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .profile-foot{display:flex;justify-content:flex-end;gap:14px;margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
 .profile-foot .btn{border-radius:26px;padding:13px 34px;font-size:15px}
 
+/* ===== GOOGLE PROFILE ===== */
+.gp-wrap{display:flex;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.gp-left{flex:1;background:linear-gradient(180deg,#cfe0fa,#e7eefb);display:flex;align-items:center;justify-content:center;padding:34px}
+.gp-phone{width:280px;background:#fff;border-radius:26px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:20px}
+.gp-glogo{text-align:center;font-weight:700;font-size:20px;color:#4285f4;margin-bottom:14px}
+.gp-search{border:1px solid var(--line);border-radius:20px;padding:10px 16px;font-size:13px;margin-bottom:14px;color:#555}
+.gp-card{border:1px solid var(--line);border-radius:10px;padding:14px}
+.gp-name{font-weight:800;font-size:17px;color:#222;margin-bottom:4px}
+.gp-cat{color:#777;font-size:12px;margin-bottom:12px}
+.gp-line{font-size:12px;color:#555;margin-bottom:8px}
+.gp-right{flex:1;padding:44px}
+.gp-right h2{font-size:30px;font-weight:800;color:#222;margin-bottom:14px}
+.gp-right h2 .g{color:var(--red)}
+.gp-right p{color:#8a8f9a;margin-bottom:22px;font-size:15px}
+.gp-check{padding:10px 0;color:#333;font-size:15px}
+.gp-btn{background:var(--red);color:#fff;border:0;border-radius:26px;padding:15px 30px;font-weight:700;font-size:15px;cursor:pointer;margin-top:18px;letter-spacing:2px}
+@media(max-width:900px){.gp-wrap{flex-direction:column}}
+
 /* ===== FEATURE ROW ===== */
 .feat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:24px 0;width:100%;max-width:1000px}
 .feat{background:#fafbfc;border:1px solid var(--line);border-radius:12px;padding:18px;text-align:left}

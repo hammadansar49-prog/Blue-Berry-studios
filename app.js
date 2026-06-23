@@ -23,7 +23,7 @@ const MENU=[
     {k:'purchase', t:'Purchase Bills', plus:true},{k:'paymentout', t:'Payment-Out', plus:true},
     {k:'expenses', t:'Expenses', plus:true},{k:'purchaseorder', t:'Purchase Order', plus:true},
     {k:'purchasereturn', t:'Purchase Return/ Dr. Note', plus:true}]},
-  {t:'Grow Your Business', ic:'📈', sub:[{k:'grow', t:'Marketing Tools'},{k:'loyalty', t:'Loyalty Points'}]},
+  {t:'Grow Your Business', ic:'📈', sub:[{k:'gprofile', t:'Google Profile Manager'},{k:'marketing', t:'Marketing Tools'},{k:'onlinestore', t:'Online Store'}]},
   {t:'Cash & Bank', ic:'🏦', sub:[
     {k:'bank', t:'Bank Accounts', plus:true},{k:'cash', t:'Cash In Hand', plus:true},{k:'cheques', t:'Cheques'}]},
   {k:'reports', t:'Reports', ic:'📊'},
@@ -60,7 +60,7 @@ function render(view){
   const map={home:vWelcome,parties:vParties,items:vItems,sale:vHome,purchase:vPurchase,reports:vReports,
     settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,
     bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,
-    barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,estimate:vEstimate,profile:vProfile};
+    barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,estimate:vEstimate,profile:vProfile,gprofile:vGProfile};
   (map[view]||vGeneric(view))();
 }
 
@@ -570,6 +570,34 @@ function vImport(){ content.innerHTML=`<div class="page-head"><h2>Import Items</
 function vEstimate(){ content.innerHTML=`<div class="page-head"><h2>Estimate / Quotation</h2><button class="btn btn-red" onclick="openSale()">+ New Estimate</button></div>
   <div class="panel">${emptyMini('📄','No estimates yet')}</div>`; }
 function emptyMini(ic,t){ return `<div class="empty" style="padding:50px;text-align:center;color:#8a8f9a"><div style="font-size:44px">${ic}</div><div style="margin-top:8px">${t}</div></div>`; }
+
+/* GOOGLE PROFILE MANAGER */
+function vGProfile(){
+  content.innerHTML=`<div class="page-head"><h2>Google Profile Manager</h2></div>
+  <div class="gp-wrap">
+    <div class="gp-left">
+      <div class="gp-phone">
+        <div class="gp-glogo">Google</div>
+        <div class="gp-search">${store.business.name||'Your Business'}</div>
+        <div class="gp-card">
+          <div class="gp-name">${store.business.name||'Your Business'} <span>📍⭐</span></div>
+          <div class="gp-cat">${store.business.category||'Your Category'}</div>
+          <div class="gp-line">📍 ${store.business.address||'Your business address'}</div>
+          <div class="gp-line">🕒 10:00 AM - 10:00 PM</div>
+          <div class="gp-line">📞 ${store.business.phone||'+00 123 456 7890'}</div>
+        </div>
+      </div>
+    </div>
+    <div class="gp-right">
+      <h2>Make your Business Visible on <span class="g">Google</span></h2>
+      <p>Create your Google Business Profile in 2 minutes. Help customers find and contact you easily.</p>
+      <div class="gp-check">✅ Make your business visible in Google Search</div>
+      <div class="gp-check">✅ Help nearby customers find you on Maps</div>
+      <div class="gp-check">✅ Show your hours, phone, and location clearly</div>
+      <button class="gp-btn" onclick="toast('Google sign-in (demo)')">G  Sign in with Google</button>
+    </div>
+  </div>`;
+}
 
 /* EDIT PROFILE (My Company) */
 const BTYPES=['Retail','Wholesale','Distributor','Service','Manufacturing','Others'];
