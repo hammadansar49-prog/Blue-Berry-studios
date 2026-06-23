@@ -85,33 +85,42 @@ function vWelcome(){
 }
 
 /* ============ HOME (FIRST SALE) ============ */
+let homeRows=[];
 function vHome(){
+  homeRows=[{item:'',qty:1,price:0}];
   content.innerHTML=`
   <div class="home-wrap">
     <div class="home-left">
-      <h1>Enter details to make your first Sale 🚀</h1>
-      <div class="lead">First sale is made in less than a minute</div>
-      <div class="hl-divider"></div>
-      <div class="sec-row">
-        <div style="flex:1">
-          <div class="sec-h"><span class="cir">📄</span> Invoice Details :</div>
-          <div class="kv"><div class="k">Invoice Number : 01</div></div>
-          <div class="kv"><div class="k">Invoice Date : ${dispDate()}</div></div>
+      <div class="home-scroll">
+        <h1>Enter details to make your first Sale 🚀</h1>
+        <div class="lead">First sale is made in less than a minute</div>
+        <div class="hl-divider"></div>
+        <div class="sec-row">
+          <div style="flex:1">
+            <div class="sec-h"><span class="cir">📄</span> Invoice Details :</div>
+            <div class="kv"><div class="k">Invoice Number : ${String(store.counters.sale).padStart(2,'0')}</div></div>
+            <div class="kv"><div class="k">Invoice Date : ${dispDate()}</div></div>
+          </div>
+          <div style="flex:1">
+            <div class="sec-h"><span class="cir">👤</span> Bill To :</div>
+            <div class="cust-field"><label>Customer Name<b>*</b></label><input id="h_cust" oninput="hPreview()"></div>
+            <div class="cust-field" style="margin-top:12px"><label>Customer Phone Number</label>
+              <div class="phone-in" style="max-width:260px"><span class="cc">+92</span><input id="h_phone" placeholder="Enter Number" oninput="hPreview()"></div></div>
+          </div>
         </div>
-        <div style="flex:1">
-          <div class="sec-h"><span class="cir">👤</span> Bill To :</div>
-          <div class="cust-field"><label>Customer Name<b>*</b></label><input id="h_cust" oninput="hPreview()"></div>
-        </div>
+        <div class="sec-h"><span class="cir">📦</span> Items :</div>
+        <table class="home-items"><thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Price</th><th class="right">Amount</th><th></th></tr></thead>
+          <tbody id="h_rows"></tbody></table>
+        <div class="add-sample" onclick="addHomeRow()" style="margin-top:10px">＋ Add Item Row</div>
+        <div class="sec-h"><span class="cir">🛡️</span> Invoice Calculation :</div>
+        <div class="calc-row"><div class="lab">Received from Customer</div>
+          <div class="rs-input"><span class="rs">Rs</span><input id="h_recv" value="0" oninput="recalcHome()"></div></div>
+        <div class="balance-bar" id="h_balbar"><span>Balance Due</span><span class="amt" id="h_bal">Rs 0</span></div>
       </div>
-      <div class="add-sample" onclick="nav('items')">📦 Add Sample Item</div>
-      <div class="sec-h"><span class="cir">🛡️</span> Invoice Calculation :</div>
-      <div class="calc-row"><div class="lab">Invoice Amount<b>*</b></div>
-        <div class="rs-input"><span class="rs">Rs</span><input id="h_amt" value="0.00" oninput="hCalc()"></div></div>
-      <div class="calc-row"><div class="lab">Received</div>
-        <div class="rs-input"><span class="rs">Rs</span><input id="h_recv" value="0.00" oninput="hCalc()"></div></div>
-      <div class="balance-bar"><span>Balance</span><span class="amt" id="h_bal">Rs 0.00</span></div>
-      <button class="create-btn" onclick="quickSale()">🧾 Create Invoice &amp; Add Payment</button>
-      <div style="text-align:center;margin-top:12px"><span class="link" style="color:var(--blue);cursor:pointer" onclick="openSale()">+ Add multiple items (full invoice)</span></div>
+      <div class="home-bottom">
+        <div class="home-total"><span>Total Amount (${(store.settings&&store.settings.currency)||'Rs'})</span><b id="h_total">0</b></div>
+        <button class="create-btn" onclick="quickSale()" style="margin:10px 0 0">🧾 Save Invoice &amp; Payment</button>
+      </div>
     </div>
     <div class="home-right">
       <h2>1Cr Vyaparis have created invoices ⚡</h2>
@@ -128,20 +137,47 @@ function vHome(){
           </div>
           <div class="inv-head"><div class="ti">Invoice</div><div class="inv-tax">TAX INVOICE</div></div>
         </div>
-        <div class="inv-meta"><div><b>Bill To</b><br><span class="muted" id="hp_cust">Enter Customer Name</span></div>
+        <div class="inv-meta"><div><b>Bill To</b><br><span class="muted" id="hp_cust">Enter Customer Name</span><br><span class="muted" id="hp_phone"></span></div>
           <div class="r"><b style="color:#333">Invoice Details</b><br>Invoice No. #${String(store.counters.sale).padStart(2,'0')}<br>Date : ${dispDate()}</div></div>
         <table class="pinv"><thead><tr><th>#</th><th>Item name</th><th>Qty</th><th>Price/ Unit</th><th>Amt</th></tr></thead>
           <tbody id="hp_rows"></tbody></table>
         <div class="inv-bottom"><div class="inv-words"><b>Amount In Words -</b><br><span class="muted" id="hp_words">Zero Rupees only</span></div>
           <div class="inv-tot"><div class="tr"><span>Sub Total</span><span id="hp_sub">Rs 0</span></div>
             <div class="tr hl"><span>Total</span><span id="hp_total">Rs 0</span></div>
+            <div class="tr"><span>Received</span><span id="hp_recv">Rs 0</span></div>
             <div class="tr"><span><b>Balance Due</b></span><span id="hp_bal">Rs 0</span></div></div></div>
       </div>
     </div>
   </div>`;
+  renderHomeRows(); recalcHome();
+}
+function renderHomeRows(){
+  document.getElementById('h_rows').innerHTML=homeRows.map((r,i)=>`<tr>
+    <td>${i+1}</td>
+    <td><input list="hil" value="${r.item}" placeholder="Item name" oninput="setHome(${i},'item',this.value)"></td>
+    <td><input type="number" value="${r.qty}" style="width:64px" oninput="setHome(${i},'qty',this.value)"></td>
+    <td><input type="number" value="${r.price}" style="width:90px" oninput="setHome(${i},'price',this.value)"></td>
+    <td class="right hamt">${rs(r.qty*r.price)}</td>
+    <td>${homeRows.length>1?`<span class="delx" onclick="delHomeRow(${i})">✕</span>`:''}</td></tr>`).join('')
+    + `<datalist id="hil">${store.items.map(it=>`<option value="${it.name}" data-price="${it.price}">`).join('')}</datalist>`;
+}
+function addHomeRow(){ homeRows.push({item:'',qty:1,price:0}); renderHomeRows(); recalcHome(); }
+function delHomeRow(i){ homeRows.splice(i,1); renderHomeRows(); recalcHome(); }
+function setHome(i,f,v){
+  homeRows[i][f]= f==='item'?v:(+v||0);
+  if(f==='item'){ const it=store.items.find(x=>x.name===v); if(it){ homeRows[i].price=it.price; renderHomeRows(); } }
+  recalcHome();
+}
+function homeTotal(){ return homeRows.reduce((s,r)=>s+r.qty*r.price,0); }
+function recalcHome(){
+  document.querySelectorAll('#h_rows tr').forEach((tr,i)=>{ const r=homeRows[i]; if(r){ const c=tr.querySelector('.hamt'); if(c)c.textContent=rs(r.qty*r.price); } });
+  const total=homeTotal(), recv=pf('h_recv'), bal=total-recv;
+  document.getElementById('h_total').textContent=Number(total).toLocaleString('en-IN');
+  const balbar=document.getElementById('h_balbar'), balEl=document.getElementById('h_bal');
+  if(bal<0){ balbar.style.background='#dfeee4'; balEl.innerHTML='<span style="color:#1aa260">Return Rs '+Math.abs(bal)+'</span>'; }
+  else { balbar.style.background='#fdeaec'; balEl.textContent=rs(bal); }
   hPreview();
 }
-function hCalc(){ const a=pf('h_amt'),r=pf('h_recv'); document.getElementById('h_bal').textContent='Rs '+(a-r).toFixed(2); hPreview(); }
 function hLogoClick(){
   if(store.business.logo){ document.getElementById('h_logomenu').classList.toggle('show'); }
   else document.getElementById('h_logofile').click();
@@ -153,26 +189,33 @@ function hLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(
   r.onload=e=>{ store.business.logo=e.target.result; persist(); document.getElementById('h_logo').innerHTML=`<img src="${e.target.result}">`; toast('Logo saved'); }; r.readAsDataURL(f); }
 document.addEventListener('click',e=>{ const m=document.getElementById('h_logomenu'); if(m&&m.classList.contains('show')&&!e.target.closest('.hlogo-wrap')) m.classList.remove('show'); });
 function hPreview(){
-  const cust=document.getElementById('h_cust').value.trim(), amt=pf('h_amt'), recv=pf('h_recv');
+  const cust=document.getElementById('h_cust').value.trim(), phone=document.getElementById('h_phone')?document.getElementById('h_phone').value.trim():'';
+  const total=homeTotal(), recv=pf('h_recv');
   document.getElementById('hp_cust').textContent=cust||'Enter Customer Name';
-  document.getElementById('hp_rows').innerHTML = amt>0
-    ? `<tr><td>1</td><td>${cust||'Sale'} item</td><td>1</td><td>Rs ${amt}</td><td>Rs ${amt}</td></tr><tr><td></td><td><b>Total</b></td><td>1</td><td></td><td><b>Rs ${amt}</b></td></tr>`
-    : `<tr><td colspan="5" style="text-align:center;color:#bbb">Enter invoice amount</td></tr>`;
-  document.getElementById('hp_sub').textContent='Rs '+amt;
-  document.getElementById('hp_total').textContent='Rs '+amt;
-  document.getElementById('hp_bal').textContent='Rs '+(amt-recv);
-  document.getElementById('hp_words').textContent=words(amt)+' Rupees only';
+  document.getElementById('hp_phone').textContent=phone?'+92 '+phone:'';
+  const rws=homeRows.filter(r=>r.item||r.price);
+  document.getElementById('hp_rows').innerHTML = rws.length
+    ? rws.map((r,i)=>`<tr><td>${i+1}</td><td>${r.item||'Item'}</td><td>${r.qty}</td><td>${rs(r.price)}</td><td>${rs(r.qty*r.price)}</td></tr>`).join('')
+      + `<tr><td></td><td><b>Total</b></td><td>${rws.reduce((s,r)=>s+r.qty,0)}</td><td></td><td><b>${rs(total)}</b></td></tr>`
+    : `<tr><td colspan="5" style="text-align:center;color:#bbb">Add items</td></tr>`;
+  document.getElementById('hp_sub').textContent=rs(total);
+  document.getElementById('hp_total').textContent=rs(total);
+  document.getElementById('hp_recv').textContent=rs(recv);
+  document.getElementById('hp_bal').textContent = total-recv<0 ? 'Return '+rs(Math.abs(total-recv)) : rs(total-recv);
+  document.getElementById('hp_words').textContent=words(total)+' Rupees only';
 }
 function quickSale(){
-  const cust=document.getElementById('h_cust').value.trim(), amt=pf('h_amt'), recv=pf('h_recv');
+  const cust=document.getElementById('h_cust').value.trim(), phone=document.getElementById('h_phone').value.trim(), recv=pf('h_recv');
   if(!cust) return toast('Enter Customer Name');
-  if(amt<=0) return toast('Enter Invoice Amount');
-  const no=String(store.counters.sale).padStart(2,'0');
-  store.sales.push({id:id(),no,party:cust,phone:'',date:dispDate(),rows:[],total:amt,received:recv});
+  const rows=homeRows.filter(r=>r.item&&r.qty);
+  const total=homeTotal();
+  if(total<=0) return toast('Add at least one item with price');
+  store.sales.push({id:id(),no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone,date:dispDate(),rows,total,received:recv});
   store.counters.sale++;
+  rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item); if(it)it.stock-=r.qty;});
   let p=store.parties.find(x=>x.name===cust);
-  if(!p){ p={id:id(),name:cust,phone:'',type:'customer',balance:0}; store.parties.push(p); }
-  p.balance += amt-recv;
+  if(!p){ p={id:id(),name:cust,phone,type:'customer',balance:0}; store.parties.push(p); }
+  p.balance += total-recv;
   if(recv>0) store.payments.push({id:id(),dir:'in',party:cust,amount:recv,mode:'Cash',date:dispDate()});
   persist(); toast(recv>0?'Invoice + payment saved!':'Invoice created!'); nav('sale');
 }
