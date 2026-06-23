@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Business - Billing</title>
+<link rel="stylesheet" href="styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ============ WINDOW TITLE BAR ============ -->
+<div class="titlebar">
+  <div class="tb-left">
+    <div class="tb-logo">V</div>
+    <span class="tb-menu">Company</span>
+    <span class="tb-menu">Help</span>
+    <span class="tb-menu">Versions</span>
+    <span class="tb-menu">Shortcuts</span>
+    <span class="tb-refresh">⟳</span>
+  </div>
+  <div class="tb-center">
+    <span class="tb-sup">Call / Chat Support</span>
+    <span class="tb-phone">📞</span>
+    <span class="tb-wa">🟢</span>
+    <a class="tb-num">(+971) 4 549 0404</a>
+    <span class="tb-divider">|</span>
+    <a class="tb-online">(((•))) Get Instant Online Support</a>
+  </div>
+  <div class="tb-right">
+    <span class="tb-win">—</span><span class="tb-win">▢</span><span class="tb-win close">✕</span>
+  </div>
+</div>
+
+<div id="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="side-search">🔍 Open Anything (Ctrl+F) <span class="collapse">‹</span></div>
+    <nav class="menu" id="menu"></nav>
+    <div class="side-bottom">
+      <div class="trial-card">
+        <div class="trial-txt">3 days Free Trial left</div>
+        <div class="trial-bar"><span></span></div>
+      </div>
+      <button class="premium-btn"><span class="coin">◉</span> Get Vyapar Premium <span class="arr">→</span></button>
+      <div class="mycompany"><span class="mc-ic">⊕</span> My Company <span class="mc-arr">›</span></div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <div class="biz-header"><span class="dot">●</span> <span id="bizName">Enter Business Name</span></div>
+    <section class="content" id="content"></section>
+  </main>
+</div>
+
+<!-- ============ CREATE INVOICE MODAL ============ -->
+<div class="modal-overlay" id="saleModal">
+  <div class="sale-modal">
+    <div class="sm-head"><h3 id="smTitle">Create Your First Invoice</h3><button class="x" onclick="closeModal('saleModal')">✕</button></div>
+    <div class="sm-body">
+      <!-- LEFT FORM -->
+      <div class="sm-left">
+        <div class="sm-cust">
+          <div class="sm-fld"><label>Customer Name<b>*</b></label><input id="s_cust" placeholder="Enter Name" oninput="drawInv()"></div>
+          <div class="sm-fld"><label>Customer Phone Number</label>
+            <div class="phone-in"><span class="cc">+92</span><input id="s_phone" placeholder="Enter Number" oninput="drawInv()"></div>
+            <div class="wa-note"><span>🟢</span> Enter your number for getting the invoice on your phone</div>
+          </div>
+        </div>
+        <div class="sm-divider"></div>
+        <table class="sm-items">
+          <thead><tr><th>#</th><th>ITEM</th><th>QTY</th><th>PRICE</th><th class="right">TOTAL <span class="addc" onclick="addSaleRow()">⊕</span></th></tr></thead>
+          <tbody id="s_rows"></tbody>
+        </table>
+        <div class="sm-addrow"><span class="link" onclick="addSaleRow()">＋ Add Row</span>
+          <span class="subt">Sub Total <b id="s_sub">0</b></span></div>
+        <div class="sm-divider"></div>
+        <div class="sm-calc">
+          <div class="cl-row"><span>Discount</span>
+            <span class="cl-inp"><span class="pct"><input id="s_discp" value="" placeholder="" oninput="recalcSale()"><i>%</i></span>
+            <input id="s_disc" value="0" oninput="recalcSale()"></span></div>
+          <div class="cl-row"><span>Tax</span>
+            <span class="cl-inp"><select id="s_taxsel" onchange="recalcSale()"><option value="0">NONE</option><option value="5">GST @5%</option><option value="12">GST @12%</option><option value="18">GST @18%</option></select>
+            <input id="s_tax" value="0" readonly></span></div>
+          <div class="cl-row"><span>Received</span>
+            <span class="cl-inp"><label class="fr"><input type="checkbox" id="s_full" onchange="fullRecv()"> Fully Received</label>
+            <input id="s_recv" value="0" oninput="recalcSale()"></span></div>
+          <div class="cl-bal">Balance: <b id="s_bal">0</b></div>
+        </div>
+        <div class="sm-total"><span>Total Amount (Rs)</span><b id="s_total">0</b></div>
+      </div>
+      <!-- RIGHT PREVIEW -->
+      <div class="sm-right">
+        <div class="inv-card">
+          <div class="inv-title">Invoice</div>
+          <div class="inv-co"><div class="logo-box">LOGO</div>
+            <div class="co-info"><div class="co-name" id="p_co">My Company</div><div class="co-phone">Phone: <b id="p_cophone">3341100761</b></div></div></div>
+          <div class="inv-band">Invoice Details:</div>
+          <div class="inv-det"><div>Invoice No.: <b>1</b></div><div>Date: <b id="p_date"></b></div></div>
+          <table class="inv-tbl"><thead><tr><th>#</th><th>Item name</th><th class="right">Quantity</th><th class="right">Price/ Unit(Rs)</th><th class="right">Amount(Rs)</th></tr></thead>
+            <tbody id="p_rows"></tbody>
+            <tfoot><tr class="ttl"><td></td><td><b>Total</b></td><td></td><td></td><td class="right"><b id="p_ttl">Rs 0.00</b></td></tr></tfoot></table>
+          <div class="inv-sum">
+            <div class="sr"><span>Sub Total</span><span>:</span><span id="p_sub">Rs 0.00</span></div>
+            <div class="sr bold band2"><span>Total</span><span>:</span><span id="p_total">Rs 0.00</span></div>
+          </div>
+          <div class="inv-band">Invoice Amount in Words:</div>
+          <div class="inv-words" id="p_words">Zero Rupees only</div>
+          <div class="inv-sum">
+            <div class="sr"><span>Received</span><span>:</span><span id="p_recv">Rs 0.00</span></div>
+            <div class="sr"><span>Balance</span><span>:</span><span id="p_balance">Rs 0.00</span></div>
+          </div>
+          <div class="inv-band">Terms &amp; Conditions:</div>
+          <div class="inv-terms">Thanks for doing business with us!</div>
+          <div class="inv-sign">For <span id="p_co2">My Company</span>:</div>
+          <div class="inv-actions">
+            <button class="save-red" onclick="saveSale()">Save</button>
+            <span class="act-ic">🟢</span><span class="act-ic">🖨️</span><span class="act-ic">⬇️</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADD ITEM MODAL ============ -->
+<div class="modal-overlay" id="itemModal">
+  <div class="modal item-modal">
+    <div class="im-head">
+      <div class="im-title">Add Item
+        <span class="toggle-wrap"><span class="tg-lbl on">Product</span>
+        <span class="switch"><i></i></span><span class="tg-lbl">Service</span></span>
+      </div>
+      <div class="im-head-r"><span class="gear">⚙</span><button class="x" onclick="closeModal('itemModal')">✕</button></div>
+    </div>
+    <div class="im-body">
+      <div class="im-row1">
+        <div class="float-field"><label>Item Name *</label><input id="i_name"></div>
+        <select class="im-cat"><option>Category</option></select>
+        <button class="im-unit">Select Unit</button>
+        <button class="im-img">⊞ Add Item Image</button>
+      </div>
+      <div class="im-row2">
+        <div class="code-field"><input placeholder="Item Code"><button class="assign">Assign Code</button></div>
+      </div>
+      <div class="im-tabs"><span class="im-tab active">Pricing</span><span class="im-tab">Stock</span></div>
+      <div class="im-section">
+        <div class="im-sec-title">Sale Price</div>
+        <input class="im-input" id="i_price" placeholder="Sale Price">
+        <div class="im-link">+ Add Wholesale Price</div>
+      </div>
+      <div class="im-section">
+        <div class="im-sec-title">Purchase Price</div>
+        <input class="im-input" id="i_pprice" placeholder="Purchase Price">
+      </div>
+    </div>
+    <div class="im-foot">
+      <button class="btn btn-outline-grey" onclick="saveItem(true)">Save &amp; New</button>
+      <button class="btn btn-grey" onclick="saveItem(false)">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ GENERIC MODAL ============ -->
+<div class="modal-overlay" id="formModal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="formTitle">Add</h3><button class="x" onclick="closeModal('formModal')">✕</button></div>
+    <div class="modal-body" id="formBody"></div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('formModal')">Cancel</button><button class="btn btn-red" id="formSave">Save</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
