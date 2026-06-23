@@ -25,7 +25,7 @@ const MENU=[
     {k:'purchasereturn', t:'Purchase Return/ Dr. Note', plus:true}]},
   {t:'Grow Your Business', ic:'📈', sub:[{k:'grow', t:'Marketing Tools'},{k:'loyalty', t:'Loyalty Points'}]},
   {t:'Cash & Bank', ic:'🏦', sub:[
-    {k:'bank', t:'Bank Accounts'},{k:'cash', t:'Cash In Hand'},{k:'cheques', t:'Cheques'},{k:'loan', t:'Loan Accounts'}]},
+    {k:'bank', t:'Bank Accounts', plus:true},{k:'cash', t:'Cash In Hand', plus:true},{k:'cheques', t:'Cheques'}]},
   {k:'reports', t:'Reports', ic:'📊'},
   {t:'Sync, Share & Backup', ic:'🔄', sub:[{k:'backup', t:'Backup to Computer'},{k:'autobackup', t:'Auto Backup'},{k:'share', t:'Share Data'}]},
   {t:'Utilities', ic:'🛠️', sub:[
@@ -516,10 +516,24 @@ function addExpense(){ formModal('Add Expense',`
 
 /* CASH & BANK */
 function vBank(){
+  if(!store.banks.length){
+    content.innerHTML=`<div class="page-head"><h2>Banks</h2></div>
+      <div class="empty-page">
+        <h2>Manage Multiple Bank Accounts</h2>
+        <p>You can organize multiple bank accounts and track all your business transactions in one place.</p>
+        <div class="empty-ill">🏦</div>
+        <div class="feat-row">
+          <div class="feat"><div class="feat-ic">🖨️</div><b>Print Bank Details on Invoices</b><span>Share your bank account information on invoices so customers can pay you easily.</span></div>
+          <div class="feat"><div class="feat-ic">💳</div><b>Unlimited Payment Types</b><span>Record payments received through banks, transfers, cards, or any method you prefer.</span></div>
+          <div class="feat"><div class="feat-ic">📒</div><b>Maintain Accurate Records</b><span>Keep your financial entries organised for better clarity and reporting.</span></div>
+        </div>
+        <button class="btn-big red" onclick="addBank()">＋ Add Bank Account</button></div>`;
+    return;
+  }
   content.innerHTML=`<div class="page-head"><h2>Bank Accounts</h2><button class="btn btn-red" onclick="addBank()">+ Add Bank</button></div>
-    <div class="panel">${store.banks.length?`<table class="data"><thead><tr><th>Bank</th><th>A/C No.</th><th class="right">Balance</th></tr></thead><tbody>
+    <div class="panel"><table class="data"><thead><tr><th>Bank</th><th>A/C No.</th><th class="right">Balance</th></tr></thead><tbody>
     ${store.banks.map(b=>`<tr><td class="bold">${b.name}</td><td class="muted">${b.acc||'-'}</td><td class="right">${rs(b.bal)}</td></tr>`).join('')}
-    </tbody></table>`:emptyMini('🏦','No bank account added')}</div>`;
+    </tbody></table></div>`;
 }
 function addBank(){ formModal('Add Bank Account',`
   <div class="field"><label>Bank Name *</label><input id="f_bn"></div>
