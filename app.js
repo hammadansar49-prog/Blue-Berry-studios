@@ -2080,10 +2080,10 @@ function vItems(){
     return;
   }
   selItem=selItem||store.items[0];
-  const tabs=[['products','PRODUCTS'],['services','SERVICES'],['category','CATEGORY'],['units','UNITS']];
+  const tabs=[['products','PRODUCTS'],['category','CATEGORY'],['units','UNITS']];
   let body='';
-  if(itemTab==='products'||itemTab==='services'){
-    const items=itemTab==='services'?store.items.filter(i=>i.unit==='Service'):store.items;
+  if(itemTab==='products'){
+    const items=store.items;
     body=`<div class="ip-body">
       <div class="ip-left">
         <div class="ip-left-head">

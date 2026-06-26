@@ -137,13 +137,17 @@
         <div class="pos-inv-payment">
           <div class="pos-pay-row">
             <span class="pos-pay-label">Payment Mode</span>
-            <span class="pos-pay-label">Discount (Rs)</span>
             <span class="pos-pay-label">Amount Received</span>
           </div>
           <div class="pos-pay-row">
             <select id="pos_paymode"><option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option></select>
-            <div class="pos-pay-amt pos-pay-disc"><span>Rs</span><input id="pos_disc" type="text" inputmode="decimal" value="0" onfocus="clearZero(this)" oninput="posCalcTotal()"></div>
             <div class="pos-pay-amt"><span>Rs</span><input id="pos_recv" type="text" inputmode="decimal" value="0" onfocus="clearZero(this)" oninput="posCalcTotal()"></div>
+          </div>
+          <div class="pos-pay-row" style="margin-top:10px">
+            <span class="pos-pay-label" style="font-weight:700">Discount (Rs)</span>
+          </div>
+          <div class="pos-pay-row">
+            <div class="pos-pay-amt pos-pay-disc" style="flex:1;max-width:300px"><span>Rs</span><input id="pos_disc" type="text" inputmode="decimal" value="0" onfocus="clearZero(this)" oninput="posCalcTotal()" style="flex:1"></div>
           </div>
         </div>
         <div class="pos-inv-return">Change to Return: <b id="pos_return">Rs 0</b></div>
