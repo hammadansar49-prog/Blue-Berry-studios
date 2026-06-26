@@ -245,6 +245,10 @@ function vWelcome(){
   <div class="dash-wrap">
     <div class="dash-top-bar">
       <div class="dash-search"><span class="dash-search-ic">🔍</span><input placeholder="Search Transactions" oninput="dashSearch(this.value)"></div>
+      <div style="display:flex;gap:10px;margin-left:auto">
+        <button onclick="openSale()" style="padding:10px 22px;background:#e74c3c;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap">＋ Add Sale</button>
+        <button onclick="nav('purchaseform')" style="padding:10px 22px;background:#2f6df6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap">＋ Add Purchase</button>
+      </div>
     </div>
     <div class="dash-admin-banner">
       <span class="dash-admin-icon">👤</span>
