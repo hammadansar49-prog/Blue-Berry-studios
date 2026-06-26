@@ -3815,7 +3815,7 @@ let repFrom='', repTo='', repSel='Sale';
 const REPORTS={
   'Transaction report':['Sale','Purchase','Day book','All Transactions','Profit And Loss','Bill Wise Profit','Cash flow','Trial Balance Report','Balance Sheet'],
   'Party report':['Party Statement','Party wise Profit & Loss','All parties','Party Report By Item','Sale Purchase By Party'],
-  'Item/Stock report':['Item Wise Profit And Loss','Low Stock Summary','Stock Detail','Item Detail','Item Wise Discount'],
+  'Item/Stock report':['Hot Selling Products','Item Wise Profit And Loss','Low Stock Summary','Stock Detail','Item Detail','Item Wise Discount'],
   'Business Status':['Bank Statement','Discount Report'],
   'Taxes':['Tax Report','Tax Rate report'],
   'Expense report':['Expense','Expense Category Report']
@@ -4135,6 +4135,70 @@ function drawRep(){
     </div>`;
   }
 
+  else if(repSel==='Hot Selling Products'){
+    const itemSales={};
+    (store.sales||[]).filter(s=>!s.refunded).forEach(s=>{
+      (s.rows||[]).forEach(r=>{
+        const name=r.item||r.name||'';
+        if(!name)return;
+        if(!itemSales[name])itemSales[name]={name,qty:0,revenue:0,transactions:0};
+        itemSales[name].qty+=(r.qty||0);
+        itemSales[name].revenue+=((r.qty||0)*(r.price||0));
+        itemSales[name].transactions++;
+      });
+    });
+    const ranked=Object.values(itemSales).sort((a,b)=>b.revenue-a.revenue);
+    const maxRev=ranked.length?ranked[0].revenue:1;
+    const medals=['🏆','🥈','🥉'];
+    const rankColors=['#ffd700','#c0c0c0','#cd7f32'];
+    const bgColors=['#fffbeb','#f8fafc','#fef6f0'];
+    html=`
+    <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <select id="hotPeriod" onchange="repHotPeriod(this.value)" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-weight:600">
+          <option value="all">All Time</option><option value="month">This Month</option><option value="week">This Week</option><option value="today">Today</option>
+        </select>
+        <span style="flex:1"></span>
+        <button onclick="exportHotSelling()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">📊 Excel Report</button>
+        <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px;text-align:center">
+      <div style="font-size:13px;color:#888;margin-bottom:4px">Total Products Sold</div>
+      <div style="font-size:28px;font-weight:800;color:#2f6df6">${ranked.length} Products</div>
+      <div style="display:flex;gap:24px;justify-content:center;margin-top:8px;font-size:13px">
+        <span style="color:#27ae60">Total Revenue: <b>${rs(ranked.reduce((a,r)=>a+r.revenue,0))}</b></span>
+        <span style="color:#2f6df6">Total Qty: <b>${ranked.reduce((a,r)=>a+r.qty,0)}</b></span>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">🏆 Hot Selling Products — Ranking</div>
+      ${ranked.length?ranked.map((p,i)=>{
+        const pct=Math.round((p.revenue/maxRev)*100);
+        const isTop3=i<3;
+        return `<div style="display:flex;align-items:center;gap:16px;padding:${isTop3?'18px 20px':'14px 20px'};border-bottom:1px solid #f5f5f5;${isTop3?`background:${bgColors[i]};border-left:4px solid ${rankColors[i]}`:''}">
+          <div style="min-width:50px;text-align:center">
+            ${isTop3?`<span style="font-size:${i===0?'36px':'28px'}">${medals[i]}</span>`:`<span style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#f1f5f9;font-size:14px;font-weight:700;color:#64748b">${i+1}</span>`}
+          </div>
+          <div style="flex:1">
+            <div style="font-weight:${isTop3?'800':'600'};font-size:${isTop3?'16px':'14px'};color:#1a2332;margin-bottom:4px">${p.name}</div>
+            <div style="display:flex;gap:16px;font-size:12px;color:#888">
+              <span>Sold: <b style="color:#333">${p.qty} qty</b></span>
+              <span>Orders: <b style="color:#333">${p.transactions}</b></span>
+            </div>
+          </div>
+          <div style="min-width:180px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:4px"><span>${rs(p.revenue)}</span><span>${pct}%</span></div>
+            <div style="height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${i===0?'#ffd700,#f59e0b':i===1?'#94a3b8,#64748b':i===2?'#d97706,#b45309':'#2f6df6,#60a5fa'});border-radius:4px;transition:width .5s"></div>
+            </div>
+          </div>
+        </div>`;
+      }).join(''):''}
+      ${!ranked.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">🏆</div><div style="font-size:14px">No sales data yet. Start selling to see hot products!</div></div>`:''}
+    </div>`;
+  }
+
   else{
     html=`<div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
@@ -4244,6 +4308,31 @@ function exportDaybookReport(){
   store.expenses.filter(e=>e.date===dbDate).forEach(e=>{csv+=`${e.cat||''},-,Expense,${e.amount||0},0,${e.amount||0}\n`;});
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='daybook-'+dbDate.replace(/\//g,'-')+'.csv';a.click();
+  toast('Excel downloaded!');
+}
+function repHotPeriod(period){
+  const now=new Date(), m=now.getMonth(), y=now.getFullYear();
+  if(period==='today'){const ds=now.getDate()+'/'+String(m+1).padStart(2,'0')+'/'+y;repFrom=ds;repTo=ds;}
+  else if(period==='week'){const d=new Date(now);d.setDate(d.getDate()-6);repFrom=d.getDate()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();repTo=now.getDate()+'/'+String(m+1).padStart(2,'0')+'/'+y;}
+  else if(period==='month'){repFrom='01/'+String(m+1).padStart(2,'0')+'/'+y;repTo=new Date(y,m+1,0).getDate()+'/'+String(m+1).padStart(2,'0')+'/'+y;}
+  else{repFrom='';repTo='';}
+  drawRep();
+}
+function exportHotSelling(){
+  let csv='Rank,Product,Quantity Sold,Revenue,Transactions\n';
+  const itemSales={};
+  (store.sales||[]).filter(s=>!s.refunded&&(repFrom?inRange(s.date):true)).forEach(s=>{
+    (s.rows||[]).forEach(r=>{
+      const name=r.item||r.name||'';if(!name)return;
+      if(!itemSales[name])itemSales[name]={name,qty:0,revenue:0,transactions:0};
+      itemSales[name].qty+=(r.qty||0);itemSales[name].revenue+=((r.qty||0)*(r.price||0));itemSales[name].transactions++;
+    });
+  });
+  Object.values(itemSales).sort((a,b)=>b.revenue-a.revenue).forEach((p,i)=>{
+    csv+=`${i+1},${p.name},${p.qty},${p.revenue},${p.transactions}\n`;
+  });
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='hot-selling-products.csv';a.click();
   toast('Excel downloaded!');
 }
 
