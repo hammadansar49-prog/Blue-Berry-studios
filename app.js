@@ -372,7 +372,14 @@ function calcLowStockCount(){
   }).length;
 }
 
-function dashInitChart(){attachChartTooltips('dashChart')}
+function dashInitChart(){
+  const period=window.dashPeriod||'this';
+  const sel=document.querySelector('#dashMonthFilter select');
+  if(sel)sel.value=period;
+  // Recompute the chart for the remembered period from the LATEST sales data.
+  if(typeof dashChangeMonth==='function')dashChangeMonth(period);
+  else attachChartTooltips('dashChart');
+}
 
 function showWidgetModal(){
   if(!store.widgets) store.widgets={purchases:false,expenses:false,stock:false,avstock:false,cash:false,bank:false,lowstock:false};
@@ -637,6 +644,7 @@ function attachChartTooltips(containerId){
 }
 
 function dashChangeMonth(val){
+  window.dashPeriod=val;   // remember the chosen period across re-renders / live updates
   const now=new Date();
   const monthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   let filterLabel='This Month';
@@ -1746,7 +1754,7 @@ function posSaveBill(){
   const saveDirect=(s.noPreview||s.posPrimary==='new');
   if(saveDirect){
     const saleId=id();
-    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
+    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
     store.counters.sale++;
     if(s.stockMaintain!==false)rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it&&typeof it.stock==='number')it.stock-=r.qty;});
     let p=store.parties.find(x=>x.name===cust);
@@ -1828,7 +1836,7 @@ function confirmSaveAndPrint(){
     }
   }
   const saleId=id();
-  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid'});
+  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid'});
   store.counters.sale++;
   if(s.stockMaintain!==false)rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it&&typeof it.stock==='number')it.stock-=r.qty;});
   let p=store.parties.find(x=>x.name===cust);
@@ -5112,7 +5120,7 @@ function nciSave(action){
   const saleId=id();
   // A paid mode (Cash/Bank/QR/Cheque) with no "Received" entered = bill fully paid via that mode.
   const effRecv=(nciPayMode!=='Credit' && (+t.received||0)===0) ? t.total : t.received;
-  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid'};
+  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid'};
   store.sales.push(sale);
   store.counters.sale++;
   if(s.stockMaintain!==false)saleRows.forEach(r=>{ const it=store.items.find(x=>x.name===r.item); if(it&&typeof it.stock==='number')it.stock-=r.qty; });
