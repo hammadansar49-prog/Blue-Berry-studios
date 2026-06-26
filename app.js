@@ -3227,7 +3227,7 @@ function vPurchaseForm(){
       <div style="flex:1"></div>
       <div class="pf-topbar-icons">
         <div class="pf-topbar-icon" title="Calculator">🧮</div>
-        <div class="pf-topbar-icon" title="Settings">⚙️</div>
+        <div class="pf-topbar-icon" title="Settings" onclick="setTab='transaction';nav('settings')">⚙️</div>
         <div class="pf-topbar-icon" onclick="nav('home')" title="Close">✕</div>
       </div>
     </div>
@@ -4235,7 +4235,7 @@ function vPaymentOut(){
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <button class="hub-btn hub-btn-red" onclick="addPayment('out')">＋ Add Payment-Out</button>
-      <span class="hub-action-icon" onclick="toast('Settings coming soon')">⚙️</span>
+        <span class="hub-action-icon" onclick="setTab='transaction';nav('settings')" title="Settings">⚙️</span>
     </div>
   </div>
   <div class="hub-card">
@@ -4680,7 +4680,7 @@ function addPayment(dir){
         <span style="font-size:18px;font-weight:700">${title}</span>
         <div style="display:flex;gap:12px;align-items:center">
           <span style="cursor:pointer;font-size:20px" title="Calculator" onclick="toast('Calculator')">🧮</span>
-          <span style="cursor:pointer;font-size:20px" title="Settings" onclick="toast('Settings')">⚙️</span>
+          <span style="cursor:pointer;font-size:20px" title="Settings" onclick="setTab='transaction';nav('settings')">⚙️</span>
           <span style="cursor:pointer;font-size:20px;color:#e74c3c" title="Close" onclick="closeModal('payOutModal')">✕</span>
         </div>
       </div>
