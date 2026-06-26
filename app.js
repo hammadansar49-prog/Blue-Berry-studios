@@ -810,6 +810,11 @@ function dashChangeMonth(val){
 }
 
 function dashOpenReport(type){
+  if(type==='sale')repSel='Sale';
+  else if(type==='alltrans')repSel='All Transactions';
+  else if(type==='daybook')repSel='Day book';
+  else if(type==='partystatement')repSel='Party Statement';
+  else repSel='Sale';
   nav('reports');
 }
 
@@ -3835,34 +3840,332 @@ function applyRep(){ repFrom=document.getElementById('rep_from').value; repTo=do
 function clearRep(){ repFrom=''; repTo=''; vReports(); }
 function drawRep(){
   const sales=store.sales.filter(s=>inRange(s.date)&&!s.refunded), purch=store.purchases.filter(p=>inRange(p.date)), exp=store.expenses.filter(e=>inRange(e.date));
+  const pays=(store.payments||[]).filter(p=>inRange(p.date));
   const refs=(store.refunds||[]).filter(r=>inRange(r.date));
   const ts=sales.reduce((a,b)=>a+b.total,0), tp=purch.reduce((a,b)=>a+b.total,0), te=exp.reduce((a,b)=>a+b.amount,0), tr=refs.reduce((a,b)=>a+b.amount,0);
   const body=document.getElementById('rep_body'); if(!body)return;
-  const tbl=(head,rows)=>rows.length?`<div class="panel"><table class="data"><thead><tr>${head.map((h,i)=>`<th class="${i>0?'right':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`:emptyMini('📊','No data for selected dates');
+  const firms=[(store.business?.name||'My Business'),...(store.companies||[]).map(c=>c.name)].filter((v,i,a)=>a.indexOf(v)===i);
+  const users=[...new Set([...(store.sales||[]).map(s=>s.user||'Admin'),...(store.purchases||[]).map(p=>p.user||'Admin')])];
+  const now=new Date();
+  const curMonth=now.getMonth(), curYear=now.getFullYear();
+  const firstDay='01/'+String(curMonth+1).padStart(2,'0')+'/'+curYear;
+  const lastDay=new Date(curYear,curMonth+1,0).getDate()+'/'+String(curMonth+1).padStart(2,'0')+'/'+curYear;
+  const monthOpts=['This Month','Last Month','Last 3 Months','Last 6 Months','All Time'];
+  const monthVal=repFrom===firstDay&&repTo===lastDay?'This Month':repFrom||repTo||'All Time';
   let html='';
-  switch(repSel){
-    case 'Sale':
-      html=tbl(['No.','Party','Date','Amount','Balance'],[...sales].reverse().map(s=>`<tr><td class="bold">${s.no}</td><td>${s.party}</td><td>${s.date}</td><td class="right">${rs(s.total)}</td><td class="right">${rs(s.total-s.received)}</td></tr>`)); break;
-    case 'Purchase':
-      html=tbl(['No.','Party','Date','Amount'],[...purch].reverse().map(p=>`<tr><td class="bold">${p.no}</td><td>${p.party}</td><td>${p.date}</td><td class="right">${rs(p.total)}</td></tr>`)); break;
-    case 'Expense': case 'Expense Category Report':
-      html=tbl(['Category','Note','Date','Amount'],[...exp].reverse().map(e=>`<tr><td class="bold">${e.cat}</td><td class="muted">${e.note||'-'}</td><td>${e.date}</td><td class="right">${rs(e.amount)}</td></tr>`)); break;
-    case 'All parties': case 'Party Statement': case 'Party wise Profit & Loss':
-      html=tbl(['Party','Phone','Type','Balance'],store.parties.map(p=>`<tr><td class="bold">${p.name}</td><td class="muted">${p.phone||'-'}</td><td>${p.type}</td><td class="right">${rs(p.balance)}</td></tr>`)); break;
-    case 'Stock Detail': case 'Item Detail': case 'Item Wise Profit And Loss':
-      html=tbl(['Item','Code','Sale','Purchase','Stock','Value'],store.items.map(i=>`<tr><td class="bold">${i.name}</td><td class="muted">${i.code||'-'}</td><td class="right">${rs(i.price)}</td><td class="right">${rs(i.pprice)}</td><td class="right">${i.stock||0}</td><td class="right">${rs((i.stock||0)*i.price)}</td></tr>`)); break;
-    case 'Low Stock Summary':
-      html=tbl(['Item','Stock','Status'],store.items.filter(i=>(i.stock||0)<10).map(i=>`<tr><td class="bold">${i.name}</td><td class="right">${i.stock||0}</td><td class="right"><span class="pill due">Low</span></td></tr>`)); break;
-    case 'Day book': case 'All Transactions':
-      const all=[...sales.map(s=>({t:'Sale',n:s.party,d:s.date,a:s.total})),...purch.map(p=>({t:'Purchase',n:p.party,d:p.date,a:-p.total})),...exp.map(e=>({t:'Expense',n:e.cat,d:e.date,a:-e.amount}))];
-      html=tbl(['Type','Name','Date','Amount'],all.map(x=>`<tr><td class="bold">${x.t}</td><td>${x.n}</td><td>${x.d}</td><td class="right" style="color:${x.a>=0?'#1aa260':'var(--red)'}">${rs(x.a)}</td></tr>`)); break;
-    default:
-      html=`<div class="cards"><div class="card"><div class="lbl">Net Sales</div><div class="val" style="color:#1aa260">${rs(ts)}</div></div>
-        <div class="card"><div class="lbl">Purchase</div><div class="val">${rs(tp)}</div></div>
-        <div class="card"><div class="lbl">Refunds</div><div class="val" style="color:var(--red)">${rs(tr)}</div></div>
-        <div class="card"><div class="lbl">Net Profit</div><div class="val" style="color:${ts-tp-te>=0?'#1aa260':'var(--red)'}">${rs(ts-tp-te)}</div></div></div>`;
+
+  if(repSel==='Sale'){
+    const trPts=ts, trRecv=sales.reduce((a,b)=>a+(b.received||0),0), trBal=trPts-trRecv;
+    html=`
+    <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <select id="repSaleMonth" onchange="repSaleMonthChange(this.value)" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-weight:600">
+          ${monthOpts.map(m=>`<option ${m===monthVal?'selected':''}>${m}</option>`).join('')}
+        </select>
+        <span style="background:#e8f5e9;color:#1a7a3a;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600">Between</span>
+        <input type="date" id="repSaleFrom" value="${repFrom.split('/').reverse().join('-')}" onchange="repSaleApply()" style="padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <span style="font-size:12px;color:#888">To</span>
+        <input type="date" id="repSaleTo" value="${repTo.split('/').reverse().join('-')}" onchange="repSaleApply()" style="padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <select onchange="toast('Firm filter applied')" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option>ALL FIRMS</option>${firms.map(f=>`<option>${f}</option>`).join('')}</select>
+        <select onchange="toast('User filter applied')" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option>ALL USERS</option>${users.map(u=>`<option>${u}</option>`).join('')}</select>
+        <span style="flex:1"></span>
+        <button onclick="exportSaleReport()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">📊 Excel Report</button>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="font-size:13px;color:#888;margin-bottom:4px">Total Sales Amount</div>
+      <div style="font-size:28px;font-weight:800;color:#1a7a3a">${rs(trPts)}</div>
+      <div style="display:flex;gap:24px;margin-top:8px;font-size:13px">
+        <span style="color:#1a7a3a">Received: <b>${rs(trRecv)}</b></span>
+        <span style="color:#e74c3c">Balance: <b>${rs(trBal)}</b></span>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:15px;font-weight:700">Transactions</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="repSaleSearch" placeholder="🔍 Search..." oninput="filterRepSale()" style="padding:7px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px;width:200px">
+          <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="hub-table" id="repSaleTable">
+          <thead><tr>
+            <th style="width:40px">#</th>
+            <th>DATE <span style="font-size:9px">⊞</span></th>
+            <th>INVOICE # <span style="font-size:9px">⊞</span></th>
+            <th>PARTY NAME <span style="font-size:9px">⊞</span></th>
+            <th>TYPE <span style="font-size:9px">⊞</span></th>
+            <th>PAYMENT <span style="font-size:9px">⊞</span></th>
+            <th class="right">AMOUNT <span style="font-size:9px">⊞</span></th>
+            <th class="right">RECEIVED <span style="font-size:9px">⊞</span></th>
+            <th class="right">BALANCE <span style="font-size:9px">⊞</span></th>
+            <th>STATUS <span style="font-size:9px">⊞</span></th>
+            <th style="width:100px">ACTIONS</th>
+          </tr></thead>
+          <tbody>
+            ${sales.length?[...sales].reverse().map((s,i)=>{
+              const bal=(s.total||0)-(s.received||0);
+              const isPaid=bal<=0;
+              return `<tr class="rep-sale-row">
+                <td style="color:#888">${i+1}</td>
+                <td>${s.date||'-'}</td>
+                <td style="font-weight:500">${s.no||'-'}</td>
+                <td style="font-weight:500">${s.party||'-'}</td>
+                <td>${s.payMode==='Credit'?'Credit':'PoS Sale'}</td>
+                <td>${s.payMode||'Cash'}</td>
+                <td class="right" style="font-weight:600">${rs(s.total||0)}</td>
+                <td class="right">${rs(s.received||0)}</td>
+                <td class="right" style="font-weight:600;color:${isPaid?'var(--green)':'var(--red)'}">${rs(bal)}</td>
+                <td><span class="hub-pill ${isPaid?'hub-pill-paid':'hub-pill-unpaid'}">${isPaid?'Paid':'Unpaid'}</span></td>
+                <td style="white-space:nowrap">
+                  <span class="hub-action-icon" onclick="printRepSale('${s.id}')" title="Print">🖨️</span>
+                  <span class="hub-action-icon" onclick="shareRepSale('${s.id}')" title="Share">↗️</span>
+                  <span class="hub-action-icon" onclick="showInvoiceView(store.sales.find(x=>x.id==='${s.id}'))" title="View">👁️</span>
+                </td>
+              </tr>`;
+            }).join(''):``}
+          </tbody>
+        </table>
+        ${!sales.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📊</div><div style="font-size:14px">No sales found for selected dates</div></div>`:''}
+      </div>
+    </div>`;
+  }
+
+  else if(repSel==='All Transactions'){
+    const allTxns=[];
+    sales.forEach(s=>allTxns.push({type:'Sale',ref:s.no,party:s.party,date:s.date,total:s.total,received:s.received||0,balance:s.total-(s.received||0),payMode:s.payMode||'Cash',status:(s.total-(s.received||0))<=0?'Paid':'Unpaid',id:s.id,src:'sales'}));
+    purch.forEach(p=>allTxns.push({type:'Purchase',ref:p.no,party:p.party,date:p.date,total:p.total,received:p.received||0,balance:p.total-(p.received||0),payMode:p.payMode||'Cash',status:(p.total-(p.received||0))<=0?'Paid':'Unpaid',id:p.id,src:'purchases'}));
+    exp.forEach(e=>allTxns.push({type:'Expense',ref:'-',party:e.cat,date:e.date,total:e.amount,received:e.amount,balance:0,payMode:'Cash',status:'Paid',id:e.id,src:'expenses'}));
+    pays.forEach(p=>{if(p.saleId)return;allTxns.push({type:p.dir==='in'?'Payment In':'Payment Out',ref:p.receipt||'-',party:p.party,date:p.date,total:p.amount,received:p.amount,balance:0,payMode:p.mode||'Cash',status:'Paid',id:p.id,src:'payments'});});
+    allTxns.sort((a,b)=>{
+      const da=a.date||'', db=b.date||'';
+      return db.localeCompare(da);
+    });
+    const totAmt=allTxns.reduce((a,t)=>a+(t.type==='Expense'||t.type==='Payment Out'?-t.total:t.total),0);
+    const totRecv=allTxns.reduce((a,t)=>a+t.received,0);
+    html=`
+    <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <select id="repAllMonth" onchange="repAllMonthChange(this.value)" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-weight:600">
+          ${monthOpts.map(m=>`<option ${m===monthVal?'selected':''}>${m}</option>`).join('')}
+        </select>
+        <span style="background:#e8f5e9;color:#1a7a3a;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600">Between</span>
+        <input type="date" id="repAllFrom" value="${repFrom.split('/').reverse().join('-')}" onchange="repAllApply()" style="padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <span style="font-size:12px;color:#888">To</span>
+        <input type="date" id="repAllTo" value="${repTo.split('/').reverse().join('-')}" onchange="repAllApply()" style="padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <select style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option>ALL FIRMS</option>${firms.map(f=>`<option>${f}</option>`).join('')}</select>
+        <select style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option>ALL USERS</option>${users.map(u=>`<option>${u}</option>`).join('')}</select>
+        <span style="flex:1"></span>
+        <button onclick="exportAllTxnReport()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">📊 Excel Report</button>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <select id="repAllType" onchange="filterRepAllTxn()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;min-width:150px">
+          <option value="">All Transaction</option><option>Sale</option><option>Purchase</option><option>Expense</option><option>Payment In</option><option>Payment Out</option>
+        </select>
+        <select id="repAllPay" onchange="filterRepAllTxn()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;min-width:150px">
+          <option value="">All Payment</option><option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option><option>Credit</option>
+        </select>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:15px;font-weight:700">Transactions (${allTxns.length})</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="repAllSearch" placeholder="🔍 Search..." oninput="filterRepAllTxn()" style="padding:7px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px;width:200px">
+          <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="hub-table" id="repAllTable">
+          <thead><tr>
+            <th style="width:40px">#</th>
+            <th>DATE</th>
+            <th>REF #</th>
+            <th>PARTY NAME</th>
+            <th>CATEGORY</th>
+            <th>TYPE</th>
+            <th class="right">TOTAL</th>
+            <th class="right">RECEIVED</th>
+            <th class="right">BALANCE</th>
+            <th>STATUS</th>
+            <th style="width:80px">ACTIONS</th>
+          </tr></thead>
+          <tbody>
+            ${allTxns.map((t,i)=>{
+              const typeClr=t.type==='Sale'?'#2f6df6':t.type==='Purchase'?'#e67e22':t.type==='Expense'?'#e74c3c':t.type==='Payment In'?'#27ae60':'#e74c3c';
+              return `<tr class="rep-all-row" data-type="${t.type}" data-pay="${t.payMode}" data-search="${(t.party+' '+t.ref+' '+t.type).toLowerCase()}">
+                <td style="color:#888">${i+1}</td>
+                <td>${t.date||'-'}</td>
+                <td style="font-weight:500">${t.ref||'-'}</td>
+                <td style="font-weight:500">${t.party||'-'}</td>
+                <td>-</td>
+                <td><span style="color:${typeClr};font-weight:500">${t.type}</span></td>
+                <td class="right" style="font-weight:600">${rs(t.total||0)}</td>
+                <td class="right">${rs(t.received||0)}</td>
+                <td class="right" style="font-weight:600;color:${t.balance>0?'var(--red)':'var(--green)'}">${rs(t.balance||0)}</td>
+                <td><span class="hub-pill ${t.status==='Paid'?'hub-pill-paid':'hub-pill-unpaid'}">${t.status}</span></td>
+                <td style="white-space:nowrap">
+                  <span class="hub-action-icon" onclick="repPrintTxn('${t.src}','${t.id}')" title="Print">🖨️</span>
+                  <span class="hub-action-icon" onclick="repShareTxn('${t.src}','${t.id}')" title="Share">↗️</span>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        ${!allTxns.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📊</div><div style="font-size:14px">No transactions found for selected dates</div></div>`:''}
+      </div>
+    </div>`;
+  }
+
+  else if(repSel==='Day book'){
+    const all=[...sales.map(s=>({t:'Sale',n:s.party,d:s.date,a:s.total})),...purch.map(p=>({t:'Purchase',n:p.party,d:p.date,a:-p.total})),...exp.map(e=>({t:'Expense',n:e.cat,d:e.date,a:-e.amount}))];
+    all.sort((a,b)=>b.d.localeCompare(a.d));
+    html=`<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">Day Book</div>
+      <div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>TYPE</th><th>NAME</th><th>DATE</th><th class="right">AMOUNT</th></tr></thead>
+      <tbody>${all.length?all.map((x,i)=>`<tr><td style="color:#888">${i+1}</td><td style="font-weight:500">${x.t}</td><td>${x.n}</td><td>${x.d}</td><td class="right" style="font-weight:600;color:${x.a>=0?'#27ae60':'var(--red)'}">${rs(x.a)}</td></tr>`).join(''):''}</tbody></table></div>
+      ${!all.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📊</div><div style="font-size:14px">No transactions for selected dates</div></div>`:''}
+    </div>`;
+  }
+
+  else if(repSel==='Purchase'){
+    html=`<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">Purchase Report</div>
+      <div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>DATE</th><th>INVOICE #</th><th>PARTY</th><th>TYPE</th><th class="right">AMOUNT</th><th class="right">BALANCE</th><th>STATUS</th></tr></thead>
+      <tbody>${purch.length?[...purch].reverse().map((p,i)=>{const b=(p.total||0)-(p.received||0);return`<tr><td style="color:#888">${i+1}</td><td>${p.date||'-'}</td><td style="font-weight:500">${p.no||'-'}</td><td>${p.party||'-'}</td><td>${p.payMode||'Credit'}</td><td class="right" style="font-weight:600">${rs(p.total)}</td><td class="right" style="color:${b>0?'var(--red)':'var(--green)'}">${rs(b)}</td><td><span class="hub-pill ${b<=0?'hub-pill-paid':'hub-pill-unpaid'}">${b<=0?'Paid':'Unpaid'}</span></td></tr>`}).join(''):''}</tbody></table></div>
+      ${!purch.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📊</div><div style="font-size:14px">No purchases found</div></div>`:''}
+    </div>`;
+  }
+
+  else if(repSel==='Expense'||repSel==='Expense Category Report'){
+    html=`<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">Expense Report</div>
+      <div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>CATEGORY</th><th>NOTE</th><th>DATE</th><th class="right">AMOUNT</th></tr></thead>
+      <tbody>${exp.length?[...exp].reverse().map((e,i)=>`<tr><td style="color:#888">${i+1}</td><td style="font-weight:500">${e.cat||'-'}</td><td>${e.note||'-'}</td><td>${e.date||'-'}</td><td class="right" style="font-weight:600;color:var(--red)">${rs(e.amount)}</td></tr>`).join(''):''}</tbody></table></div>
+      ${!exp.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📊</div><div style="font-size:14px">No expenses found</div></div>`:''}
+    </div>`;
+  }
+
+  else if(repSel==='All parties'||repSel==='Party Statement'||repSel==='Party wise Profit & Loss'){
+    html=`<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">All Parties</div>
+      <div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>PARTY</th><th>PHONE</th><th>TYPE</th><th class="right">BALANCE</th></tr></thead>
+      <tbody>${store.parties.length?store.parties.map((p,i)=>`<tr><td style="color:#888">${i+1}</td><td style="font-weight:500">${p.name||'-'}</td><td>${p.phone||'-'}</td><td>${p.type||'-'}</td><td class="right" style="font-weight:600;color:${(p.balance||0)>0?'var(--red)':'var(--green)'}">${rs(Math.abs(p.balance||0))}</td></tr>`).join(''):''}</tbody></table></div>
+      ${!store.parties.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">👥</div><div style="font-size:14px">No parties found</div></div>`:''}
+    </div>`;
+  }
+
+  else if(repSel==='Stock Detail'||repSel==='Item Detail'||repSel==='Item Wise Profit And Loss'){
+    html=`<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">Stock / Item Detail</div>
+      <div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>ITEM</th><th>CODE</th><th class="right">SALE PRICE</th><th class="right">PURCHASE PRICE</th><th class="right">STOCK</th><th class="right">VALUE</th></tr></thead>
+      <tbody>${store.items.length?store.items.map((i,idx)=>`<tr><td style="color:#888">${idx+1}</td><td style="font-weight:500">${i.name||'-'}</td><td>${i.code||'-'}</td><td class="right">${rs(i.price)}</td><td class="right">${rs(i.pprice||0)}</td><td class="right" style="font-weight:600;color:${(i.stock||0)>0?'var(--green)':'var(--red)'}">${i.stock||0}</td><td class="right" style="font-weight:600">${rs((i.stock||0)*(i.price||0))}</td></tr>`).join(''):''}</tbody></table></div>
+      ${!store.items.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📦</div><div style="font-size:14px">No items found</div></div>`:''}
+    </div>`;
+  }
+
+  else if(repSel==='Low Stock Summary'){
+    const lowItems=store.items.filter(i=>(i.lowstock||0)>0&&(i.stock||0)<=i.lowstock);
+    html=`<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">Low Stock Items (${lowItems.length})</div>
+      <div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>ITEM</th><th class="right">STOCK</th><th class="right">MIN STOCK</th><th>STATUS</th></tr></thead>
+      <tbody>${lowItems.length?lowItems.map((i,idx)=>`<tr><td style="color:#888">${idx+1}</td><td style="font-weight:500">${i.name||'-'}</td><td class="right" style="color:var(--red);font-weight:600">${i.stock||0}</td><td class="right">${i.lowstock||0}</td><td><span class="hub-pill hub-pill-unpaid">Low</span></td></tr>`).join(''):''}</tbody></table></div>
+      ${!lowItems.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">✅</div><div style="font-size:14px">All items are well stocked</div></div>`:''}
+    </div>`;
+  }
+
+  else{
+    html=`<div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+        <div style="flex:1;min-width:160px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px"><div style="font-size:12px;color:#16a34a;margin-bottom:4px">Net Sales</div><div style="font-size:20px;font-weight:800;color:#16a34a">${rs(ts)}</div></div>
+        <div style="flex:1;min-width:160px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px"><div style="font-size:12px;color:#64748b;margin-bottom:4px">Purchase</div><div style="font-size:20px;font-weight:800">${rs(tp)}</div></div>
+        <div style="flex:1;min-width:160px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px"><div style="font-size:12px;color:#dc2626;margin-bottom:4px">Refunds</div><div style="font-size:20px;font-weight:800;color:#dc2626">${rs(tr)}</div></div>
+        <div style="flex:1;min-width:160px;background:${ts-tp-te>=0?'#f0fdf4':'#fef2f2'};border:1px solid ${ts-tp-te>=0?'#bbf7d0':'#fecaca'};border-radius:10px;padding:16px"><div style="font-size:12px;color:${ts-tp-te>=0?'#16a34a':'#dc2626'};margin-bottom:4px">Net Profit</div><div style="font-size:20px;font-weight:800;color:${ts-tp-te>=0?'#16a34a':'#dc2626'}">${rs(ts-tp-te)}</div></div>
+      </div>
+    </div>`;
   }
   body.innerHTML=html;
+}
+
+function repSaleMonthChange(v){
+  const now=new Date(), m=now.getMonth(), y=now.getFullYear();
+  if(v==='This Month'){repFrom='01/'+String(m+1).padStart(2,'0')+'/'+y;repTo=new Date(y,m+1,0).getDate()+'/'+String(m+1).padStart(2,'0')+'/'+y;}
+  else if(v==='Last Month'){repFrom='01/'+String(m).padStart(2,'0')+'/'+y;repTo=new Date(y,m,0).getDate()+'/'+String(m).padStart(2,'0')+'/'+y;}
+  else if(v==='Last 3 Months'){const sm=new Date(y,m-2,1);repFrom='01/'+String(sm.getMonth()+1).padStart(2,'0')+'/'+sm.getFullYear();repTo=new Date(y,m+1,0).getDate()+'/'+String(m+1).padStart(2,'0')+'/'+y;}
+  else if(v==='Last 6 Months'){const sm=new Date(y,m-5,1);repFrom='01/'+String(sm.getMonth()+1).padStart(2,'0')+'/'+sm.getFullYear();repTo=new Date(y,m+1,0).getDate()+'/'+String(m+1).padStart(2,'0')+'/'+y;}
+  else{repFrom='';repTo='';}
+  drawRep();
+}
+function repSaleApply(){
+  const f=document.getElementById('repSaleFrom')?.value;
+  const t=document.getElementById('repSaleTo')?.value;
+  if(f)repFrom=f.split('-').reverse().join('/');
+  if(t)repTo=t.split('-').reverse().join('/');
+  drawRep();
+}
+function filterRepSale(){
+  const q=(document.getElementById('repSaleSearch')?.value||'').toLowerCase();
+  document.querySelectorAll('.rep-sale-row').forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(q)?'':'none';});
+}
+function printRepSale(sid){
+  const s=store.sales.find(x=>x.id===sid);
+  if(s){viewInv=s;printInvoice();}
+}
+function shareRepSale(sid){
+  const s=store.sales.find(x=>x.id===sid);
+  if(!s)return;
+  let txt='Invoice #'+s.no+'\nParty: '+s.party+'\nDate: '+s.date+'\nTotal: '+rs(s.total)+'\nReceived: '+rs(s.received)+'\nBalance: '+rs(s.total-s.received);
+  if(navigator.share){navigator.share({title:'Invoice',text:txt}).catch(()=>{});}
+  else{navigator.clipboard.writeText(txt);toast('Copied!');}
+}
+function repAllMonthChange(v){
+  repSaleMonthChange(v);
+}
+function repAllApply(){
+  const f=document.getElementById('repAllFrom')?.value;
+  const t=document.getElementById('repAllTo')?.value;
+  if(f)repFrom=f.split('-').reverse().join('/');
+  if(t)repTo=t.split('-').reverse().join('/');
+  drawRep();
+}
+function filterRepAllTxn(){
+  const q=(document.getElementById('repAllSearch')?.value||'').toLowerCase();
+  const typeF=document.getElementById('repAllType')?.value||'';
+  const payF=document.getElementById('repAllPay')?.value||'';
+  document.querySelectorAll('.rep-all-row').forEach(r=>{
+    const search=(r.getAttribute('data-search')||'').includes(q);
+    const type=!typeF||r.getAttribute('data-type')===typeF;
+    const pay=!payF||r.getAttribute('data-pay')===payF;
+    r.style.display=(search&&type&&pay)?'':'none';
+  });
+}
+function repPrintTxn(src,id){
+  if(src==='sales'){const s=store.sales.find(x=>x.id===id);if(s){viewInv=s;printInvoice();}}
+  else if(src==='purchases'){printPurchase(store.purchases.findIndex(x=>x.id===id));}
+  else toast('Print coming soon');
+}
+function repShareTxn(src,id){
+  if(src==='sales'){shareRepSale(id);return;}
+  toast('Share coming soon');
+}
+function exportSaleReport(){
+  let csv='Date,Invoice,Party,Type,Payment,Amount,Received,Balance\n';
+  store.sales.filter(s=>inRange(s.date)&&!s.refunded).forEach(s=>{
+    csv+=`${s.date||''},${s.no||''},${s.party||''},Sale,${s.payMode||'Cash'},${s.total||0},${s.received||0},${(s.total||0)-(s.received||0)}\n`;
+  });
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sale-report.csv';a.click();
+  toast('Excel downloaded!');
+}
+function exportAllTxnReport(){
+  let csv='Date,Ref,Party,Type,Total,Received,Balance,Status\n';
+  store.sales.filter(s=>inRange(s.date)).forEach(s=>{csv+=`${s.date||''},${s.no||''},${s.party||''},Sale,${s.total||0},${s.received||0},${(s.total||0)-(s.received||0)},${(s.total||0)-(s.received||0)<=0?'Paid':'Unpaid'}\n`;});
+  store.purchases.filter(p=>inRange(p.date)).forEach(p=>{csv+=`${p.date||''},${p.no||''},${p.party||''},Purchase,${p.total||0},${p.received||0},${(p.total||0)-(p.received||0)},${(p.total||0)-(p.received||0)<=0?'Paid':'Unpaid'}\n`;});
+  store.expenses.filter(e=>inRange(e.date)).forEach(e=>{csv+=`${e.date||''},-,${e.cat||''},Expense,${e.amount||0},${e.amount||0},0,Paid\n`;});
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='all-transactions.csv';a.click();
+  toast('Excel downloaded!');
 }
 
 /* ============ GENERIC SECTIONS ============ */
