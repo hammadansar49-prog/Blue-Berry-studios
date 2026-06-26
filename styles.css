@@ -1053,7 +1053,7 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .pos-inv-total-sub{font-size:11px;color:#999;margin-top:2px}
 .pos-inv-breakup{text-align:right;font-size:11px;color:var(--blue);font-weight:600;cursor:pointer;line-height:1.4}
 .pos-inv-breakup span{font-size:10px;color:#999;font-weight:400}
-.pos-inv-payment{padding:14px 18px;background:#fff;border-bottom:1px solid var(--line);overflow:hidden}
+.pos-inv-payment{padding:14px 18px;background:#fff;border-bottom:1px solid var(--line);overflow:visible}
 .pos-pay-row{display:flex;gap:12px;margin-bottom:10px}
 .pos-pay-row:last-child{margin-bottom:0}
 .pos-pay-row:first-child{margin-bottom:6px}
@@ -1063,7 +1063,7 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .pos-pay-amt:focus-within{border-color:var(--blue);box-shadow:0 0 0 2px rgba(47,109,246,.15)}
 .pos-pay-amt span{padding:10px 0 10px 12px;font-size:13px;color:#999;font-weight:600;border-right:1px solid var(--line);line-height:1}
 .pos-pay-amt input{border:0;outline:none;padding:11px 12px;flex:1;text-align:left;font-size:14px;font-weight:600;background:transparent;caret-color:#333;color:#333;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.pos-pay-amt.pos-pay-disc{border-color:#ff9800}
+.pos-pay-amt.pos-pay-disc{border-color:#ff9800;box-sizing:border-box}
 .pos-pay-amt.pos-pay-disc span{color:#ff9800}
 .pos-pay-amt.pos-pay-disc:focus-within{border-color:#ff9800;box-shadow:0 0 0 2px rgba(255,152,0,.15)}
 .pos-suffix-input{display:flex;align-items:center;border:1px solid var(--line);border-radius:6px;background:#f9fafb;overflow:hidden}
