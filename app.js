@@ -243,6 +243,7 @@ function vWelcome(){
 
   content.innerHTML=`
   <div class="dash-wrap">
+    <div class="dash-welcome" style="font-size:22px;font-weight:800;color:#222;margin-bottom:14px">Welcome to <span style="color:#e74c3c">Karobar</span></div>
     <div class="dash-top-bar">
       <div class="dash-search"><span class="dash-search-ic">🔍</span><input placeholder="Search Transactions" oninput="dashSearch(this.value)"></div>
       <div style="display:flex;gap:10px;margin-left:auto">
