@@ -362,11 +362,12 @@ function calcLowStockCount(){
 function dashInitChart(){attachChartTooltips('dashChart')}
 
 function showWidgetModal(){
-  if(!store.widgets) store.widgets={purchases:false,expenses:false,stock:false,cash:false,bank:false,lowstock:false};
+  if(!store.widgets) store.widgets={purchases:false,expenses:false,stock:false,avstock:false,cash:false,bank:false,lowstock:false};
   const widgets=[
     {key:'purchases',label:'Purchases',val:rs((store.purchases||[]).reduce((a,p)=>a+p.total,0))},
     {key:'expenses',label:'Expenses',val:rs((store.expenses||[]).reduce((a,e)=>a+e.amount,0))},
     {key:'stock',label:'Stock Value',val:rs((store.items||[]).reduce((a,i)=>a+(i.stock||0)*(i.price||0),0))},
+    {key:'avstock',label:'Available Stock',val:(store.items||[]).reduce((a,i)=>a+(i.stock||0),0)+' units'},
     {key:'cash',label:'Cash In Hand',val:rs(calcCashInHand())},
     {key:'bank',label:'Total Bank Balance',val:rs((store.banks||[]).reduce((a,b)=>a+(b.bal||0),0))},
     {key:'lowstock',label:'Low Stock Items',val:calcLowStockCount()+' items'}
@@ -409,6 +410,7 @@ function renderWidgets(){
   if(w.purchases) items.push({label:'Purchases',val:rs((store.purchases||[]).reduce((a,p)=>a+p.total,0)),color:'#2f6df6'});
   if(w.expenses) items.push({label:'Expenses',val:rs((store.expenses||[]).reduce((a,e)=>a+e.amount,0)),color:'#e74c3c'});
   if(w.stock) items.push({label:'Stock Value',val:rs((store.items||[]).reduce((a,i)=>a+(i.stock||0)*(i.price||0),0)),color:'#8b5cf6'});
+  if(w.avstock) items.push({label:'Available Stock',val:(store.items||[]).reduce((a,i)=>a+(i.stock||0),0)+' units',color:'#6366f1'});
   if(w.cash) items.push({label:'Cash In Hand',val:rs(calcCashInHand()),color:'#27ae60'});
   if(w.bank) items.push({label:'Total Bank Balance',val:rs((store.banks||[]).reduce((a,b)=>a+(b.bal||0),0)),color:'#0891b2'});
   if(w.lowstock) items.push({label:'Low Stock Items',val:calcLowStockCount()+' items',color:'#f59e0b'});
