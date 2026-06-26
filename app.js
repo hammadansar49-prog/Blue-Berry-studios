@@ -2,7 +2,7 @@
 const KEY='mybiz_v2';
 let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
-function persist(){ localStorage.setItem(KEY, JSON.stringify(store)) }
+function persist(){ localStorage.setItem(KEY, JSON.stringify(store)); if(window.cloudPush) window.cloudPush(); }
 function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
 function refreshAll(){ refreshView(); }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
@@ -5434,9 +5434,22 @@ function addUser(){
     const role=document.getElementById('f_userrole').value;
     const pass=document.getElementById('f_userpass').value;
     if(!pass)return toast('Set a password');
+    if(pass.length<6)return toast('Password kam az kam 6 characters ka ho (cloud login ke liye)');
     if(!store.users)store.users=[];
-    store.users.push({id:id(),name:n,role,pass,created:dispDate()});
-    persist();refreshView();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n);},'ADD');
+    // Create the linked cloud account first, then save locally.
+    toast('Creating user…');
+    window.createStaffAccount(n,pass).then(function(staffUid){
+      store.users.push({id:id(),name:n,role,pass,created:dispDate(),staffUid:staffUid});
+      persist();refreshView();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n);
+    }).catch(function(e){
+      var box=document.getElementById('f_userError');
+      var show=function(m){ if(box){ box.textContent='⚠ '+m; box.style.display='block'; } toast(m); };
+      if(e.code==='auth/email-already-in-use')show('Ye username "'+n+'" already exist karta hai — koi doosra username rakhein');
+      else if(e.code==='auth/weak-password')show('Password kam az kam 6 characters ka ho');
+      else if(e.code==='not-owner')show('Sirf store owner naye users bana sakta hai');
+      else if(e.code==='auth/network-request-failed')show('Internet connection check karein');
+      else show('User banane mein error: '+(e.code||e.message));
+    });},'ADD');
 }
 function checkUsernameExists(){
   const n=(document.getElementById('f_username').value||'').trim().toLowerCase();
@@ -6853,7 +6866,23 @@ function restoreCompanyBackup(){
   const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,.vyp';
   inp.onchange=()=>restoreBackup(inp); inp.click();
 }
-function companyLogout(){ if(confirm('Logout? Logging out will stop syncing data.')){ closeModal('companyModal'); toast('Logged out (demo)'); } }
+function staffLoginPrompt(){
+  try{ closeModal('companyModal'); }catch(e){}
+  formModal('Login with User ID',`<p style="font-size:12px;color:#888;margin:0 0 12px">Apni User ID aur password daalein. Aapko us store ka same data milega.</p>
+    <div class="field"><label>User ID</label><input id="sl_uid" placeholder="Enter user id" autocomplete="off"></div>
+    <div class="field" style="margin-top:10px"><label>Password</label><input id="sl_pass" type="password" placeholder="Enter password"></div>
+    <div id="sl_err" style="color:var(--red);font-size:12px;margin-top:8px;min-height:14px"></div>`,()=>{
+    const uid=(document.getElementById('sl_uid').value||'').trim();
+    const pass=document.getElementById('sl_pass').value||'';
+    const err=document.getElementById('sl_err');
+    if(!uid||!pass){ if(err)err.textContent='User ID aur password dono daalein'; return; }
+    if(err)err.textContent='Logging in…';
+    window.fbStaffLogin(uid,pass,function(m){ if(err)err.textContent=m; });
+    // on success, auth state change reloads the store and closes the app gate
+    setTimeout(()=>{ try{ closeModal('companyModal'); closeModal('formModal'); }catch(e){} }, 1600);
+  },'Login');
+}
+function companyLogout(){ if(confirm('Logout? Logging out will stop syncing data.')){ closeModal('companyModal'); if(window.fbLogout)window.fbLogout(); } }
 
 /* ============ HELPERS ============ */
 const content=document.getElementById('content');
@@ -7091,3 +7120,327 @@ function showProfitView(){
   btn.textContent='📊 See Payments';
   btn.classList.add('active');
 }
+
+/* ============ FIREBASE CLOUD SYNC ============ */
+(function(){
+  var fbUser = null;          // current firebase user
+  var unsub = null;           // onSnapshot unsubscribe
+  var applyingRemote = false; // guard: don't push while applying remote data
+  var pushTimer = null;       // debounce timer
+  var lastPushedJSON = '';    // last payload we wrote (echo guard)
+  var fbMode = 'login';       // 'login' | 'signup'
+  var loginKind = 'owner';    // 'owner' (email/Google) | 'staff' (user-id)
+  var cloudReady = false;     // true only AFTER this user's own cloud data is loaded
+  var dataUid = null;         // the store doc we read/write (owner uid; = authUid for owners, ownerUid for staff)
+  var isStaffSession = false; // true when the logged-in user is a staff member of someone else's store
+  var STAFF_DOMAIN = '@staff.karobar.app'; // synthetic email domain for staff user-id logins
+
+  function $(id){ return document.getElementById(id); }
+  // Cloud payload = the whole store EXCEPT per-device fields (currentUser is local only).
+  function cloudJSON(){ var c = {}; for(var k in store){ if(k!=='currentUser') c[k]=store[k]; } return JSON.stringify(c); }
+  // A genuinely empty store for a brand-new owner: no demo company/shared/phone/users/items.
+  function freshOwnerStore(){
+    var d = defaults();
+    d.companies = [{ id: 'c1', name: '', sync: true, current: true }];
+    d.sharedCompanies = [];
+    if(d.account) d.account.phone = '';
+    d.users = [];
+    return d;
+  }
+  function setStatus(t){ var e=$('fbSyncStatus'); if(e) e.textContent=t; }
+  function setErr(t){ var e=$('fbAuthError'); if(e) e.textContent=t||''; }
+
+  function showAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='block'; }
+  function hideAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='none'; }
+
+  // ---- Real-time push to Firestore (debounced) ----
+  window.cloudPush = function(){
+    if(!fbUser || applyingRemote || !cloudReady) return; // never push before this user's data is loaded
+    var uidAtSchedule = fbUser.uid;                      // lock the auth account NOW
+    var docAtSchedule = dataUid;                         // lock the store doc NOW
+    if(pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(function(){
+      // Abort if the account/store changed (logout / switch) between schedule and fire
+      if(!fbUser || fbUser.uid !== uidAtSchedule || dataUid !== docAtSchedule || !cloudReady) return;
+      var json = cloudJSON();
+      lastPushedJSON = json;
+      setStatus('Saving…');
+      // merge:true so we never clobber the memberUids field on the store doc
+      window.fbDB.collection('users').doc(docAtSchedule).set({
+        data: json,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true }).then(function(){
+        setStatus('☁️ Saved · ' + new Date().toLocaleTimeString());
+      }).catch(function(e){
+        setStatus('⚠️ Save failed: ' + e.code);
+        console.error('cloudPush error', e);
+      });
+    }, 700);
+  };
+
+  // ---- Apply remote data into local store ----
+  function applyRemote(json){
+    try{
+      applyingRemote = true;
+      var keepUser = store.currentUser;          // currentUser is per-device, keep it
+      store = JSON.parse(json);
+      store.currentUser = keepUser;
+      if(typeof ensure==='function') ensure();
+      localStorage.setItem(KEY, JSON.stringify(store)); // local cache, no cloud echo
+      if(typeof refreshAll==='function') refreshAll();
+    }catch(e){ console.error('applyRemote error', e); }
+    finally{ applyingRemote = false; }
+  }
+
+  // ---- Load THIS user's data from cloud, then start live sync ----
+  // Strict isolation: data comes ONLY from this user's own cloud doc.
+  // A brand-new user starts with a fresh empty store (never the previous user's data).
+  function loadUserData(authUid){
+    cloudReady = false;            // block all pushes until we have the right store's data
+    if(pushTimer){ clearTimeout(pushTimer); pushTimer = null; }  // drop any previous pending write
+    if(unsub){ unsub(); unsub = null; }
+    setStatus('Loading your data…');
+    // 1) Am I a staff member of someone else's store? Check the mapping.
+    window.fbDB.collection('staffMap').doc(authUid).get().then(function(mapSnap){
+      var ownerUid = (mapSnap.exists && mapSnap.data() && mapSnap.data().ownerUid) ? mapSnap.data().ownerUid : authUid;
+      isStaffSession = (ownerUid !== authUid);
+      dataUid = ownerUid;                           // <-- read/write the OWNER's store doc
+      // 2) Load that store's data.
+      return window.fbDB.collection('users').doc(dataUid).get().then(function(snap){
+        var hasData = snap.exists && snap.data() && snap.data().data;
+        applyingRemote = true;
+        if(hasData){
+          store = JSON.parse(snap.data().data);     // owner's store (shared by all members)
+        }else if(isStaffSession){
+          throw { code: 'owner-store-missing' };     // staff but owner has no data -> abort safely
+        }else{
+          store = freshOwnerStore();                 // brand-new owner -> truly empty
+        }
+        if(typeof ensure==='function') ensure();
+        // Cloud login IS the identity now -> set currentUser locally and skip the old
+        // "select your account" password screen entirely.
+        if(isStaffSession){
+          var me = (store.users||[]).filter(function(u){return u.staffUid===authUid;})[0];
+          store.currentUser = me ? {name:me.name, role:me.role, id:me.id} : {name:'Staff', role:'cashier', id:'staff'};
+        }else{
+          var oname = (fbUser && (fbUser.displayName || fbUser.email)) || 'Owner';
+          store.currentUser = {name: oname, role:'owner', id:'admin'};
+        }
+        localStorage.setItem(KEY, JSON.stringify(store));
+        lastPushedJSON = cloudJSON();
+        applyingRemote = false;
+        cloudReady = true;                           // pushes allowed now
+        try{ closeModal('loginModal'); closeModal('passcodeModal'); }catch(e){}
+        var badge=document.getElementById('currentUserBadge');
+        if(badge) badge.textContent = store.currentUser.name + ' (' + (store.currentUser.role.charAt(0).toUpperCase()+store.currentUser.role.slice(1)) + ')';
+        if(typeof refreshAll==='function') refreshAll();
+        if(typeof nav==='function'){ try{ nav('home'); }catch(e){} }
+        if(!hasData && !isStaffSession){
+          // create the owner's store doc with an empty members list
+          window.fbDB.collection('users').doc(dataUid).set({
+            data: lastPushedJSON,
+            memberUids: [],
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true }).catch(function(e){ console.error('create store doc error', e); });
+        }
+        startSnapshot(dataUid);
+        hideAuthModal();                             // data ready -> reveal the app
+        setStatus((isStaffSession ? '☁️ Joined store · ' : '☁️ Ready · ') + new Date().toLocaleTimeString());
+      });
+    }).catch(function(e){
+      // No data loaded -> never fall back to in-memory data (could be another store's!)
+      cloudReady = false; dataUid = null; isStaffSession = false;
+      console.error('loadUserData error', e);
+      setErr('Data load nahi hua (' + (e.code||e.message) + '). Internet check karke dobara login karein.');
+      window.fbAuth.signOut();
+    });
+  }
+
+  // ---- Live listener for remote changes (other devices, same account) ----
+  function startSnapshot(uid){
+    if(unsub){ unsub(); unsub = null; }
+    var ref = window.fbDB.collection('users').doc(uid);
+    unsub = ref.onSnapshot(function(snap){
+      if(!cloudReady) return;
+      if(snap.metadata.hasPendingWrites) return;     // our own pending write
+      if(!snap.exists) return;
+      var d = snap.data();
+      var json = d && d.data;
+      if(!json) return;
+      if(json === lastPushedJSON) return;            // echo of our own write
+      if(json === cloudJSON()) return;               // already in sync
+      applyRemote(json);
+      setStatus('☁️ Synced · ' + new Date().toLocaleTimeString());
+    }, function(err){
+      setStatus('⚠️ Sync error: ' + err.code);
+      console.error('onSnapshot error', err);
+    });
+  }
+
+  // ---- Auth UI handlers (global) ----
+  window.fbToggleMode = function(){
+    fbMode = (fbMode==='login') ? 'signup' : 'login';
+    $('fbLoginBtn').textContent = (fbMode==='login') ? 'Login' : 'Create Account';
+    $('fbToggleBtn').textContent = (fbMode==='login') ? 'New here? Create an account' : 'Already have an account? Login';
+    $('fbAuthSub').textContent = (fbMode==='login') ? 'Login to sync your data across devices' : 'Create an account to back up your data';
+    setErr('');
+  };
+
+  window.loginKindIsStaff = function(){ return loginKind === 'staff'; };
+  // Toggle the gate between store-owner login and staff (user-id) login
+  window.fbSwitchKind = function(kind){
+    loginKind = kind;
+    var staff = (kind==='staff');
+    var lblEmail = document.querySelector('#fbAuthModal label[for-field="email"]');
+    if($('fbEmail')) $('fbEmail').placeholder = staff ? 'User ID' : 'you@example.com';
+    if($('fbEmail')) $('fbEmail').type = staff ? 'text' : 'email';
+    var emLbl = $('fbEmailLabel'); if(emLbl) emLbl.textContent = staff ? 'User ID' : 'Email';
+    $('fbAuthSub') && ($('fbAuthSub').textContent = staff ? 'Employee login — apni User ID se' : 'Login to sync your data across devices');
+    // hide owner-only options in staff mode
+    ['fbToggleBtn','fbGoogleBtn','fbForgotWrap','fbOrWrap'].forEach(function(idd){ var e=$(idd); if(e) e.style.display = staff ? 'none' : ''; });
+    var sw=$('fbKindToggle'); if(sw) sw.textContent = staff ? '← Store owner login (Email/Google)' : 'Employee? Login with User ID';
+    setErr('');
+  };
+
+  window.fbDoLogin = function(){
+    if(loginKind==='staff'){
+      var uid = ($('fbEmail').value||'').trim();
+      var p2 = $('fbPass').value||'';
+      setErr(''); $('fbLoginBtn').disabled = true;
+      window.fbStaffLogin(uid, p2, function(m){ setErr(m); });
+      setTimeout(function(){ if($('fbLoginBtn')) $('fbLoginBtn').disabled = false; }, 1500);
+      return;
+    }
+    var email = ($('fbEmail').value||'').trim();
+    var pass = $('fbPass').value||'';
+    if(!email || !pass){ setErr('Email aur password dono daalein'); return; }
+    setErr(''); $('fbLoginBtn').disabled = true;
+    var p = (fbMode==='signup')
+      ? window.fbAuth.createUserWithEmailAndPassword(email, pass)
+      : window.fbAuth.signInWithEmailAndPassword(email, pass);
+    p.catch(function(e){
+      var msg = e.code;
+      if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password') msg='Galat email ya password';
+      else if(e.code==='auth/email-already-in-use') msg='Ye email already registered hai — Login karein';
+      else if(e.code==='auth/weak-password') msg='Password kam az kam 6 characters ka ho';
+      else if(e.code==='auth/invalid-email') msg='Email sahi nahi hai';
+      else if(e.code==='auth/network-request-failed') msg='Internet connection check karein';
+      setErr(msg);
+    }).finally(function(){ $('fbLoginBtn').disabled = false; });
+  };
+
+  window.fbGoogleLogin = function(){
+    setErr('Google login khul raha hai…');
+    var provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    window.fbAuth.signInWithPopup(provider).then(function(){
+      setErr('');
+    }).catch(function(e){
+      // Popup blocked / failed -> fall back to full-page redirect (always works)
+      if(e.code==='auth/popup-blocked' || e.code==='auth/popup-closed-by-user' || e.code==='auth/cancelled-popup-request' || e.code==='auth/operation-not-supported-in-this-environment'){
+        setErr('Google par redirect ho rahe hain…');
+        window.fbAuth.signInWithRedirect(provider).catch(function(e2){ setErr(gErr(e2)); });
+        return;
+      }
+      setErr(gErr(e));
+    });
+  };
+  function gErr(e){
+    if(e.code==='auth/network-request-failed') return 'Internet connection check karein';
+    if(e.code==='auth/unauthorized-domain') return 'Is domain ko Firebase Console > Authentication > Settings > Authorized domains mein add karein';
+    if(e.code==='auth/account-exists-with-different-credential') return 'Ye email pehle se kisi aur tareeqe se registered hai';
+    return e.code || e.message;
+  }
+
+  // ---- Secondary Firebase app (creates staff accounts WITHOUT logging the owner out) ----
+  function secondaryAuth(){
+    var s;
+    try { s = firebase.app('staffWorker'); }
+    catch(e){ s = firebase.initializeApp(firebaseConfig, 'staffWorker'); }
+    return s.auth();
+  }
+
+  // ---- Owner creates a linked staff account, mapped to this store ----
+  // Returns Promise<staffUid>. Must be called while an OWNER is logged in.
+  window.createStaffAccount = function(username, pass){
+    if(!fbUser || isStaffSession || dataUid !== fbUser.uid){
+      return Promise.reject({ code: 'not-owner', message: 'Sirf store owner naye users bana sakta hai' });
+    }
+    var ownerUid = fbUser.uid;
+    var uname = (username||'').toLowerCase().trim();
+    var email = uname + STAFF_DOMAIN;
+    var sec = secondaryAuth();
+    return sec.createUserWithEmailAndPassword(email, pass).then(function(cred){
+      var staffUid = cred.user.uid;
+      // Owner (primary auth) writes the mapping + adds staff to the members list.
+      return window.fbDB.collection('staffMap').doc(staffUid).set({ ownerUid: ownerUid, username: uname })
+        .then(function(){
+          return window.fbDB.collection('users').doc(ownerUid).set({
+            memberUids: firebase.firestore.FieldValue.arrayUnion(staffUid)
+          }, { merge: true });
+        })
+        .then(function(){ return sec.signOut().catch(function(){}); })
+        .then(function(){ return staffUid; });
+    });
+  };
+
+  // ---- Staff logs in with their user-id + password (resolves to the owner's store) ----
+  window.fbStaffLogin = function(username, pass, onErr){
+    var uname = (username||'').toLowerCase().trim();
+    if(!uname || !pass){ if(onErr) onErr('User ID aur password dono daalein'); return; }
+    var email = uname + STAFF_DOMAIN;
+    window.fbAuth.signInWithEmailAndPassword(email, pass).catch(function(e){
+      var msg = e.code;
+      if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found') msg='Galat User ID ya password';
+      else if(e.code==='auth/network-request-failed') msg='Internet connection check karein';
+      if(onErr) onErr(msg); else setErr(msg);
+    });
+  };
+
+  window.fbResetPass = function(){
+    var email = ($('fbEmail').value||'').trim();
+    if(!email){ setErr('Pehle apna email daalein, phir Forgot password dabayein'); return; }
+    window.fbAuth.sendPasswordResetEmail(email).then(function(){
+      setErr(''); alert('Password reset link aapke email par bhej diya gaya hai: '+email);
+    }).catch(function(e){ setErr(e.code); });
+  };
+
+  window.fbLogout = function(){
+    if(window.fbAuth) window.fbAuth.signOut();
+  };
+
+  // ---- React to auth state ----
+  function init(){
+    if(!window.fbAuth){ console.warn('Firebase not loaded'); return; }
+    showAuthModal();
+    // Surface any error that happened during a Google redirect sign-in
+    window.fbAuth.getRedirectResult().catch(function(e){ if(e&&e.code) setErr(gErr(e)); });
+    window.fbAuth.onAuthStateChanged(function(user){
+      if(user){
+        fbUser = user;
+        // keep the cover screen up; only hide AFTER this user's data has loaded
+        $('fbAuthSub') && ( $('fbAuthSub').textContent = 'Loading your data…' );
+        var box=$('fbAccountBox'); if(box){ box.style.display='flex'; $('fbAccountEmail').textContent = user.email || 'Cloud account'; }
+        loadUserData(user.uid);   // load ONLY this user's data, then hides cover
+      }else{
+        // Signed out -> stop sync AND wipe local data so the next user can't see it
+        fbUser = null;
+        cloudReady = false;
+        dataUid = null;
+        isStaffSession = false;
+        if(unsub){ unsub(); unsub = null; }
+        if(pushTimer){ clearTimeout(pushTimer); pushTimer = null; }
+        lastPushedJSON = '';
+        applyingRemote = true;
+        store = defaults();
+        localStorage.removeItem(KEY);
+        applyingRemote = false;
+        var box2=$('fbAccountBox'); if(box2) box2.style.display='none';
+        showAuthModal();
+      }
+    });
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
