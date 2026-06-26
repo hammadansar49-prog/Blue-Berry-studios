@@ -2938,7 +2938,7 @@ function renderPOForm(){
     const amt=(r.qty||0)*(r.price||0)-(r.discA||0);
     return `<tr>
       <td style="width:30px;text-align:center;color:#999;font-size:12px">${idx+1}</td>
-      <td><input value="${r.item}" onfocus="poFilterItems(this,'')" onblur="setTimeout(hideSharedItemDropdown,200)" oninput="poUpdateItem(${idx},this.value);poFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input value="${r.item}" onfocus="poFilterItems(this,'')" onblur="setTimeout(hideSharedItemDropdown,300)" oninput="poUpdateItem(${idx},this.value);poFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.desc}" oninput="poData.rows[${idx}].desc=this.value" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.count}" oninput="poData.rows[${idx}].count=this.value" style="width:70px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.size}" oninput="poData.rows[${idx}].size=this.value" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
@@ -3055,7 +3055,7 @@ function sharedItemPick(id){
   dd.style.display='none';
 }
 function poFilterItems(input,val){
-  const itemList=(store.items||[]).map(it=>`<div class="po-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+  const itemList=(store.items||[]).map(it=>`<div class="po-item-opt" data-name="${it.name}" data-code="${it.code||''}" onmousedown=\"event.preventDefault();sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
     <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
     <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
     <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
@@ -3283,7 +3283,7 @@ function vPurchaseForm(){
               </div>`).join('');
               return `<tr>
                 <td class="pf-td-num">${i+1}</td>
-                <td><input placeholder="Search item..." value="${r.item}" onfocus="pfFilterItems(this,'',${i})" onblur="setTimeout(hideSharedItemDropdown,200)" oninput="pfTabs[${pfActiveTab}].rows[${i}].item=this.value;pfFilterItems(this,this.value,${i})" autocomplete="off" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+                <td><input placeholder="Search item..." value="${r.item}" onfocus="pfFilterItems(this,'',${i})" onblur="setTimeout(hideSharedItemDropdown,300)" oninput="pfTabs[${pfActiveTab}].rows[${i}].item=this.value;pfFilterItems(this,this.value,${i})" autocomplete="off" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
                 <td><input placeholder="Description" value="${r.desc}" oninput="pfTabs[${pfActiveTab}].rows[${i}].desc=this.value"></td>
                 <td><input type="number" value="${r.count}" oninput="pfTabs[${pfActiveTab}].rows[${i}].count=this.value"></td>
                 <td><input placeholder="Size" value="${r.size}" oninput="pfTabs[${pfActiveTab}].rows[${i}].size=this.value"></td>
@@ -3358,7 +3358,7 @@ function pfSelectItem(idx,it){
   vPurchaseForm();
 }
 function pfFilterItems(input,val,idx){
-  const itemList=(store.items||[]).map(it=>`<div class="pf-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+  const itemList=(store.items||[]).map(it=>`<div class="pf-item-opt" data-name="${it.name}" data-code="${it.code||''}" onmousedown=\"event.preventDefault();sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
     <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
     <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
     <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
@@ -3564,7 +3564,7 @@ function renderDebitNoteForm(){
     const amt=(r.qty||0)*(r.price||0)-(r.discA||0);
     return `<tr>
       <td style="width:30px;text-align:center;color:#999;font-size:12px">${idx+1}</td>
-      <td><input value="${r.item}" onfocus="dnFilterItems(this,'')" onblur="setTimeout(hideSharedItemDropdown,200)" oninput="dnUpdateItem(${idx},this.value);dnFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input value="${r.item}" onfocus="dnFilterItems(this,'')" onblur="setTimeout(hideSharedItemDropdown,300)" oninput="dnUpdateItem(${idx},this.value);dnFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.desc}" oninput="dnData.rows[${idx}].desc=this.value" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.count}" oninput="dnData.rows[${idx}].count=this.value" style="width:70px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.size}" oninput="dnData.rows[${idx}].size=this.value" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
@@ -3656,7 +3656,7 @@ function dnSelectItem(it){
 }
 function dnUpdateItem(idx,val){dnData.rows[idx].item=val;}
 function dnFilterItems(input,val){
-  const itemList=(store.items||[]).map(it=>`<div class="dn-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+  const itemList=(store.items||[]).map(it=>`<div class="dn-item-opt" data-name="${it.name}" data-code="${it.code||''}" onmousedown=\"event.preventDefault();sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
     <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
     <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
     <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
