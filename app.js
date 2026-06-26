@@ -4,7 +4,15 @@ let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)); if(window.cloudPush) window.cloudPush(); }
 function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
-function refreshAll(){ refreshView(); }
+function refreshAll(){ refreshView(); refreshOpenModals(); }
+// Re-render live data inside any open modal (e.g. the payment-breakdown popup) so
+// real-time cloud updates reflect immediately without closing/reopening.
+function refreshOpenModals(){
+  try{
+    var pm=document.getElementById('paymentModal');
+    if(pm&&pm.classList.contains('show')&&typeof renderPaymentBreakdown==='function') renderPaymentBreakdown();
+  }catch(e){}
+}
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
 function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'',category:'',address:'',pincode:'',signature:''},parties:[],items:[],sales:[],purchases:[],
   expenses:[],payments:[],banks:[],refunds:[],trash:[],categories:['General'],counters:{sale:1,purchaseBase:1},activityLog:[],users:[],
@@ -4898,7 +4906,7 @@ function downloadSavedInv(sid){
   if(s){viewInv=s;downloadInvoice();}
 }
 /* ============ CREATE INVOICE (Compact Sale) ============ */
-let nciRows=[{name:'',item:'',qty:1,price:0}], nciDiscP=0, nciDiscAmt=0, nciTaxRate=0, nciReceived=0, nciFully=false, nciCustName='', nciCustPhone='';
+let nciRows=[{name:'',item:'',qty:1,price:0}], nciDiscP=0, nciDiscAmt=0, nciTaxRate=0, nciReceived=0, nciFully=false, nciCustName='', nciCustPhone='', nciPayMode='Cash';
 function nciFmt(n){ return Number(n||0).toLocaleString('en-IN'); }
 function nci2(n){ return Number(n||0).toFixed(2); }
 function nciTotals(){
@@ -4948,6 +4956,16 @@ function vCreateInvoice(){
               <option value="18" ${nciTaxRate===18?'selected':''}>GST @18%</option>
             </select>
             <input id="nciTaxAmt" type="number" value="${Math.round(t.taxAmt)}" readonly>
+          </div>
+        </div>
+        <div class="nci-sumline"><span class="lbl">Payment Mode</span>
+          <div class="nci-money">
+            <select class="nci-tax-sel" onchange="nciPayMode=this.value" style="min-width:150px">
+              <option ${nciPayMode==='Cash'?'selected':''}>Cash</option>
+              <option ${nciPayMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
+              <option ${nciPayMode==='QR Code'?'selected':''}>QR Code</option>
+              <option ${nciPayMode==='Cheque'?'selected':''}>Cheque</option>
+            </select>
           </div>
         </div>
         <div class="nci-sumline"><span class="lbl">Received</span>
@@ -5061,7 +5079,7 @@ function nciPreview(){
   </div>`;
 }
 function nciSwitchFull(){ openSale(); }
-function nciReset(){ nciRows=[{name:'',item:'',qty:1,price:0}]; nciDiscP=0; nciDiscAmt=0; nciTaxRate=0; nciReceived=0; nciFully=false; nciCustName=''; nciCustPhone=''; }
+function nciReset(){ nciRows=[{name:'',item:'',qty:1,price:0}]; nciDiscP=0; nciDiscAmt=0; nciTaxRate=0; nciReceived=0; nciFully=false; nciCustName=''; nciCustPhone=''; nciPayMode='Cash'; }
 function nciWhatsApp(s){
   let digits=(s.phone||'').replace(/\D/g,'').replace(/^0+/,''); digits=digits.replace(/^92/,'');
   const to=digits?('92'+digits):'';
@@ -5090,7 +5108,7 @@ function nciSave(action){
   const saleDate=s.addTime?dispDate()+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):dispDate();
   const saleRows=rows.map(r=>({item:r.name||r.item,qty:+r.qty||0,price:+r.price||0,disc:0}));
   const saleId=id();
-  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:saleRows,total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,status:t.received>=t.total?'paid':'unpaid'};
+  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:saleRows,total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:t.received>=t.total?'paid':'unpaid'};
   store.sales.push(sale);
   store.counters.sale++;
   if(s.stockMaintain!==false)saleRows.forEach(r=>{ const it=store.items.find(x=>x.name===r.item); if(it&&typeof it.stock==='number')it.stock-=r.qty; });
@@ -5098,7 +5116,7 @@ function nciSave(action){
   if(!p){ p={id:id(),name:cust,phone:phone,type:'customer',balance:0}; store.parties.push(p); }
   else if(phone)p.phone=phone;
   p.balance+=t.total-t.received;
-  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:t.received,mode:'Cash',date:dispDate()});
+  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:t.received,mode:nciPayMode,date:dispDate()});
   persist();
   viewInv=sale;
   toast('Invoice saved! '+invNo);
@@ -7277,6 +7295,22 @@ function showProfitView(){
     });
   }
 
+  // ---- Manual / periodic one-shot refresh from the cloud ----
+  window.cloudRefresh = function(manual){
+    if(!cloudReady || !dataUid || !window.fbDB){ if(manual) toast('Pehle login karein'); return; }
+    var btn = document.getElementById('tbRefresh');
+    if(manual && btn){ btn.style.transition='transform .6s ease'; btn.style.transform='rotate(360deg)'; setTimeout(function(){ btn.style.transition=''; btn.style.transform=''; }, 600); }
+    window.fbDB.collection('users').doc(dataUid).get().then(function(snap){
+      if(!cloudReady) return;
+      var json = snap.exists && snap.data() && snap.data().data;
+      if(!json) return;
+      if(json === lastPushedJSON || json === cloudJSON()){ if(manual) toast('Already up to date'); return; }
+      applyRemote(json);
+      setStatus('☁️ Refreshed · ' + new Date().toLocaleTimeString());
+      if(manual) toast('Data refreshed');
+    }).catch(function(e){ if(manual) toast('Refresh failed: ' + (e.code||e.message)); });
+  };
+
   // ---- Auth UI handlers (global) ----
   window.fbToggleMode = function(){
     fbMode = (fbMode==='login') ? 'signup' : 'login';
@@ -7415,6 +7449,8 @@ function showProfitView(){
     showAuthModal();
     // Surface any error that happened during a Google redirect sign-in
     window.fbAuth.getRedirectResult().catch(function(e){ if(e&&e.code) setErr(gErr(e)); });
+    // Auto-refresh from the cloud every 5s (belt-and-suspenders on top of the live listener)
+    if(!window.__cloudPoll){ window.__cloudPoll = setInterval(function(){ if(cloudReady) window.cloudRefresh(false); }, 5000); }
     window.fbAuth.onAuthStateChanged(function(user){
       if(user){
         fbUser = user;
