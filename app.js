@@ -376,7 +376,7 @@ function showWidgetModal(){
     {key:'bank',label:'Total Bank Balance',val:rs((store.banks||[]).reduce((a,b)=>a+(b.bal||0),0))},
     {key:'lowstock',label:'Low Stock Items',val:calcLowStockCount()+' items'}
   ];
-  const html=`<div id="widgetModal" class="modal-overlay" onclick="closeModal('widgetModal')" style="position:fixed;inset:0;background:rgba(20,22,30,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px">
+  const html=`<div id="widgetModal" class="modal-overlay modal-dynamic" onclick="closeModal('widgetModal')" style="position:fixed;inset:0;background:rgba(20,22,30,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px">
     <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;width:95%;border-radius:16px;overflow:hidden">
       <div class="modal-head"><span>Add Widget of Your Choice</span><span class="modal-close" onclick="closeModal('widgetModal')">✕</span></div>
       <div style="padding:16px">
@@ -2805,7 +2805,7 @@ function viewPurchase(idx){
   if(!p)return;
   const bal=p.total-p.received;
   const rows=(p.rows||[]).map(r=>`<tr><td>${r.item||'-'}</td><td class="right">${r.qty||0}</td><td class="right">${rs(r.price||0)}</td><td class="right">${rs((r.qty||0)*(r.price||0))}</td></tr>`).join('');
-  const html=`<div class="modal-overlay" id="purchViewModal" onclick="closeModal('purchViewModal')">
+  const html=`<div class="modal-overlay modal-dynamic" id="purchViewModal" onclick="closeModal('purchViewModal')">
     <div class="modal" onclick="event.stopPropagation()" style="max-width:600px;width:95%">
       <div class="modal-head"><span>Purchase ${p.no||''}</span><span class="modal-close" onclick="closeModal('purchViewModal')">✕</span></div>
       <div style="padding:20px">
@@ -3770,7 +3770,7 @@ function buildDebitNoteText(nid){
   return txt;
 }
 function openAddPartyModal(){
-  const html=`<div class="modal-overlay show" id="addPartyModal" onclick="closeModal('addPartyModal')">
+  const html=`<div class="modal-overlay modal-dynamic show" id="addPartyModal" onclick="closeModal('addPartyModal')">
     <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;width:95%">
       <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid #eee">
         <span style="font-size:18px;font-weight:700">Add New Party</span>
@@ -5185,7 +5185,7 @@ function addPayment(dir){
   const title=isOut?'Payment-Out':'Payment-In';
   const nextNo=(store.payments||[]).filter(p=>p.dir===dir).length+1;
   const receiptNo=(isOut?'PO-':'PI-')+String(nextNo).padStart(4,'0');
-  const html=`<div class="modal-overlay show" id="payOutModal" onclick="closeModal('payOutModal')">
+  const html=`<div class="modal-overlay modal-dynamic show" id="payOutModal" onclick="closeModal('payOutModal')">
     <div class="modal" onclick="event.stopPropagation()" style="max-width:800px;width:95%;max-height:90vh;overflow-y:auto">
       <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid #eee">
         <span style="font-size:18px;font-weight:700">${title}</span>
@@ -6859,10 +6859,10 @@ const content=document.getElementById('content');
 function pf(id){ return parseFloat(document.getElementById(id).value)||0 }
 function dispDate(){ const d=new Date(); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear(); }
 function showModal(id){ document.getElementById(id).classList.add('show') }
-function closeModal(id){ 
+function closeModal(id){
   const el=document.getElementById(id);
   if(el){
-    if(el.classList.contains('modal-overlay')&&el.parentElement===document.body){
+    if(el.classList.contains('modal-dynamic')){
       el.remove();
     } else {
       el.classList.remove('show');
