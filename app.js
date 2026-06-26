@@ -4931,10 +4931,10 @@ function vCreateInvoice(){
           <tbody id="nciRows"></tbody></table>
         <div class="nci-addrow" onclick="nciAddRow()">＋ Add Row</div>
         <div class="nci-subtotal"><span>Sub Total</span><span id="nciSub">${nciFmt(t.sub)}</span></div>
-        <div class="nci-sumline"><span class="lbl">Discount</span>
-          <div class="nci-money">
+        <div class="nci-sumline" style="flex-direction:column;align-items:stretch;gap:8px"><span class="lbl">Discount</span>
+          <div style="display:flex;gap:10px;align-items:center">
             <div class="nci-pct"><input id="nciDiscP" type="number" value="${nciDiscP||0}" onfocus="clearZero(this)" oninput="nciDiscByPct(this.value)"><span>%</span></div>
-            <input id="nciDiscAmt" type="number" value="${Math.round(t.discAmt)||0}" onfocus="clearZero(this)" oninput="nciDiscByAmt(this.value)">
+            <input id="nciDiscAmt" type="number" value="${Math.round(t.discAmt)||0}" onfocus="clearZero(this)" oninput="nciDiscByAmt(this.value)" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:10px 12px;outline:none;text-align:right;font-size:14px;font-weight:600">
           </div>
         </div>
         <div class="nci-sumline"><span class="lbl">Tax</span>
