@@ -3,7 +3,7 @@ const KEY='mybiz_v2';
 let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)) }
-function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
+function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
 function refreshAll(){ refreshView(); }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
 function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'',category:'',address:'',pincode:'',signature:''},parties:[],items:[],sales:[],purchases:[],
@@ -148,7 +148,7 @@ function nav(view,el){
   logActivity('navigation','Opened '+viewNames[view]);
 }
 function render(view){
-  const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,reports:vReports,
+  const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,
     settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,purchasereturn:vPurchaseReturn,
     saleorder:vSaleOrder,savedinv:vSavedInvoices,
     bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,
@@ -1518,6 +1518,22 @@ function posPickItem(i,iid){
   document.getElementById('posDrop'+i).classList.remove('show');
   posCalcTotal();
 }
+function posSearchCust(){
+  const drop=document.getElementById('posCustDrop'); if(!drop)return;
+  const q=(document.getElementById('pos_cust')?.value||'').toLowerCase();
+  if(!q){drop.style.display='none';return;}
+  const matches=store.parties.filter(p=>p.name.toLowerCase().includes(q)||(p.phone||'').includes(q));
+  if(!matches.length){drop.style.display='none';return;}
+  drop.innerHTML=matches.slice(0,10).map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5" onmousedown="posPickCust('${p.id}')"><span style="font-weight:500;font-size:13px">${p.name}</span><span style="font-size:11px;color:#888">${p.phone||''} <span style="color:${p.balance>=0?'#27ae60':'#e74c3c'}">${rs(Math.abs(p.balance))}</span></span></div>`).join('');
+  drop.style.display='block';
+}
+function posPickCust(pid){
+  const p=store.parties.find(x=>x.id===pid); if(!p)return;
+  document.getElementById('pos_cust').value=p.name;
+  document.getElementById('pos_phone').value=p.phone||'';
+  const drop=document.getElementById('posCustDrop'); if(drop)drop.style.display='none';
+  const t=posTabs[posActiveTab]; if(t){t.cust=p.name;t.phone=p.phone||'';}
+}
 function posSearchItems(){
   const q=(document.getElementById('posSearchItem').value||'').toLowerCase();
   if(!q){document.querySelectorAll('.pos-item-drop').forEach(d=>d.classList.remove('show'));return;}
@@ -2860,6 +2876,295 @@ function filterPurchaseRows(q){
     r.style.display=r.textContent.toLowerCase().includes(q)?'':'none';
   });
 }
+
+let poData={party:'',phone:'',rows:[{item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0}],payMode:'Cash',discP:0,discA:0};
+
+function vPurchaseOrder(){
+  const orders=(store.purchaseOrders||[]);
+  if(!orders.length){
+    content.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+      <div style="text-align:center;max-width:400px">
+        <div style="width:120px;height:120px;margin:0 auto 20px;background:#f0f4f8;border-radius:50%;display:flex;align-items:center;justify-content:center">
+          <svg viewBox="0 0 64 64" width="64" height="64"><rect x="14" y="8" width="36" height="48" rx="4" fill="#fff" stroke="#555" stroke-width="2.5"/><line x1="22" y1="20" x2="42" y2="20" stroke="#bbb" stroke-width="2"/><line x1="22" y1="28" x2="42" y2="28" stroke="#bbb" stroke-width="2"/><line x1="22" y1="36" x2="36" y2="36" stroke="#bbb" stroke-width="2"/><path d="M42 8V4a4 4 0 0 1 4 4h-4z" fill="#e8e8e8"/></svg>
+        </div>
+        <h2 style="font-size:22px;font-weight:800;color:#222;margin-bottom:8px">Purchase Order</h2>
+        <p style="font-size:14px;color:#888;margin-bottom:20px">Create purchase orders for your suppliers.</p>
+        <button onclick="openPurchaseOrderForm()" style="padding:12px 28px;background:#e74c3c;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">+ Add Purchase Order</button>
+      </div>
+    </div>`;
+  } else {
+    renderPurchaseOrderList();
+  }
+}
+
+function renderPurchaseOrderList(){
+  const orders=(store.purchaseOrders||[]).reverse();
+  content.innerHTML=`
+  <div class="hub-header"><h2>Purchase Orders</h2><button class="hub-btn hub-btn-red" onclick="openPurchaseOrderForm()">＋ Add Purchase Order</button></div>
+  <div class="hub-card"><div style="overflow-x:auto">
+    <table class="hub-table"><thead><tr>
+      <th>DATE</th><th>ORDER NO</th><th>PARTY</th><th class="right">TOTAL</th><th>STATUS</th><th style="width:100px"></th>
+    </tr></thead><tbody>${orders.map((o,i)=>{
+      const total=(o.rows||[]).reduce((a,r)=>a+((r.qty||0)*(r.price||0)-(r.discA||0)),0);
+      return `<tr>
+        <td>${o.date||'-'}</td><td>${o.orderNo||'-'}</td><td style="font-weight:500">${o.party||'-'}</td>
+        <td class="right">${rs(total)}</td>
+        <td><span class="hub-pill hub-pill-paid">${o.status||'Pending'}</span></td>
+        <td><div class="hub-actions">
+          <span class="hub-action-icon" onclick="viewPurchaseOrder(${i})" title="View">👁️</span>
+          <span class="hub-action-icon" onclick="printPurchaseOrder(${i})" title="Print">🖨️</span>
+          <span class="hub-action-icon" onclick="deletePurchaseOrder(${i})" title="Delete">🗑️</span>
+        </div></td>
+      </tr>`;
+    }).join('')||`<tr><td colspan="6" class="hub-empty"><div style="font-size:48px;margin-bottom:10px">📋</div><div class="hub-empty-title">No Purchase Orders</div></td></tr>`}</tbody></table>
+  </div></div>`;
+}
+
+function openPurchaseOrderForm(){
+  const nextNo=(store.purchaseOrders||[]).length+1;
+  poData={party:'',phone:'',rows:[{item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0}],payMode:'Cash',discP:0,discA:0,orderNo:nextNo,date:new Date().toISOString().split('T')[0],dueDate:new Date().toISOString().split('T')[0]};
+  renderPOForm();
+}
+
+function renderPOForm(){
+  const units=['NONE','PCS','BOX','SET','DOZ','KG','M','LTR','BAG','ROLL'];
+  const itemList=(store.items||[]).map(it=>`<div class="po-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="poSelectItem(${JSON.stringify(it).replace(/"/g,'&quot;')})" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+    <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
+    <div style="text-align:right;min-width:50px"><div style="font-size:11px;color:#888">STOCK</div><div style="font-weight:700;font-size:13px;color:${(it.stock||0)>0?'#27ae60':'#e74c3c'}">${it.stock||0}</div></div>
+  </div>`).join('');
+
+  const rowsHtml=poData.rows.map((r,idx)=>{
+    const amt=(r.qty||0)*(r.price||0)-(r.discA||0);
+    return `<tr>
+      <td style="width:30px;text-align:center;color:#999;font-size:12px">${idx+1}</td>
+      <td style="position:relative"><input value="${r.item}" onfocus="poFilterItems(this,'')" onblur="setTimeout(()=>this.nextElementSibling.style.display='none',200)" oninput="poUpdateItem(${idx},this.value);poFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"><div class="po-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:250px;overflow-y:auto">${itemList}</div></td>
+      <td><input value="${r.desc}" oninput="poData.rows[${idx}].desc=this.value" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input value="${r.count}" oninput="poData.rows[${idx}].count=this.value" style="width:70px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input value="${r.size}" oninput="poData.rows[${idx}].size=this.value" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input type="number" value="${r.qty}" oninput="poUpdateRow(${idx},'qty',this.value)" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><select onchange="poData.rows[${idx}].unit=this.value" style="padding:6px;border:1px solid #eee;border-radius:4px;font-size:12px">${units.map(u=>`<option ${r.unit===u?'selected':''}>${u}</option>`).join('')}</select></td>
+      <td><input type="number" value="${r.price}" oninput="poUpdateRow(${idx},'price',this.value)" style="width:80px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input type="number" value="${r.discP||0}" oninput="poUpdateRow(${idx},'discP',this.value)" style="width:50px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:12px" placeholder="%"></td>
+      <td><input type="number" value="${r.discA||0}" oninput="poUpdateRow(${idx},'discA',this.value)" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:12px"></td>
+      <td style="font-weight:600;text-align:right">${rs(amt)}</td>
+      <td><span style="cursor:pointer;color:#e74c3c;font-size:16px" onclick="poRemoveRow(${idx})">✕</span></td>
+    </tr>`;
+  }).join('');
+
+  const totals=poCalcTotals();
+
+  content.innerHTML=`
+  <div style="background:#fff;min-height:100vh;padding-bottom:20px">
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid #eee;background:#f8f9fa">
+      <span style="font-size:18px;font-weight:700">Purchase Order #${poData.orderNo}</span>
+      <span style="flex:1"></span>
+      <span style="cursor:pointer;font-size:20px" onclick="vPurchaseOrder()">✕</span>
+    </div>
+    <div style="padding:20px 24px">
+      <div style="display:flex;gap:30px;margin-bottom:20px;flex-wrap:wrap">
+        <div style="flex:1;min-width:250px">
+          <label style="display:block;font-size:13px;color:#2f6df6;font-weight:600;margin-bottom:6px">Search by Name/Phone *</label>
+          <select id="po_party" onchange="poData.party=this.value;poData.phone=this.options[this.selectedIndex].dataset.phone||''" style="width:100%;padding:10px 12px;border:1px solid #2f6df6;border-radius:8px;font-size:14px">
+            <option value="">Select party...</option>
+            ${store.parties.map(p=>`<option value="${p.name}" data-phone="${p.phone||''}">${p.name} ${p.phone?'('+p.phone+')':''}</option>`).join('')}
+          </select>
+        </div>
+        <div style="min-width:200px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><label style="font-size:13px;color:#666;min-width:80px">Order No.</label><input value="${poData.orderNo}" onchange="poData.orderNo=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:100px"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><label style="font-size:13px;color:#666;min-width:80px">Order Date</label><input type="date" value="${poData.date}" onchange="poData.date=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px"></div>
+          <div style="display:flex;align-items:center;gap:10px"><label style="font-size:13px;color:#666;min-width:80px">Due Date</label><input type="date" value="${poData.dueDate}" onchange="poData.dueDate=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px"></div>
+        </div>
+      </div>
+      <div style="overflow-x:auto;border:1px solid #eee;border-radius:8px;margin-bottom:16px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:#f8f9fa;border-bottom:2px solid #eee">
+            <th style="padding:10px 8px;width:30px">#</th>
+            <th style="padding:10px 8px;min-width:180px">ITEM</th>
+            <th style="padding:10px 8px;min-width:120px">DESCRIPTION</th>
+            <th style="padding:10px 8px;min-width:70px">COUNT</th>
+            <th style="padding:10px 8px;min-width:60px">SIZE</th>
+            <th style="padding:10px 8px;min-width:60px">QTY</th>
+            <th style="padding:10px 8px">UNIT</th>
+            <th style="padding:10px 8px;min-width:80px">PRICE/UNIT</th>
+            <th style="padding:10px 8px;min-width:50px">DISC %</th>
+            <th style="padding:10px 8px;min-width:60px">DISC Amt</th>
+            <th style="padding:10px 8px;min-width:80px;text-align:right">AMOUNT</th>
+            <th style="padding:10px 8px;width:30px"></th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      <button onclick="poAddRow()" style="padding:6px 16px;border:2px solid #2f6df6;color:#2f6df6;background:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:20px">+ ADD ROW</button>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:20px;border-top:2px solid #eee;padding-top:16px">
+        <div>
+          <div style="margin-bottom:12px"><label style="font-size:13px;color:#666;margin-right:8px">Payment Type</label>
+            <select id="po_payMode" onchange="poData.payMode=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option>
+            </select></div>
+          <span style="color:#2f6df6;font-size:13px;cursor:pointer;font-weight:600">+ Add Payment type</span>
+        </div>
+        <div style="text-align:right">
+          <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;justify-content:flex-end"><span style="font-size:13px;color:#666">Discount</span><input type="number" value="${poData.discP}" oninput="poData.discP=+this.value;poRecalcDisc()" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;text-align:right"><span style="font-size:12px;color:#999">(%)</span><span style="color:#999">-</span><input type="number" value="${poData.discA}" oninput="poData.discA=+this.value;poRecalc()" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;text-align:right"><span style="font-size:12px;color:#999">(Rs)</span></div>
+          <div style="font-size:13px;color:#666;margin-bottom:4px">Subtotal: <b>${rs(totals.subtotal)}</b></div>
+          <div style="font-size:13px;color:#666;margin-bottom:4px">Discount: <b style="color:#e74c3c">-${rs(totals.disc)}</b></div>
+          <div style="font-size:20px;font-weight:800;color:#2f6df6;border-top:2px solid #eee;padding-top:8px;margin-top:4px">Total: ${rs(totals.total)}</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:12px;background:#f8f9fa">
+      <button onclick="sharePurchaseOrder()" style="padding:10px 24px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600">Share ▾</button>
+      <button onclick="savePurchaseOrder()" style="padding:10px 32px;border:none;border-radius:8px;background:#2f6df6;color:#fff;cursor:pointer;font-size:14px;font-weight:700">Save</button>
+    </div>
+  </div>`;
+}
+
+function poSelectItem(it){
+  const lastRow=poData.rows[poData.rows.length-1];
+  if(lastRow.item&&lastRow.qty>0) poData.rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});
+  const idx=poData.rows.length-1;
+  poData.rows[idx].item=it.name;
+  poData.rows[idx].price=it.pprice||it.price||0;
+  poData.rows[idx].desc=it.code||'';
+  renderPOForm();
+}
+
+function poUpdateItem(idx,val){poData.rows[idx].item=val;}
+function poFilterItems(input,val){
+  const dd=input.nextElementSibling;
+  if(!dd)return;
+  const q=val.toLowerCase();
+  dd.style.display='block';
+  Array.from(dd.children).forEach(opt=>{
+    const name=(opt.getAttribute('data-name')||'').toLowerCase();
+    const code=(opt.getAttribute('data-code')||'').toLowerCase();
+    opt.style.display=(!q||name.includes(q)||code.includes(q))?'flex':'none';
+  });
+}
+function poUpdateRow(idx,field,val){
+  poData.rows[idx][field]=field==='item'||field==='desc'||field==='count'||field==='size'?val:+val||0;
+  if(field==='discP'&&poData.rows[idx].price){
+    poData.rows[idx].discA=Math.round(poData.rows[idx].qty*poData.rows[idx].price*poData.rows[idx].discP/100);
+  }
+  poRecalc();
+}
+
+function poAddRow(){poData.rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});renderPOForm();}
+function poRemoveRow(idx){if(poData.rows.length>1){poData.rows.splice(idx,1);renderPOForm();}}
+function poRecalcDisc(){
+  poData.rows.forEach(r=>{
+    if(r.discP&&r.price) r.discA=Math.round(r.qty*r.price*r.discP/100);
+  });
+  poRecalc();
+}
+function poRecalc(){renderPOForm();}
+
+function poCalcTotals(){
+  let subtotal=0,disc=0;
+  poData.rows.forEach(r=>{
+    const lineTotal=(r.qty||0)*(r.price||0);
+    subtotal+=lineTotal;
+    disc+=(r.discA||0);
+  });
+  disc+=poData.discA||0;
+  if(poData.discP) disc+=Math.round((subtotal-disc)*poData.discP/100);
+  return{subtotal,disc,total:Math.max(subtotal-disc,0)};
+}
+
+function savePurchaseOrder(){
+  if(!poData.party) return toast('Select a party');
+  const t=poCalcTotals();
+  const dt=poData.date.split('-');
+  const order={id:id(),orderNo:poData.orderNo,party:poData.party,phone:poData.phone,date:dt[2]+'/'+dt[1]+'/'+dt[0],dueDate:poData.dueDate,rows:[...poData.rows],payMode:poData.payMode,discP:poData.discP,discA:poData.discA,total:t.total,status:'Pending'};
+  if(!store.purchaseOrders) store.purchaseOrders=[];
+  store.purchaseOrders.push(order);
+  persist();
+  toast('Purchase Order saved!');
+  showPOPreview(order);
+}
+
+function showPOPreview(order){
+  const rows=(order.rows||[]).map((r,i)=>{
+    const amt=(r.qty||0)*(r.price||0)-(r.discA||0);
+    return `<tr><td>${i+1}</td><td>${r.item||''}<br><small style="color:#888">${r.desc||''}</small></td><td style="text-align:right">${r.qty} ${r.unit||''}</td><td style="text-align:right">${rs(r.price)}</td><td style="text-align:right">${rs(amt)}</td></tr>`;
+  }).join('');
+  const biz=store.business||{};
+  content.innerHTML=`
+  <div style="display:flex;min-height:100vh;background:#f0f2f5">
+    <div style="width:200px;background:#fff;border-right:1px solid #eee;padding:16px">
+      <h3 style="font-size:14px;margin-bottom:12px">Select Theme</h3>
+      <div style="padding:10px;border-radius:6px;cursor:pointer;background:#e8f4fd;font-weight:600;font-size:13px;margin-bottom:6px">Classic Theme</div>
+      <div style="padding:10px;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:6px">Modern Theme</div>
+      <div style="padding:10px;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:6px">Minimal Theme</div>
+    </div>
+    <div style="flex:1;padding:30px;display:flex;justify-content:center">
+      <div style="width:600px;background:#fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:30px">
+        <div style="text-align:center;margin-bottom:16px">
+          ${biz.logo?`<img src="${biz.logo}" style="max-height:60px;margin-bottom:8px">`:''}
+          <h2 style="font-size:20px;margin:0">${biz.name||'My Business'}</h2>
+          ${biz.phone?`<p style="margin:4px 0;font-size:13px;color:#666">Ph.No.: ${biz.phone}</p>`:''}
+          ${biz.email?`<p style="margin:4px 0;font-size:13px;color:#666">Email: ${biz.email}</p>`:''}
+        </div>
+        <hr style="border:none;border-top:2px dashed #333;margin:12px 0">
+        <h3 style="text-align:center;margin:0 0 8px">Purchase Order</h3>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+          <span>Order No.: ${order.orderNo}</span><span>Date: ${order.date}</span>
+        </div>
+        <div style="font-size:13px;margin-bottom:12px">Party: <b>${order.party}</b></div>
+        <hr style="border:none;border-top:1px dashed #999;margin:8px 0">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="border-bottom:2px dashed #333"><th style="text-align:left;padding:6px 0">#</th><th style="text-align:left">Item Name</th><th style="text-align:right">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amount</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr style="border-top:2px dashed #333;font-weight:700"><td colspan="4" style="padding:8px 0">Total</td><td style="text-align:right">${rs(order.total)}</td></tr></tfoot>
+        </table>
+        <hr style="border:none;border-top:2px dashed #333;margin:12px 0">
+        <div style="font-size:13px;text-align:center;color:#666">Balance: ${rs(order.total)}</div>
+      </div>
+    </div>
+    <div style="width:200px;background:#fff;border-left:1px solid #eee;padding:16px">
+      <h3 style="font-size:14px;margin-bottom:12px">Share Invoice</h3>
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <div onclick="toast('WhatsApp sharing')" style="text-align:center;cursor:pointer;padding:10px;border:1px solid #eee;border-radius:8px;flex:1;min-width:60px"><div style="font-size:24px">💬</div><div style="font-size:11px">WhatsApp</div></div>
+        <div onclick="toast('Gmail sharing')" style="text-align:center;cursor:pointer;padding:10px;border:1px solid #eee;border-radius:8px;flex:1;min-width:60px"><div style="font-size:24px">📧</div><div style="font-size:11px">Gmail</div></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div onclick="toast('PDF downloading')" style="text-align:center;cursor:pointer;padding:10px;border:1px solid #eee;border-radius:8px;flex:1;min-width:60px"><div style="font-size:24px">📥</div><div style="font-size:11px">PDF</div></div>
+        <div onclick="window.print()" style="text-align:center;cursor:pointer;padding:10px;border:1px solid #eee;border-radius:8px;flex:1;min-width:60px"><div style="font-size:24px">🖨️</div><div style="font-size:11px">Print</div></div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:16px 24px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:12px;background:#f8f9fa">
+    <button onclick="vPurchaseOrder()" style="padding:10px 24px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600">Close</button>
+  </div>`;
+}
+
+function printPurchaseOrder(idx){
+  const o=(store.purchaseOrders||[])[idx];
+  if(!o)return;
+  const rows=(o.rows||[]).map((r,i)=>`<tr><td>${i+1}</td><td>${r.item}</td><td style="text-align:right">${r.qty} ${r.unit||''}</td><td style="text-align:right">${rs(r.price)}</td><td style="text-align:right">${rs((r.qty||0)*(r.price||0)-(r.discA||0))}</td></tr>`).join('');
+  const w=window.open('','','width=800,height=600');
+  w.document.write(`<html><head><title>PO ${o.orderNo}</title><style>body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}.r{text-align:right}</style></head><body><h2>Purchase Order #${o.orderNo}</h2><p><b>Party:</b> ${o.party} | <b>Date:</b> ${o.date} | <b>Due:</b> ${o.dueDate}</p><table><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700;border-top:2px solid #333"><td colspan="4">Total</td><td class="r">${rs(o.total)}</td></tr></tfoot></table></body></html>`);
+  w.document.close();w.print();
+}
+
+function deletePurchaseOrder(idx){
+  if(!confirm('Delete this Purchase Order?'))return;
+  store.purchaseOrders.splice(idx,1);
+  persist();toast('Deleted');vPurchaseOrder();
+}
+
+function viewPurchaseOrder(idx){
+  const o=(store.purchaseOrders||[])[idx];
+  if(!o)return;
+  showPOPreview(o);
+}
+
+function sharePurchaseOrder(){
+  const txt=`Purchase Order #${poData.orderNo}\nParty: ${poData.party}\nDate: ${poData.date}\nTotal: ${rs(poCalcTotals().total)}`;
+  if(navigator.share){navigator.share({title:'Purchase Order',text:txt}).catch(()=>{})}
+  else{navigator.clipboard.writeText(txt);toast('Copied!')}
+}
 let pfTabs=[];
 let pfActiveTab=0;
 function pfInitTab(){
@@ -2941,9 +3246,15 @@ function vPurchaseForm(){
           <tbody id="pfItemsBody">
             ${cur.rows.map((r,i)=>{
               const amt=calcRowTotal(r);
+              const pfItemList=(store.items||[]).map(it=>`<div class="pf-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="pfSelectItem(${i},${JSON.stringify(it).replace(/"/g,'&quot;')})" style="display:flex;align-items:center;padding:8px 12px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:10px">
+                <div style="flex:1"><div style="font-weight:600;font-size:12px">${it.name}</div><div style="font-size:10px;color:#999">${it.code||''}</div></div>
+                <div style="text-align:right;min-width:60px"><div style="font-size:10px;color:#888">SALE</div><div style="font-weight:600;font-size:12px">${rs(it.price)}</div></div>
+                <div style="text-align:right;min-width:60px"><div style="font-size:10px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:12px">${rs(it.pprice||0)}</div></div>
+                <div style="text-align:right;min-width:40px"><div style="font-size:10px;color:#888">STOCK</div><div style="font-weight:700;font-size:12px;color:${(it.stock||0)>0?'#27ae60':'#e74c3c'}">${it.stock||0}</div></div>
+              </div>`).join('');
               return `<tr>
                 <td class="pf-td-num">${i+1}</td>
-                <td><input placeholder="Item name" value="${r.item}" oninput="pfTabs[${pfActiveTab}].rows[${i}].item=this.value"></td>
+                <td style="position:relative"><input placeholder="Search item..." value="${r.item}" onfocus="pfFilterItems(this,'',${i})" onblur="setTimeout(()=>this.nextElementSibling.style.display='none',200)" oninput="pfTabs[${pfActiveTab}].rows[${i}].item=this.value;pfFilterItems(this,this.value,${i})" autocomplete="off" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"><div class="pf-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:250px;overflow-y:auto">${pfItemList}</div></td>
                 <td><input placeholder="Description" value="${r.desc}" oninput="pfTabs[${pfActiveTab}].rows[${i}].desc=this.value"></td>
                 <td><input type="number" value="${r.count}" oninput="pfTabs[${pfActiveTab}].rows[${i}].count=this.value"></td>
                 <td><input placeholder="Size" value="${r.size}" oninput="pfTabs[${pfActiveTab}].rows[${i}].size=this.value"></td>
@@ -3006,6 +3317,27 @@ function pfCloseTab(i){
   pfTabs.splice(i,1);
   if(pfActiveTab>=pfTabs.length)pfActiveTab=pfTabs.length-1;
   vPurchaseForm();
+}
+function pfSelectItem(idx,it){
+  const lastRow=pfTabs[pfActiveTab].rows[pfTabs[pfActiveTab].rows.length-1];
+  if(lastRow.item&&lastRow.qty>0) pfTabs[pfActiveTab].rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});
+  const ri=pfTabs[pfActiveTab].rows.length-1;
+  const target=Math.min(idx,ri);
+  pfTabs[pfActiveTab].rows[target].item=it.name;
+  pfTabs[pfActiveTab].rows[target].price=it.pprice||it.price||0;
+  pfTabs[pfActiveTab].rows[target].desc=it.code||'';
+  vPurchaseForm();
+}
+function pfFilterItems(input,val,idx){
+  const dd=input.nextElementSibling;
+  if(!dd)return;
+  const q=(val||'').toLowerCase();
+  dd.style.display='block';
+  Array.from(dd.children).forEach(opt=>{
+    const name=(opt.getAttribute('data-name')||'').toLowerCase();
+    const code=(opt.getAttribute('data-code')||'').toLowerCase();
+    opt.style.display=(!q||name.includes(q)||code.includes(q))?'flex':'none';
+  });
 }
 function pfAddRow(){
   pfTabs[pfActiveTab].rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});
@@ -3075,13 +3407,13 @@ function vPurchaseReturn(){
   const firstDay='01/'+String(curMonth+1).padStart(2,'0')+'/'+curYear;
   const lastDay=new Date(curYear,curMonth+1,0).getDate()+'/'+String(curMonth+1).padStart(2,'0')+'/'+curYear;
   const firms=[(store.business.name||'My Business'),...(store.companies||[]).map(c=>c.name)].filter((v,i,a)=>a.indexOf(v)===i);
-  const returns=(store.purchaseReturns||[]).reverse();
+  const returns=[...(store.purchaseReturns||[]),...(store.debitNotes||[])].sort((a,b)=>b.date?.localeCompare(a.date)||0).reverse();
   const totalAmt=returns.reduce((a,r)=>a+(r.total||0),0);
   const balanceAmt=returns.reduce((a,r)=>a+((r.total||0)-(r.received||0)),0);
   content.innerHTML=`
   <div class="hub-header">
     <h2>Purchase Return</h2>
-    <button class="hub-btn hub-btn-blue" onclick="toast('Add Debit Note coming soon')">＋ Add Debit Note</button>
+    <button class="hub-btn hub-btn-blue" onclick="openDebitNoteForm()">＋ Add Debit Note</button>
   </div>
   <div class="hub-card">
     <div class="hub-filters" style="margin-bottom:12px">
@@ -3108,7 +3440,7 @@ function vPurchaseReturn(){
   <div class="hub-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
       <input class="hub-search" type="text" placeholder="🔍 Search..." oninput="filterPurchaseReturnRows(this.value)">
-      <button class="hub-btn hub-btn-blue" onclick="toast('Add Debit Note coming soon')">＋ Add Debit Note</button>
+      <button class="hub-btn hub-btn-blue" onclick="openDebitNoteForm()">＋ Add Debit Note</button>
     </div>
     <div style="overflow-x:auto">
       <table class="hub-table" id="purchaseReturnTable">
@@ -3177,6 +3509,247 @@ function filterPurchaseReturnRows(q){
     r.style.display=r.textContent.toLowerCase().includes(q)?'':'none';
   });
 }
+
+let dnData={};
+function openDebitNoteForm(){
+  const nextNo=(store.debitNotes||[]).length+1;
+  dnData={party:'',phone:'',rows:[{item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0}],payMode:'Cash',discP:0,discA:0,returnNo:'DN-'+String(nextNo).padStart(4,'0'),billNo:'',billDate:new Date().toISOString().split('T')[0],date:new Date().toISOString().split('T')[0]};
+  renderDebitNoteForm();
+}
+function renderDebitNoteForm(){
+  const units=['NONE','PCS','BOX','SET','DOZ','KG','M','LTR','BAG','ROLL'];
+  const itemList=(store.items||[]).map(it=>`<div class="dn-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="dnSelectItem(${JSON.stringify(it).replace(/"/g,'&quot;')})" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+    <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
+    <div style="text-align:right;min-width:50px"><div style="font-size:11px;color:#888">STOCK</div><div style="font-weight:700;font-size:13px;color:${(it.stock||0)>0?'#27ae60':'#e74c3c'}">${it.stock||0}</div></div>
+  </div>`).join('');
+  const rowsHtml=dnData.rows.map((r,idx)=>{
+    const amt=(r.qty||0)*(r.price||0)-(r.discA||0);
+    return `<tr>
+      <td style="width:30px;text-align:center;color:#999;font-size:12px">${idx+1}</td>
+      <td style="position:relative"><input value="${r.item}" onfocus="dnFilterItems(this,'')" onblur="setTimeout(()=>this.nextElementSibling.style.display='none',200)" oninput="dnUpdateItem(${idx},this.value);dnFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"><div class="dn-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:250px;overflow-y:auto">${itemList}</div></td>
+      <td><input value="${r.desc}" oninput="dnData.rows[${idx}].desc=this.value" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input value="${r.count}" oninput="dnData.rows[${idx}].count=this.value" style="width:70px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input value="${r.size}" oninput="dnData.rows[${idx}].size=this.value" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input type="number" value="${r.qty}" oninput="dnUpdateRow(${idx},'qty',this.value)" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><select onchange="dnData.rows[${idx}].unit=this.value" style="padding:6px;border:1px solid #eee;border-radius:4px;font-size:12px">${units.map(u=>`<option ${r.unit===u?'selected':''}>${u}</option>`).join('')}</select></td>
+      <td><input type="number" value="${r.price}" oninput="dnUpdateRow(${idx},'price',this.value)" style="width:80px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
+      <td><input type="number" value="${r.discP||0}" oninput="dnUpdateRow(${idx},'discP',this.value)" style="width:50px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:12px" placeholder="%"></td>
+      <td><input type="number" value="${r.discA||0}" oninput="dnUpdateRow(${idx},'discA',this.value)" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:12px"></td>
+      <td style="font-weight:600;text-align:right">${rs(amt)}</td>
+      <td><span style="cursor:pointer;color:#e74c3c;font-size:16px" onclick="dnRemoveRow(${idx})">✕</span></td>
+    </tr>`;
+  }).join('');
+  const totals=dnCalcTotals();
+  content.innerHTML=`
+  <div style="background:#fff;min-height:100vh;padding-bottom:20px">
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid #eee;background:#f8f9fa">
+      <span style="font-size:18px;font-weight:700">Debit Note #${dnData.returnNo}</span>
+      <span style="flex:1"></span>
+      <span style="cursor:pointer;font-size:20px" onclick="vPurchaseReturn()">✕</span>
+    </div>
+    <div style="padding:20px 24px">
+      <div style="display:flex;gap:30px;margin-bottom:20px;flex-wrap:wrap">
+        <div style="flex:1;min-width:250px">
+          <label style="display:block;font-size:13px;color:#2f6df6;font-weight:600;margin-bottom:6px">Party *</label>
+          <select id="dn_party" onchange="dnData.party=this.value;dnData.phone=this.options[this.selectedIndex].dataset.phone||''" style="width:100%;padding:10px 12px;border:1px solid #2f6df6;border-radius:8px;font-size:14px">
+            <option value="">Select party...</option>
+            ${store.parties.map(p=>`<option value="${p.name}" data-phone="${p.phone||''}">${p.name} ${p.phone?'('+p.phone+')':''}</option>`).join('')}
+          </select>
+          <span onclick="openAddPartyModal()" style="display:inline-block;margin-top:6px;color:#2f6df6;font-size:12px;cursor:pointer;font-weight:600">+ Add Party</span>
+        </div>
+        <div style="min-width:200px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><label style="font-size:13px;color:#666;min-width:90px">Phone No.</label><input value="${dnData.phone}" onchange="dnData.phone=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:140px"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><label style="font-size:13px;color:#666;min-width:90px">Return No.</label><input value="${dnData.returnNo}" onchange="dnData.returnNo=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:140px"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><label style="font-size:13px;color:#666;min-width:90px">Bill Number</label><input value="${dnData.billNo}" onchange="dnData.billNo=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:140px"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><label style="font-size:13px;color:#666;min-width:90px">Bill Date</label><input type="date" value="${dnData.billDate}" onchange="dnData.billDate=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px"></div>
+          <div style="display:flex;align-items:center;gap:10px"><label style="font-size:13px;color:#666;min-width:90px">Date</label><input type="date" value="${dnData.date}" onchange="dnData.date=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px"></div>
+        </div>
+      </div>
+      <div style="overflow-x:auto;border:1px solid #eee;border-radius:8px;margin-bottom:16px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:#f8f9fa;border-bottom:2px solid #eee">
+            <th style="padding:10px 8px;width:30px">#</th>
+            <th style="padding:10px 8px;min-width:180px">ITEM</th>
+            <th style="padding:10px 8px;min-width:120px">DESCRIPTION</th>
+            <th style="padding:10px 8px;min-width:70px">COUNT</th>
+            <th style="padding:10px 8px;min-width:60px">SIZE</th>
+            <th style="padding:10px 8px;min-width:60px">QTY</th>
+            <th style="padding:10px 8px">UNIT</th>
+            <th style="padding:10px 8px;min-width:80px">PRICE/UNIT</th>
+            <th style="padding:10px 8px;min-width:50px">DISC %</th>
+            <th style="padding:10px 8px;min-width:60px">DISC Amt</th>
+            <th style="padding:10px 8px;min-width:80px;text-align:right">AMOUNT</th>
+            <th style="padding:10px 8px;width:30px"></th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      <button onclick="dnAddRow()" style="padding:6px 16px;border:2px solid #2f6df6;color:#2f6df6;background:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:20px">+ ADD ROW</button>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:20px;border-top:2px solid #eee;padding-top:16px">
+        <div>
+          <div style="margin-bottom:12px"><label style="font-size:13px;color:#666;margin-right:8px">Payment Type</label>
+            <select id="dn_payMode" onchange="dnData.payMode=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option>
+            </select></div>
+          <span style="color:#2f6df6;font-size:13px;cursor:pointer;font-weight:600">+ Add Payment type</span>
+        </div>
+        <div style="text-align:right">
+          <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;justify-content:flex-end"><span style="font-size:13px;color:#666">Discount</span><input type="number" value="${dnData.discP}" oninput="dnData.discP=+this.value;dnRecalcDisc()" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;text-align:right"><span style="font-size:12px;color:#999">(%)</span><span style="color:#999">-</span><input type="number" value="${dnData.discA}" oninput="dnData.discA=+this.value;dnRecalc()" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;text-align:right"><span style="font-size:12px;color:#999">(Rs)</span></div>
+          <div style="font-size:13px;color:#666;margin-bottom:4px">Subtotal: <b>${rs(totals.subtotal)}</b></div>
+          <div style="font-size:13px;color:#666;margin-bottom:4px">Discount: <b style="color:#e74c3c">-${rs(totals.disc)}</b></div>
+          <div style="font-size:20px;font-weight:800;color:#2f6df6;border-top:2px solid #eee;padding-top:8px;margin-top:4px">Total: ${rs(totals.total)}</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:12px;background:#f8f9fa">
+      <button onclick="shareDebitNote()" style="padding:10px 24px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600">Share ▾</button>
+      <button onclick="saveDebitNote()" style="padding:10px 32px;border:none;border-radius:8px;background:#2f6df6;color:#fff;cursor:pointer;font-size:14px;font-weight:700">Save</button>
+    </div>
+  </div>`;
+}
+function dnSelectItem(it){
+  const lastRow=dnData.rows[dnData.rows.length-1];
+  if(lastRow.item&&lastRow.qty>0) dnData.rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});
+  const idx=dnData.rows.length-1;
+  dnData.rows[idx].item=it.name;
+  dnData.rows[idx].price=it.pprice||it.price||0;
+  dnData.rows[idx].desc=it.code||'';
+  renderDebitNoteForm();
+}
+function dnUpdateItem(idx,val){dnData.rows[idx].item=val;}
+function dnFilterItems(input,val){
+  const dd=input.nextElementSibling;
+  if(!dd)return;
+  const q=val.toLowerCase();
+  dd.style.display='block';
+  Array.from(dd.children).forEach(opt=>{
+    const name=(opt.getAttribute('data-name')||'').toLowerCase();
+    const code=(opt.getAttribute('data-code')||'').toLowerCase();
+    opt.style.display=(!q||name.includes(q)||code.includes(q))?'flex':'none';
+  });
+}
+function dnUpdateRow(idx,field,val){
+  dnData.rows[idx][field]=field==='item'||field==='desc'||field==='count'||field==='size'?val:+val||0;
+  if(field==='discP'&&dnData.rows[idx].price){
+    dnData.rows[idx].discA=Math.round(dnData.rows[idx].qty*dnData.rows[idx].price*dnData.rows[idx].discP/100);
+  }
+  dnRecalc();
+}
+function dnAddRow(){dnData.rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});renderDebitNoteForm();}
+function dnRemoveRow(idx){if(dnData.rows.length>1){dnData.rows.splice(idx,1);renderDebitNoteForm();}}
+function dnRecalcDisc(){
+  dnData.rows.forEach(r=>{
+    if(r.discP&&r.price) r.discA=Math.round(r.qty*r.price*r.discP/100);
+  });
+  dnRecalc();
+}
+function dnRecalc(){renderDebitNoteForm();}
+function dnCalcTotals(){
+  let subtotal=0,disc=0;
+  dnData.rows.forEach(r=>{
+    const lineTotal=(r.qty||0)*(r.price||0);
+    subtotal+=lineTotal;
+    disc+=(r.discA||0);
+  });
+  disc+=dnData.discA||0;
+  if(dnData.discP) disc+=Math.round((subtotal-disc)*dnData.discP/100);
+  return{subtotal,disc,total:Math.max(subtotal-disc,0)};
+}
+function saveDebitNote(){
+  if(!dnData.party) return toast('Select a party');
+  if(!dnData.rows.length||!dnData.rows[0].item) return toast('Add at least one item');
+  const t=dnCalcTotals();
+  const dt=dnData.date.split('-');
+  const note={id:id(),returnNo:dnData.returnNo,party:dnData.party,phone:dnData.phone,billNo:dnData.billNo,billDate:dnData.billDate,date:dt[2]+'/'+dt[1]+'/'+dt[0],rows:[...dnData.rows],payMode:dnData.payMode,discP:dnData.discP,discA:dnData.discA,total:t.total,received:0,status:'Unpaid'};
+  if(!store.debitNotes) store.debitNotes=[];
+  store.debitNotes.push(note);
+  const p=store.parties.find(x=>x.name===dnData.party);
+  if(p) p.balance+=t.total;
+  persist();
+  toast('Debit Note saved!');
+  showDebitNotePreview(note);
+}
+function shareDebitNote(){
+  const t=dnCalcTotals();
+  let txt='Debit Note #'+dnData.returnNo+'\nParty: '+dnData.party+'\nDate: '+dnData.date+'\n\n';
+  dnData.rows.forEach((r,i)=>{txt+=(i+1)+'. '+r.item+' x'+r.qty+' = '+rs((r.qty||0)*(r.price||0)-(r.discA||0))+'\n';});
+  txt+='\nTotal: '+rs(t.total);
+  if(navigator.share){navigator.share({title:'Debit Note',text:txt}).catch(()=>{});}
+  else{navigator.clipboard.writeText(txt);toast('Copied!');}
+}
+function showDebitNotePreview(note){
+  const dt=(note.date||'').split('/');
+  const displayDate=dt.length===3?dt[0]+'/'+dt[1]+'/'+dt[2]:note.date;
+  content.innerHTML=`
+  <div style="background:#f0f2f5;min-height:100vh;padding:20px">
+    <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid #eee;background:#f8f9fa">
+        <span style="font-size:18px;font-weight:700">Debit Note Preview</span>
+        <span style="flex:1"></span>
+        <button onclick="navigator.clipboard.writeText(buildDebitNoteText('${note.id}'));toast('Copied!')" style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">📋 Copy</button>
+        <button onclick="window.print()" style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">🖨️ Print</button>
+        <span style="cursor:pointer;font-size:20px" onclick="vPurchaseReturn()">✕</span>
+      </div>
+      <div style="padding:24px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+          <div><div style="font-size:22px;font-weight:800;color:#2f6df6">DEBIT NOTE</div><div style="font-size:13px;color:#888;margin-top:4px">Return #${note.returnNo||'-'}</div></div>
+          <div style="text-align:right"><div style="font-size:13px;color:#666">Date: <b>${displayDate||'-'}</b></div>${note.billNo?`<div style="font-size:13px;color:#666">Bill: <b>${note.billNo}</b></div>`:''}</div>
+        </div>
+        <div style="background:#f8f9fa;padding:12px 16px;border-radius:8px;margin-bottom:16px">
+          <div style="font-size:13px;color:#666">Party: <b style="color:#333">${note.party||'-'}</b></div>
+          ${note.phone?`<div style="font-size:13px;color:#666">Phone: ${note.phone}</div>`:''}
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+          <thead><tr style="border-bottom:2px solid #eee"><th style="padding:8px;text-align:left">#</th><th style="padding:8px;text-align:left">Item</th><th style="padding:8px;text-align:center">Qty</th><th style="padding:8px;text-align:right">Price</th><th style="padding:8px;text-align:right">Amount</th></tr></thead>
+          <tbody>${(note.rows||[]).map((r,i)=>`<tr style="border-bottom:1px solid #f5f5f5"><td style="padding:8px;color:#888">${i+1}</td><td style="padding:8px;font-weight:500">${r.item||'-'}</td><td style="padding:8px;text-align:center">${r.qty||0} ${r.unit||''}</td><td style="padding:8px;text-align:right">${rs(r.price||0)}</td><td style="padding:8px;text-align:right;font-weight:600">${rs((r.qty||0)*(r.price||0)-(r.discA||0))}</td></tr>`).join('')}</tbody>
+        </table>
+        <div style="text-align:right;border-top:2px solid #eee;padding-top:12px"><div style="font-size:20px;font-weight:800;color:#2f6df6">Total: ${rs(note.total||0)}</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+function buildDebitNoteText(nid){
+  const notes=store.debitNotes||[];
+  const note=notes.find(n=>n.id===nid);if(!note) return '';
+  let txt='Debit Note #'+note.returnNo+'\nParty: '+note.party+'\nDate: '+note.date+'\n\n';
+  (note.rows||[]).forEach((r,i)=>{txt+=(i+1)+'. '+r.item+' x'+r.qty+' = '+rs((r.qty||0)*(r.price||0)-(r.discA||0))+'\n';});
+  txt+='\nTotal: '+rs(note.total||0);
+  return txt;
+}
+function openAddPartyModal(){
+  const html=`<div class="modal-overlay show" id="addPartyModal" onclick="closeModal('addPartyModal')">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;width:95%">
+      <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid #eee">
+        <span style="font-size:18px;font-weight:700">Add New Party</span>
+        <span style="cursor:pointer;font-size:20px" onclick="closeModal('addPartyModal')">✕</span>
+      </div>
+      <div style="padding:24px">
+        <div style="margin-bottom:16px"><label style="display:block;font-size:13px;color:#666;font-weight:500;margin-bottom:6px">Name *</label><input id="ap_name" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px" placeholder="Party name"></div>
+        <div style="margin-bottom:16px"><label style="display:block;font-size:13px;color:#666;font-weight:500;margin-bottom:6px">Phone</label><input id="ap_phone" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px" placeholder="Phone number"></div>
+        <div style="margin-bottom:16px"><label style="display:block;font-size:13px;color:#666;font-weight:500;margin-bottom:6px">Type</label><select id="ap_type" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px"><option>customer</option><option>supplier</option></select></div>
+      </div>
+      <div style="padding:16px 24px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:12px">
+        <button onclick="closeModal('addPartyModal')" style="padding:10px 24px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px">Cancel</button>
+        <button onclick="saveNewParty()" style="padding:10px 32px;border:none;border-radius:8px;background:#2f6df6;color:#fff;cursor:pointer;font-size:14px;font-weight:700">Save</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+function saveNewParty(){
+  const name=(document.getElementById('ap_name').value||'').trim();
+  if(!name) return toast('Enter party name');
+  const phone=(document.getElementById('ap_phone').value||'').trim();
+  const type=document.getElementById('ap_type').value;
+  store.parties.push({id:id(),name,phone,type,balance:0});
+  persist();
+  closeModal('addPartyModal');
+  toast('Party added!');
+  renderDebitNoteForm();
+}
+
 function txn(key,title){
   const rows=[...store[key]].reverse();
   content.innerHTML=`<div class="page-head"><h2>${title}</h2></div>
@@ -4051,14 +4624,118 @@ function vExpenses(){
   </div>`;
 }
 function addPayment(dir){
-  formModal(dir==='in'?'Payment In':'Payment Out',`
-    <div class="field"><label>Party Name *</label><input id="f_party" list="pl"><datalist id="pl">${store.parties.map(p=>`<option value="${p.name}">`).join('')}</datalist></div>
-    <div class="field"><label>Amount</label><input id="f_amt" type="number" value="0"></div>
-    <div class="field"><label>Mode</label><select id="f_mode"><option>Cash</option><option>Bank</option><option>UPI</option><option>Cheque</option></select></div>`,
-  ()=>{ const p=document.getElementById('f_party').value.trim(); if(!p)return toast('Enter party');
-    store.payments.push({id:id(),dir,party:p,amount:+document.getElementById('f_amt').value||0,mode:document.getElementById('f_mode').value,date:dispDate()});
-    const pt=store.parties.find(x=>x.name===p); if(pt) pt.balance+= dir==='in'?-(+document.getElementById('f_amt').value||0):(+document.getElementById('f_amt').value||0);
-    persist(); refreshView(); closeModal('formModal'); toast('Saved'); render(dir==='in'?'paymentin':'paymentout'); });
+  const isOut=dir==='out';
+  const title=isOut?'Payment-Out':'Payment-In';
+  const nextNo=(store.payments||[]).filter(p=>p.dir===dir).length+1;
+  const receiptNo=(isOut?'PO-':'PI-')+String(nextNo).padStart(4,'0');
+  const html=`<div class="modal-overlay show" id="payOutModal" onclick="closeModal('payOutModal')">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:800px;width:95%;max-height:90vh;overflow-y:auto">
+      <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid #eee">
+        <span style="font-size:18px;font-weight:700">${title}</span>
+        <div style="display:flex;gap:12px;align-items:center">
+          <span style="cursor:pointer;font-size:20px" title="Calculator" onclick="toast('Calculator')">🧮</span>
+          <span style="cursor:pointer;font-size:20px" title="Settings" onclick="toast('Settings')">⚙️</span>
+          <span style="cursor:pointer;font-size:20px;color:#e74c3c" title="Close" onclick="closeModal('payOutModal')">✕</span>
+        </div>
+      </div>
+      <div style="padding:24px;display:flex;gap:30px;flex-wrap:wrap">
+        <div style="flex:1;min-width:280px">
+          <div style="margin-bottom:20px">
+            <label style="display:block;font-size:13px;color:#2f6df6;font-weight:600;margin-bottom:6px">Party *</label>
+            <select id="po_party" style="width:100%;padding:10px 12px;border:1px solid #2f6df6;border-radius:8px;font-size:14px">
+              <option value="">Select party...</option>
+              ${store.parties.map(p=>`<option value="${p.name}">${p.name} (${rs(Math.abs(p.balance))})</option>`).join('')}
+            </select>
+          </div>
+          <div style="margin-bottom:20px">
+            <label style="display:block;font-size:13px;color:#666;font-weight:500;margin-bottom:6px">Payment Type</label>
+            <select id="po_mode" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px">
+              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option>
+            </select>
+          </div>
+          <div style="margin-bottom:16px">
+            <span style="color:#2f6df6;font-size:13px;cursor:pointer;font-weight:600">+ Add Payment type</span>
+          </div>
+          <div style="margin-bottom:16px">
+            <button onclick="document.getElementById('po_desc_field').style.display=document.getElementById('po_desc_field').style.display==='none'?'block':'none'" style="padding:8px 16px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:#666">📝 ADD DESCRIPTION</button>
+            <textarea id="po_desc_field" style="display:none;width:100%;margin-top:8px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;min-height:60px;resize:vertical" placeholder="Add description..."></textarea>
+          </div>
+          <div style="margin-bottom:10px">
+            <span style="cursor:pointer;font-size:24px;color:#ccc" title="Attach photo">📷</span>
+          </div>
+        </div>
+        <div style="flex:1;min-width:250px">
+          <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px">
+            <label style="font-size:13px;color:#666;font-weight:500;min-width:80px">Receipt No</label>
+            <input id="po_receipt" value="${receiptNo}" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px">
+          </div>
+          <div style="margin-bottom:20px;display:flex;align-items:center;gap:10px">
+            <label style="font-size:13px;color:#666;font-weight:500;min-width:80px">Date</label>
+            <input id="po_date" type="date" value="${new Date().toISOString().split('T')[0]}" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px">
+          </div>
+          <div style="border-top:1px solid #eee;padding-top:20px">
+            <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
+              <label style="font-size:14px;color:#666;font-weight:500;min-width:80px">Paid</label>
+              <input id="po_paid" type="number" value="0" oninput="poUpdateTotal()" style="flex:1;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:16px;font-weight:600">
+            </div>
+            <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
+              <label style="font-size:14px;color:#666;font-weight:500;min-width:80px">Discount</label>
+              <input id="po_disc" type="number" value="0" oninput="poUpdateTotal()" style="flex:1;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid #eee">
+              <span style="font-size:16px;font-weight:700">Total</span>
+              <span id="po_total" style="font-size:20px;font-weight:800;color:#2f6df6">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:16px 24px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:12px">
+        <button onclick="sharePaymentOut()" style="padding:10px 24px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600">Share ▾</button>
+        <button onclick="savePaymentOut('${dir}')" style="padding:10px 32px;border:none;border-radius:8px;background:#2f6df6;color:#fff;cursor:pointer;font-size:14px;font-weight:700">Save</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+function poUpdateTotal(){
+  const paid=+(document.getElementById('po_paid')?.value)||0;
+  const disc=+(document.getElementById('po_disc')?.value)||0;
+  const total=paid-disc;
+  const el=document.getElementById('po_total');
+  if(el) el.textContent=rs(total<0?0:total);
+}
+
+function savePaymentOut(dir){
+  const party=(document.getElementById('po_party')?.value||'').trim();
+  if(!party) return toast('Select a party');
+  const amount=+(document.getElementById('po_paid')?.value)||0;
+  const disc=+(document.getElementById('po_disc')?.value)||0;
+  const mode=document.getElementById('po_mode')?.value||'Cash';
+  const receipt=document.getElementById('po_receipt')?.value||'';
+  const dateStr=document.getElementById('po_date')?.value||'';
+  const desc=(document.getElementById('po_desc_field')?.value||'').trim();
+  const dateParts=dateStr.split('-');
+  const formattedDate=dateParts[2]+'/'+dateParts[1]+'/'+dateParts[0];
+  const finalAmount=amount-disc;
+  if(finalAmount<=0) return toast('Enter a valid amount');
+  store.payments.push({id:id(),dir,party,amount:finalAmount,mode,date:formattedDate||dispDate(),receipt,desc,disc});
+  const pt=store.parties.find(x=>x.name===party);
+  if(pt) pt.balance+=dir==='in'?-finalAmount:finalAmount;
+  persist();
+  closeModal('payOutModal');
+  toast('Payment saved!');
+  if(dir==='out') vPaymentOut(); else vPaymentIn();
+}
+
+function sharePaymentOut(){
+  const party=(document.getElementById('po_party')?.value||'N/A');
+  const amount=(document.getElementById('po_paid')?.value||'0');
+  const mode=(document.getElementById('po_mode')?.value||'Cash');
+  const date=(document.getElementById('po_date')?.value||'');
+  const txt=`Payment Out\\nParty: ${party}\\nAmount: Rs ${amount}\\nMode: ${mode}\\nDate: ${date}`;
+  if(navigator.share){navigator.share({title:'Payment Out',text:txt}).catch(()=>{})}
+  else{navigator.clipboard.writeText(txt);toast('Copied to clipboard!')}
 }
 
 

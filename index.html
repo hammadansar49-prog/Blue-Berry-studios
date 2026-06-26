@@ -114,9 +114,10 @@
       <div class="pos-inv-right">
         <div class="pos-inv-date">Invoice Date: <b id="pos_inv_date"></b></div>
         <div class="pos-inv-cust-row">
-          <div class="pos-inv-cust">
+          <div class="pos-inv-cust" style="position:relative">
             <label>Customer Name *</label>
-            <input id="pos_cust" name="pos_cust_x9k2m" placeholder="Enter customer name" autocomplete="one-time-code" data-1p-ignore="true" type="text">
+            <input id="pos_cust" name="pos_cust_x9k2m" placeholder="Enter customer name" autocomplete="one-time-code" data-1p-ignore="true" type="text" oninput="posSearchCust()" onfocus="posSearchCust()" onblur="setTimeout(()=>{const d=document.getElementById('posCustDrop');if(d)d.style.display='none'},200)">
+            <div id="posCustDrop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:100;max-height:200px;overflow-y:auto"></div>
           </div>
           <div class="pos-inv-cust">
             <label>Phone Number</label>
