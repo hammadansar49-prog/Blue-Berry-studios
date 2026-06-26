@@ -4019,13 +4019,73 @@ function drawRep(){
   }
 
   else if(repSel==='Day book'){
-    const all=[...sales.map(s=>({t:'Sale',n:s.party,d:s.date,a:s.total})),...purch.map(p=>({t:'Purchase',n:p.party,d:p.date,a:-p.total})),...exp.map(e=>({t:'Expense',n:e.cat,d:e.date,a:-e.amount}))];
-    all.sort((a,b)=>b.d.localeCompare(a.d));
-    html=`<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
-      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">Day Book</div>
-      <div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>TYPE</th><th>NAME</th><th>DATE</th><th class="right">AMOUNT</th></tr></thead>
-      <tbody>${all.length?all.map((x,i)=>`<tr><td style="color:#888">${i+1}</td><td style="font-weight:500">${x.t}</td><td>${x.n}</td><td>${x.d}</td><td class="right" style="font-weight:600;color:${x.a>=0?'#27ae60':'var(--red)'}">${rs(x.a)}</td></tr>`).join(''):''}</tbody></table></div>
-      ${!all.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📊</div><div style="font-size:14px">No transactions for selected dates</div></div>`:''}
+    const dbDate=repFrom||new Date().toISOString().split('T')[0].split('-').reverse().join('/');
+    const dbDateISO=dbDate.split('/').reverse().join('-');
+    const dbSales=sales.filter(s=>s.date===dbDate);
+    const dbPurch=purch.filter(p=>p.date===dbDate);
+    const dbExp=exp.filter(e=>e.date===dbDate);
+    const dbPays=pays.filter(p=>p.date===dbDate);
+    const allTxns=[];
+    dbSales.forEach(s=>allTxns.push({name:s.party,ref:s.no||'-',type:'Sale',total:s.total||0,moneyIn:s.received||0,moneyOut:0,src:'sales',id:s.id}));
+    dbPurch.forEach(p=>allTxns.push({name:p.party,ref:p.no||'-',type:'Purchase',total:p.total||0,moneyIn:0,moneyOut:p.received||0,src:'purchases',id:p.id}));
+    dbExp.forEach(e=>allTxns.push({name:e.cat,ref:'-',type:'Expense',total:e.amount||0,moneyIn:0,moneyOut:e.amount||0,src:'expenses',id:e.id}));
+    dbPays.forEach(p=>{if(p.saleId)return;allTxns.push({name:p.party||'-',ref:p.receipt||'-',type:p.dir==='in'?'Payment In':'Payment Out',total:p.amount||0,moneyIn:p.dir==='in'?(p.amount||0):0,moneyOut:p.dir==='out'?(p.amount||0):0,src:'payments',id:p.id});});
+    (store.purchaseOrders||[]).filter(p=>p.date===dbDate).forEach(po=>allTxns.push({name:po.party||'-',ref:po.orderNo||'-',type:'Purchase Order',total:po.total||0,moneyIn:0,moneyOut:0,src:'purchaseOrders',id:po.id}));
+    const totMoneyIn=allTxns.reduce((a,t)=>a+t.moneyIn,0);
+    const totMoneyOut=allTxns.reduce((a,t)=>a+t.moneyOut,0);
+    html=`
+    <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="background:#e8f5e9;color:#1a7a3a;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600">Date</span>
+        <input type="date" id="dbDate" value="${dbDateISO}" onchange="repDaybookApply()" style="padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+        <select style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option>ALL FIRMS</option>${firms.map(f=>`<option>${f}</option>`).join('')}</select>
+        <span style="flex:1"></span>
+        <button onclick="exportDaybookReport()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">📊 Excel Report</button>
+        <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:15px;font-weight:700">Day Book — ${dbDate}</span>
+        <input id="dbSearch" placeholder="🔍 Search..." oninput="filterDaybook()" style="padding:7px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px;width:200px">
+      </div>
+      <div style="overflow-x:auto">
+        <table class="hub-table" id="dbTable">
+          <thead><tr>
+            <th>NAME</th>
+            <th>REF NO.</th>
+            <th>TYPE</th>
+            <th class="right">TOTAL</th>
+            <th class="right">MONEY IN</th>
+            <th class="right">MONEY OUT</th>
+            <th style="width:100px">PRINT/SHARE</th>
+          </tr></thead>
+          <tbody>
+            ${allTxns.map((t,i)=>{
+              const typeClr=t.type==='Sale'?'#2f6df6':t.type==='Purchase'?'#e67e22':t.type==='Expense'?'#e74c3c':t.type==='Payment In'?'#27ae60':t.type==='Payment Out'?'#e74c3c':'#8b5cf6';
+              return `<tr class="db-row" data-search="${(t.name+' '+t.ref+' '+t.type).toLowerCase()}">
+                <td style="font-weight:500">${t.name||'-'}</td>
+                <td>${t.ref}</td>
+                <td><span style="color:${typeClr};font-weight:500">${t.type}</span></td>
+                <td class="right" style="font-weight:600">${rs(t.total)}</td>
+                <td class="right" style="font-weight:600;color:${t.moneyIn>0?'#27ae60':'#888'}">${t.moneyIn>0?rs(t.moneyIn):'-'}</td>
+                <td class="right" style="font-weight:600;color:${t.moneyOut>0?'#e74c3c':'#888'}">${t.moneyOut>0?rs(t.moneyOut):'-'}</td>
+                <td style="white-space:nowrap">
+                  <span class="hub-action-icon" onclick="repPrintTxn('${t.src}','${t.id}')" title="Print">🖨️</span>
+                  <span class="hub-action-icon" onclick="repShareTxn('${t.src}','${t.id}')" title="Share">↗️</span>
+                  <span class="hub-action-icon" title="More">⋮</span>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        ${!allTxns.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">📊</div><div style="font-size:14px">No transactions for ${dbDate}</div></div>`:''}
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:16px 20px;border-top:2px solid #f0f0f0;font-size:14px;font-weight:700;flex-wrap:wrap;gap:8px">
+        <span style="color:#27ae60">Total Money-In: ${rs(totMoneyIn)}</span>
+        <span style="color:#e74c3c">Total Money-Out: ${rs(totMoneyOut)}</span>
+        <span style="color:${(totMoneyIn-totMoneyOut)>=0?'#27ae60':'#e74c3c'}">Total Money In - Total Money Out: ${rs(totMoneyIn-totMoneyOut)}</span>
+      </div>
     </div>`;
   }
 
@@ -4165,6 +4225,25 @@ function exportAllTxnReport(){
   store.expenses.filter(e=>inRange(e.date)).forEach(e=>{csv+=`${e.date||''},-,${e.cat||''},Expense,${e.amount||0},${e.amount||0},0,Paid\n`;});
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='all-transactions.csv';a.click();
+  toast('Excel downloaded!');
+}
+function repDaybookApply(){
+  const v=document.getElementById('dbDate')?.value;
+  if(v)repFrom=v.split('-').reverse().join('/');
+  drawRep();
+}
+function filterDaybook(){
+  const q=(document.getElementById('dbSearch')?.value||'').toLowerCase();
+  document.querySelectorAll('.db-row').forEach(r=>{r.style.display=(r.getAttribute('data-search')||'').includes(q)?'':'none';});
+}
+function exportDaybookReport(){
+  const dbDate=repFrom||new Date().toISOString().split('T')[0].split('-').reverse().join('/');
+  let csv='Name,Ref No,Type,Total,Money In,Money Out\n';
+  store.sales.filter(s=>s.date===dbDate).forEach(s=>{csv+=`${s.party||''},${s.no||''},Sale,${s.total||0},${s.received||0},0\n`;});
+  store.purchases.filter(p=>p.date===dbDate).forEach(p=>{csv+=`${p.party||''},${p.no||''},Purchase,${p.total||0},0,${p.received||0}\n`;});
+  store.expenses.filter(e=>e.date===dbDate).forEach(e=>{csv+=`${e.cat||''},-,Expense,${e.amount||0},0,${e.amount||0}\n`;});
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='daybook-'+dbDate.replace(/\//g,'-')+'.csv';a.click();
   toast('Excel downloaded!');
 }
 
