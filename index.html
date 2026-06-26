@@ -22,11 +22,13 @@
     <span class="tb-menu">Help</span>
     <span class="tb-menu">Versions</span>
     <span class="tb-menu">Shortcuts</span>
-    <span class="tb-menu tb-profit-btn" onclick="toast('Coming soon')">💰 How Customers Paying / See Profits</span>
+    <span class="tb-menu tb-profit-btn" onclick="showPaymentBreakdown()">💰 How Customers Paying / See Profits</span>
     <span class="tb-refresh">⟳</span>
   </div>
+  <div class="tb-center">
+  </div>
   <div class="tb-right">
-    <span class="tb-win">—</span><span class="tb-win">▢</span><span class="tb-win close">✕</span>
+    <span class="tb-designer">Web designer <span class="tb-designer-name">Hammad Ansar</span> <span class="tb-designer-phone">03341100761</span></span>
   </div>
 </div>
 
@@ -298,7 +300,8 @@
       <button class="btn btn-ghost" id="iv_replace" onclick="replaceInvoice()">🔄 Replacement</button>
       <button class="btn btn-ghost" style="color:#e67e22" onclick="trashCurrentInvoice()">🗑 Trash</button>
       <button class="btn btn-outline-blue" onclick="downloadInvoice()">⬇️ Download</button>
-      <button class="btn btn-red" onclick="printInvoice()">🖨️ Print</button>
+      <button class="btn btn-grey" id="iv_save" onclick="saveInvoiceFromPreview()">💾 Save</button>
+      <button class="btn btn-red" onclick="printAndSaveInvoice()">🖨️ Print</button>
     </div>
   </div>
 </div>
@@ -409,6 +412,31 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- ============ PAYMENT MODE BREAKDOWN MODAL ============ -->
+<div class="modal-overlay" id="paymentModal">
+  <div class="paym-modal">
+    <div class="paym-head">
+      <h2>How Customers Are Paying</h2>
+      <div class="paym-head-btns">
+        <button class="paym-profit-btn" onclick="showProfitView()">💰 See Profits</button>
+        <button class="paym-close" onclick="closeModal('paymentModal')">✕</button>
+      </div>
+    </div>
+    <div class="paym-filters">
+      <label>From:</label>
+      <input type="date" id="pmFrom" onchange="renderPaymentBreakdown()">
+      <label>To:</label>
+      <input type="date" id="pmTo" onchange="renderPaymentBreakdown()">
+    </div>
+    <div class="paym-cards" id="pmCards"></div>
+    <div class="paym-total-row" id="pmTotalRow"></div>
+    <div class="paym-profit-view" id="pmProfitView" style="display:none">
+      <div class="paym-profit-cards" id="pmProfitCards"></div>
+      <div class="paym-profit-summary" id="pmProfitSummary"></div>
+    </div>
+  </div>
+</div>
 
 <!-- Login Modal -->
 <div id="loginModal" class="modal-overlay" style="z-index:9999">

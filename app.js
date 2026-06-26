@@ -3,11 +3,12 @@ const KEY='mybiz_v2';
 let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)) }
-function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchaseForm,purchaseform:vPurchaseForm,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
+function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
 function refreshAll(){ refreshView(); }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
 function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'',category:'',address:'',pincode:'',signature:''},parties:[],items:[],sales:[],purchases:[],
   expenses:[],payments:[],banks:[],refunds:[],trash:[],categories:['General'],counters:{sale:1,purchaseBase:1},activityLog:[],users:[],
+  widgets:{purchases:false,expenses:false,stock:false,cash:false,bank:false,lowstock:false},
   account:{phone:'3341100761'},
   companies:[{id:'c1',name:'hmdx',sync:true,current:true}],
   sharedCompanies:[{id:'s1',name:'Blueberry Studio Bahawalpur',adminPhone:'3132020534'}],
@@ -21,7 +22,24 @@ function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'
     smsParty:true,smsUpdate:false,smsSelf:false,smsBalance:false,smsLink:true,smsSales:true,smsPurchase:true,smsSalesRet:true,smsPurchRet:true,smsPayIn:true,smsPayOut:true,smsSaleOrd:true,smsPurchOrd:false,smsEstimate:false,smsProforma:false,smsChallan:false,smsCancelled:true,
     partyGroup:false,shipAddr:false,partyStatus:true,payReminder:false,loyalty:false,
     enableItem:true,barcodeScan:true,directBarcode:true,stockMaintain:true,manufacturing:false,lowStock:true,itemUnit:true,itemCategory:true,partyWiseRate:false,itemDesc:true,itemTax:false,itemDiscount:true,updatePrice:false,itemQtyDec:2,wholesale:true,sizeField:false}}; }
-function ensure(){ const d=defaults(); for(const k in d){ if(store[k]===undefined) store[k]=d[k]; } if(!store.business) store.business=d.business; if(!store.counters)store.counters=d.counters; if(store.counters.purchaseBase===undefined)store.counters.purchaseBase=store.counters.purchase||1; }
+function ensure(){ const d=defaults(); for(const k in d){ if(store[k]===undefined) store[k]=d[k]; } if(!store.business) store.business=d.business; if(!store.counters)store.counters=d.counters; if(store.counters.purchaseBase===undefined)store.counters.purchaseBase=store.counters.purchase||1; syncOldSalesToPayments(); }
+function syncOldSalesToPayments(){
+  if(!store.sales||!store.sales.length)return;
+  if(!store.payments)store.payments=[];
+  let changed=false;
+  store.sales.forEach(s=>{
+    if(s.refunded)return;
+    const alreadyHas=store.payments.some(p=>p.saleId===s.id);
+    if(alreadyHas)return;
+    const mode=s.mode||'Cash';
+    const party=s.party||'';
+    const amount=s.received||0;
+    const date=s.date||dispDate();
+    store.payments.push({id:id(),saleId:s.id,dir:'in',party:party,amount:amount,mode:mode,date:date});
+    changed=true;
+  });
+  if(changed)persist();
+}
 function logActivity(type,detail){
   if(!store.activityLog)store.activityLog=[];
   const now=new Date();
@@ -36,6 +54,28 @@ function logActivity(type,detail){
 }
 function id(){ return Math.random().toString(36).slice(2,9) }
 const rs = n => { const s=(store.settings||{}); return (s.currency||'Rs')+' '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:s.decimals||0,maximumFractionDigits:s.decimals||0}); };
+
+function chartTicks(maxVal){
+  if(maxVal<=0)maxVal=1;
+  const ceiling=maxVal*1.25;
+  const rawStep=ceiling/5;
+  const mag=Math.pow(10,Math.floor(Math.log10(rawStep)));
+  const norm=rawStep/mag;
+  let step;
+  if(norm<=1.5)step=mag;
+  else if(norm<=3.5)step=2*mag;
+  else if(norm<=7.5)step=5*mag;
+  else step=10*mag;
+  const ticks=[];
+  for(let v=0;v<=ceiling+step*0.1;v+=step)ticks.push(Math.round(v));
+  return{ticks,step};
+}
+function chartFmt(v){
+  if(v>=10000000)return(v/10000000)+'Cr';
+  if(v>=100000)return(v/100000)+'L';
+  if(v>=1000)return(v/1000)+'k';
+  return v;
+}
 
 /* ============ MENU CONFIG ============ */
 const MENU=[
@@ -52,7 +92,6 @@ const MENU=[
     {k:'purchase', t:'Purchase Bills', plus:true},{k:'paymentout', t:'Payment-Out', plus:true},
     {k:'expenses', t:'Expenses', plus:true},{k:'purchaseorder', t:'Purchase Order', plus:true},
     {k:'purchasereturn', t:'Purchase Return/ Dr. Note', plus:true}]},
-  {t:'Grow Your Business', ic:'📈', sub:[{k:'gprofile', t:'Google Profile Manager'},{k:'marketing', t:'Marketing Tools'},{k:'onlinestore', t:'Online Store'}]},
   {k:'reports', t:'Reports', ic:'📊'},
   {t:'Sync, Share & Backup', ic:'🔄', sub:[{k:'useractivity', t:'User Activity', dot:true},{k:'restorebackup', t:'Restore Backup'}]},
   {t:'Utilities', ic:'🛠️', sub:[
@@ -109,7 +148,7 @@ function nav(view,el){
   logActivity('navigation','Opened '+viewNames[view]);
 }
 function render(view){
-  const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchaseForm,purchaseform:vPurchaseForm,reports:vReports,
+  const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,reports:vReports,
     settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,purchasereturn:vPurchaseReturn,
     saleorder:vSaleOrder,savedinv:vSavedInvoices,
     bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,
@@ -163,7 +202,7 @@ function vWelcome(){
   const chartPoints=[];
   for(let d=1;d<=daysInMonth;d++){
     const val=dailySales[d]||0;
-    chartPoints.push({day:d,val});
+    chartPoints.push({day:d,label:monthNames[currentMonth]+' '+d,val});
   }
   const chartW=700,chartH=200,padL=50,padR=20,padT=10,padB=40;
   const plotW=chartW-padL-padR,plotH=chartH-padT-padB;
@@ -171,29 +210,30 @@ function vWelcome(){
     const svgPts=chartPoints.map((p,i)=>{
       const x=padL+(i/(chartPoints.length-1||1))*plotW;
       const y=padT+plotH-(p.val/maxSale)*plotH;
-      return {x,y,val:p.val,day:p.day};
+      return {x,y,val:p.val,label:p.label};
     });
-    const pathD=svgPts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+    const pathD=smoothPath(svgPts);
     const areaD=pathD+' L'+svgPts[svgPts.length-1].x.toFixed(1)+','+(padT+plotH)+' L'+svgPts[0].x.toFixed(1)+','+(padT+plotH)+' Z';
-    const yTicks=[0,5000,10000,15000,20000].filter(v=>v<=maxSale*1.2);
+    const yT=chartTicks(maxSale);
+    const yTicks=yT.ticks;
     const yLines=yTicks.map(v=>{
       const y=padT+plotH-(v/maxSale)*plotH;
-      return `<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#eee" stroke-width="1"/>
-              <text x="${padL-8}" y="${y+4}" text-anchor="end" fill="#999" font-size="11">${v>=1000?(v/1000)+'k':v}</text>`;
+      return `<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#f0f0f0" stroke-width="1"/>
+              <text x="${padL-8}" y="${y+4}" text-anchor="end" fill="#aaa" font-size="11" font-weight="500">${chartFmt(v)}</text>`;
     }).join('');
     const xLabels=chartPoints.filter((p,i)=>i%Math.max(1,Math.floor(chartPoints.length/8))===0||p.day===daysInMonth).map(p=>{
       const x=padL+((p.day-1)/(chartPoints.length-1||1))*plotW;
-      return `<text x="${x}" y="${chartH-8}" text-anchor="middle" fill="#999" font-size="11">${monthNames[currentMonth]} ${p.day}</text>`;
+      return `<text x="${x}" y="${chartH-6}" text-anchor="middle" fill="#aaa" font-size="11" font-weight="500">${p.day}</text>`;
     }).join('');
     chartHTML=`<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;height:200px">
-      <defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(47,109,246,0.2)"/>
-        <stop offset="100%" stop-color="rgba(47,109,246,0.02)"/>
+      <defs><linearGradient id="areaGradInit" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(47,109,246,0.18)"/>
+        <stop offset="100%" stop-color="rgba(47,109,246,0.01)"/>
       </linearGradient></defs>
       ${yLines}
-      <path d="${areaD}" fill="url(#areaGrad)"/>
-      <path d="${pathD}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round"/>
-      ${svgPts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--blue)" stroke="#fff" stroke-width="1.5"/>`).join('')}
+      <path d="${areaD}" fill="url(#areaGradInit)"/>
+      <path d="${pathD}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${svgPts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--blue)" stroke="#fff" stroke-width="2" data-label="${p.label}" data-val="${p.val}"/>`).join('')}
       ${xLabels}
     </svg>`;
   } else {
@@ -205,12 +245,6 @@ function vWelcome(){
   <div class="dash-wrap">
     <div class="dash-top-bar">
       <div class="dash-search"><span class="dash-search-ic">🔍</span><input placeholder="Search Transactions" oninput="dashSearch(this.value)"></div>
-      <div class="dash-top-btns">
-        <button class="dash-btn dash-btn-red" onclick="openSale()">+ Add Sale</button>
-        <button class="dash-btn dash-btn-blue" onclick="nav('purchaseform')">+ Add Purchase</button>
-        <button class="dash-btn dash-btn-icon" onclick="openAnything()">+</button>
-        <button class="dash-btn dash-btn-more" onclick="dashMoreMenu(event)">⋮</button>
-      </div>
     </div>
     <div class="dash-admin-banner">
       <span class="dash-admin-icon">👤</span>
@@ -244,7 +278,10 @@ function vWelcome(){
             </div>
             <div class="dash-sale-filter" id="dashMonthFilter">
               <select onchange="dashChangeMonth(this.value)">
-                <option value="this">This Month</option>
+                <option value="today">Today</option>
+                <option value="3days">Last 3 Days</option>
+                <option value="week">This Week</option>
+                <option value="this" selected>This Month</option>
                 <option value="last">Last Month</option>
                 <option value="3">Last 3 Months</option>
                 <option value="6">Last 6 Months</option>
@@ -281,7 +318,7 @@ function vWelcome(){
       </div>
       <div class="dash-col-right">
         <div class="dash-widget-area">
-          <div class="dash-widget-ill">
+          ${renderWidgets()||`<div class="dash-widget-ill">
             <svg viewBox="0 0 200 180" style="width:140px;height:140px">
               <circle cx="100" cy="90" r="85" fill="#e8f4fd"/>
               <rect x="60" y="40" width="80" height="70" rx="6" fill="#fff" stroke="#b8d8f0" stroke-width="2"/>
@@ -297,9 +334,9 @@ function vWelcome(){
             </svg>
           </div>
           <div class="dash-widget-title">It Looks So Empty in Here!</div>
-          <div class="dash-widget-sub">Add one of our widgets to get started and view your business operations</div>
+          <div class="dash-widget-sub">Add one of our widgets to get started and view your business operations</div>`}
         </div>
-        <div class="dash-add-widget" onclick="toast('Widget customization coming soon!')">
+        <div class="dash-add-widget" onclick="showWidgetModal()">
           <span>Add Widget of Your Choice</span>
           <span class="dash-add-widget-plus">+</span>
         </div>
@@ -309,7 +346,80 @@ function vWelcome(){
   dashInitChart();
 }
 
-function dashInitChart(){}
+function calcCashInHand(){
+  const cashIn=(store.payments||[]).filter(p=>p.dir==='in'&&p.mode==='Cash').reduce((a,b)=>a+(b.amount||0),0);
+  const cashOut=(store.payments||[]).filter(p=>p.dir==='out'&&p.mode==='Cash').reduce((a,b)=>a+(b.amount||0),0);
+  return cashIn-cashOut;
+}
+
+function calcLowStockCount(){
+  return (store.items||[]).filter(i=>{
+    const min=i.lowstock||0;
+    return min>0&&(i.stock||0)<=min;
+  }).length;
+}
+
+function dashInitChart(){attachChartTooltips('dashChart')}
+
+function showWidgetModal(){
+  if(!store.widgets) store.widgets={purchases:false,expenses:false,stock:false,cash:false,bank:false,lowstock:false};
+  const widgets=[
+    {key:'purchases',label:'Purchases',val:rs((store.purchases||[]).reduce((a,p)=>a+p.total,0))},
+    {key:'expenses',label:'Expenses',val:rs((store.expenses||[]).reduce((a,e)=>a+e.amount,0))},
+    {key:'stock',label:'Stock Value',val:rs((store.items||[]).reduce((a,i)=>a+(i.stock||0)*(i.price||0),0))},
+    {key:'cash',label:'Cash In Hand',val:rs(calcCashInHand())},
+    {key:'bank',label:'Total Bank Balance',val:rs((store.banks||[]).reduce((a,b)=>a+(b.bal||0),0))},
+    {key:'lowstock',label:'Low Stock Items',val:calcLowStockCount()+' items'}
+  ];
+  const html=`<div id="widgetModal" class="modal-overlay" onclick="closeModal('widgetModal')" style="position:fixed;inset:0;background:rgba(20,22,30,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;width:95%;border-radius:16px;overflow:hidden">
+      <div class="modal-head"><span>Add Widget of Your Choice</span><span class="modal-close" onclick="closeModal('widgetModal')">✕</span></div>
+      <div style="padding:16px">
+        ${widgets.map(w=>{
+          const active=store.widgets[w.key];
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid #f0f0f0">
+            <div>
+              <div style="font-size:14px;color:#666;margin-bottom:4px">${w.label}</div>
+              <div style="font-size:18px;font-weight:700;color:#222">${w.val}</div>
+            </div>
+            <div onclick="toggleWidget('${w.key}')" style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-weight:700;transition:.2s;${active?'background:#fff0f0;color:#e74c3c;border:2px solid #e74c3c':'background:#f0f7ff;color:#2f6df6;border:2px solid #2f6df6'}">
+              ${active?'−':'+'}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+function toggleWidget(key){
+  if(!store.widgets) store.widgets={};
+  store.widgets[key]=!store.widgets[key];
+  persist();
+  closeModal('widgetModal');
+  showWidgetModal();
+  refreshView();
+}
+
+function renderWidgets(){
+  if(!store.widgets) return '';
+  const w=store.widgets;
+  const items=[];
+  if(w.purchases) items.push({label:'Purchases',val:rs((store.purchases||[]).reduce((a,p)=>a+p.total,0)),color:'#2f6df6'});
+  if(w.expenses) items.push({label:'Expenses',val:rs((store.expenses||[]).reduce((a,e)=>a+e.amount,0)),color:'#e74c3c'});
+  if(w.stock) items.push({label:'Stock Value',val:rs((store.items||[]).reduce((a,i)=>a+(i.stock||0)*(i.price||0),0)),color:'#8b5cf6'});
+  if(w.cash) items.push({label:'Cash In Hand',val:rs(calcCashInHand()),color:'#27ae60'});
+  if(w.bank) items.push({label:'Total Bank Balance',val:rs((store.banks||[]).reduce((a,b)=>a+(b.bal||0),0)),color:'#0891b2'});
+  if(w.lowstock) items.push({label:'Low Stock Items',val:calcLowStockCount()+' items',color:'#f59e0b'});
+  if(!items.length) return '';
+  return `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
+    ${items.map(it=>`<div style="flex:1;min-width:140px;background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:16px">
+      <div style="font-size:13px;color:#888;margin-bottom:6px">${it.label}</div>
+      <div style="font-size:20px;font-weight:800;color:${it.color}">${it.val}</div>
+    </div>`).join('')}
+  </div>`;
+}
 
 function dashShowReceivables(){dashShowBalanceDetail('receivable')}
 function dashShowPayables(){dashShowBalanceDetail('payable')}
@@ -336,67 +446,79 @@ function dashShowBalanceDetail(type){
   parties.forEach(p=>{
     const bal=Math.abs(p.balance);
     const salesForParty=(store.sales||[]).filter(s=>s.party===p.name);
-    if(salesForParty.length){
-      salesForParty.forEach(s=>{
-        const outstanding=(s.total||0)-(s.received||0);
-        if(isR&&outstanding<=0)return;
-        if(!isR&&outstanding>=0)return;
-        const parts=(s.date||'').split(/[\s/-]/);
-        if(parts.length<3)return;
-        const day=parseInt(parts[0]);
-        const m=parseInt(parts[1])-1;
-        const y=parseInt(parts[2]);
-        if(isNaN(day)||isNaN(m)||isNaN(y))return;
-        if(m===curMonth&&y===curYear){
-          dailyData[day]=(dailyData[day]||0)+Math.abs(outstanding);
-        }
-      });
-    } else {
-      const today=now.getDate();
-      dailyData[today]=(dailyData[today]||0)+bal;
+    let currentMonthOutstanding=0;
+    const daySales={};
+    const dayPayments={};
+    salesForParty.forEach(s=>{
+      const parts=(s.date||'').split(/[\s/-]/);
+      if(parts.length<3)return;
+      const sm=parseInt(parts[1])-1;
+      const sy=parseInt(parts[2]);
+      if(sm!==curMonth||sy!==curYear)return;
+      const outstanding=(s.total||0)-(s.received||0);
+      if(isR&&outstanding<=0)return;
+      if(!isR&&outstanding>=0)return;
+      currentMonthOutstanding+=Math.abs(outstanding);
+      const day=parseInt(parts[0]);
+      daySales[day]=(daySales[day]||0)+Math.abs(outstanding);
+    });
+    let currentMonthPayments=0;
+    const partyPayments=(store.payments||[]).filter(pay=>pay.party===p.name&&(isR?pay.dir==='in':pay.dir==='out'));
+    partyPayments.forEach(pay=>{
+      const parts=(pay.date||'').split(/[\s/-]/);
+      if(parts.length<3)return;
+      const pm=parseInt(parts[1])-1;
+      const py=parseInt(parts[2]);
+      if(pm!==curMonth||py!==curYear)return;
+      currentMonthPayments+=(pay.amount||0);
+      const day=parseInt(parts[0]);
+      dayPayments[day]=(dayPayments[day]||0)+(pay.amount||0);
+    });
+    const openingBal=Math.max(bal-currentMonthOutstanding+currentMonthPayments,0);
+    let running=openingBal;
+    for(let d=1;d<=daysInMonth;d++){
+      if(daySales[d]) running+=daySales[d];
+      if(dayPayments[d]) running=Math.max(running-dayPayments[d],0);
+      dailyData[d]=(dailyData[d]||0)+running;
     }
   });
 
   const chartPoints=[];
-  for(let d=1;d<=daysInMonth;d++){chartPoints.push({day:d,val:dailyData[d]||0});}
+  for(let d=1;d<=daysInMonth;d++){chartPoints.push({day:d,label:monthNames[curMonth]+' '+d,val:dailyData[d]||0});}
   const hasData=chartPoints.some(p=>p.val>0);
   const maxVal=Math.max(...chartPoints.map(p=>p.val),1);
 
   let chartHTML='';
-  const chartW=700,chartH=300,padL=50,padR=20,padT=15,padB=40;
+  const chartW=700,chartH=200,padL=50,padR=20,padT=10,padB=40;
   const plotW=chartW-padL-padR,plotH=chartH-padT-padB;
 
   const svgPts=chartPoints.map((p,i)=>{
     const x=padL+(i/(chartPoints.length-1||1))*plotW;
     const y=padT+plotH-(p.val/maxVal)*plotH;
-    return {x,y,val:p.val,day:p.day};
+    return {x,y,val:p.val,label:p.label};
   });
-  const pathD=svgPts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  const pathD=smoothPath(svgPts);
   const areaD=pathD+' L'+svgPts[svgPts.length-1].x.toFixed(1)+','+(padT+plotH)+' L'+svgPts[0].x.toFixed(1)+','+(padT+plotH)+' Z';
-  const yMax=maxVal*1.2;
-  const yStep=yMax>0?Math.ceil(yMax/4/100)*100:1000;
-  const yTicks=[];
-  for(let v=0;v<=yMax;v+=yStep)yTicks.push(v);
-  if(!yTicks.length)yTicks.push(0);
-  const yLines=yTicks.map(v=>{
-    const y=padT+plotH-(v/yMax)*plotH;
-    return `<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#eee" stroke-width="1"/>
-            <text x="${padL-8}" y="${y+4}" text-anchor="end" fill="#999" font-size="11">${v>=1000?(v/1000)+'k':v}</text>`;
+  const yT=chartTicks(maxVal);
+  const yLines=yT.ticks.map(v=>{
+    const y=padT+plotH-(v/maxVal)*plotH;
+    return `<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#f0f0f0" stroke-width="1"/>
+            <text x="${padL-8}" y="${y+4}" text-anchor="end" fill="#aaa" font-size="11" font-weight="500">${chartFmt(v)}</text>`;
   }).join('');
   const xLabels=chartPoints.filter((p,i)=>i%Math.max(1,Math.floor(chartPoints.length/8))===0||p.day===daysInMonth).map(p=>{
     const x=padL+((p.day-1)/(chartPoints.length-1||1))*plotW;
-    return `<text x="${x}" y="${chartH-8}" text-anchor="middle" fill="#999" font-size="11">${monthNames[curMonth]} ${p.day}</text>`;
+    return `<text x="${x}" y="${chartH-6}" text-anchor="middle" fill="#aaa" font-size="11" font-weight="500">${p.day}</text>`;
   }).join('');
-  const gradId='balGrad'+type;
-  chartHTML=`<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;height:300px">
+  const gradId='balGrad_'+type;
+  chartHTML=`<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;height:200px">
     <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${color}33"/>
+      <stop offset="0%" stop-color="${color}30"/>
       <stop offset="100%" stop-color="${color}05"/>
     </linearGradient></defs>
     ${yLines}
     <path d="${areaD}" fill="url(#${gradId})"/>
-    <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>
-    ${svgPts.filter(p=>p.val>0).map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`).join('')}
+    <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${svgPts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${color}" stroke="#fff" stroke-width="2" data-label="${p.label}" data-val="${p.val}"/>`).join('')}
     ${xLabels}
   </svg>`;
 
@@ -423,13 +545,80 @@ function dashShowBalanceDetail(type){
       </div>
       <div class="dbar-page-total" style="color:${color}">${rs(total)}</div>
     </div>
-    <div class="dbar-page-chart">${chartHTML}</div>
-    ${parties.length?`<div class="dbar-page-section-head">Party-wise Breakdown <span style="color:#999;font-weight:400;font-size:13px">(${parties.length})</span></div>
-    <div class="dbar-page-list">${partyListHtml}</div>`:`<div class="dbar-page-empty">No pending ${type} records</div>`}
+    <div class="dbar-page-chart" id="balDetailChart" style="position:relative">${chartHTML}</div>
   </div>`;
 
   content.innerHTML=html;
   currentView='home';
+  attachChartTooltips('balDetailChart');
+}
+
+function smoothPath(pts){
+  if(pts.length<2) return '';
+  let d='M'+pts[0].x.toFixed(1)+','+pts[0].y.toFixed(1);
+  if(pts.length===2){
+    d+='L'+pts[1].x.toFixed(1)+','+pts[1].y.toFixed(1);
+    return d;
+  }
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[Math.max(i-1,0)];
+    const p1=pts[i];
+    const p2=pts[i+1];
+    const p3=pts[Math.min(i+2,pts.length-1)];
+    const tension=0.3;
+    const cp1x=p1.x+(p2.x-p0.x)*tension;
+    const cp1y=p1.y+(p2.y-p0.y)*tension;
+    const cp2x=p2.x-(p3.x-p1.x)*tension;
+    const cp2y=p2.y-(p3.y-p1.y)*tension;
+    d+=' C'+cp1x.toFixed(1)+','+cp1y.toFixed(1)+' '+cp2x.toFixed(1)+','+cp2y.toFixed(1)+' '+p2.x.toFixed(1)+','+p2.y.toFixed(1);
+  }
+  return d;
+}
+
+function chartTooltipHTML(label,val){
+  return `<div class="tt-date">${label}</div><div class="tt-val">${rs(val)}</div>`;
+}
+
+function attachChartTooltips(containerId){
+  const el=document.getElementById(containerId);
+  if(!el) return;
+  let tip=el.querySelector('.chart-tooltip');
+  if(!tip){
+    tip=document.createElement('div');
+    tip.className='chart-tooltip';
+    el.appendChild(tip);
+  }
+  const svg=el.querySelector('svg');
+  if(!svg) return;
+  const vb=svg.getAttribute('viewBox');
+  const vbParts=vb?vb.split(/\s+/):[700,200];
+  const vbW=parseFloat(vbParts[2])||700;
+  const vbH=parseFloat(vbParts[3])||200;
+  const circles=svg.querySelectorAll('circle');
+  circles.forEach(c=>{
+    c.addEventListener('mouseenter',function(e){
+      const label=this.getAttribute('data-label')||'';
+      const val=parseInt(this.getAttribute('data-val'))||0;
+      tip.innerHTML=chartTooltipHTML(label,val);
+      tip.classList.add('show');
+      const rect=el.getBoundingClientRect();
+      const cx=parseFloat(this.getAttribute('cx'));
+      const cy=parseFloat(this.getAttribute('cy'));
+      const svgRect=svg.getBoundingClientRect();
+      const scalex=svgRect.width/vbW;
+      const scaley=svgRect.height/vbH;
+      let left=cx*scalex-tip.offsetWidth/2;
+      let top=cy*scaley-tip.offsetHeight-14;
+      if(left<0) left=4;
+      if(left+tip.offsetWidth>rect.width) left=rect.width-tip.offsetWidth-4;
+      if(top<0) top=cy*scaley+14;
+      tip.style.left=left+'px';
+      tip.style.top=top+'px';
+    });
+    c.addEventListener('mouseleave',function(){
+      tip.classList.remove('show');
+    });
+  });
 }
 
 function dashChangeMonth(val){
@@ -438,19 +627,48 @@ function dashChangeMonth(val){
   let filterLabel='This Month';
   let filteredSales=[];
   const allSales=(store.sales||[]).filter(s=>!s.refunded);
-  if(val==='this'){
+
+  function parseDate(s){
+    const parts=s.date.split(/[\s/-]/);
+    return new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+  }
+
+  if(val==='today'){
+    filterLabel='Today';
+    filteredSales=allSales.filter(s=>{
+      const d=parseDate(s);
+      return d.toDateString()===now.toDateString();
+    });
+  } else if(val==='3days'){
+    filterLabel='Last 3 Days';
+    const cutoff=new Date(now);
+    cutoff.setDate(now.getDate()-2);
+    cutoff.setHours(0,0,0,0);
+    filteredSales=allSales.filter(s=>{
+      const d=parseDate(s);
+      return d>=cutoff;
+    });
+  } else if(val==='week'){
+    filterLabel='This Week';
+    const dayOfWeek=now.getDay();
+    const weekStart=new Date(now);
+    weekStart.setDate(now.getDate()-dayOfWeek);
+    weekStart.setHours(0,0,0,0);
+    filteredSales=allSales.filter(s=>{
+      const d=parseDate(s);
+      return d>=weekStart;
+    });
+  } else if(val==='this'){
     filterLabel='This Month';
     filteredSales=allSales.filter(s=>{
-      const parts=s.date.split(/[\s/-]/);
-      const d=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+      const d=parseDate(s);
       return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
     });
   } else if(val==='last'){
     filterLabel='Last Month';
     const lm=new Date(now.getFullYear(),now.getMonth()-1,1);
     filteredSales=allSales.filter(s=>{
-      const parts=s.date.split(/[\s/-]/);
-      const d=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+      const d=parseDate(s);
       return d.getMonth()===lm.getMonth()&&d.getFullYear()===lm.getFullYear();
     });
   } else if(val==='3'||val==='6'){
@@ -458,66 +676,131 @@ function dashChangeMonth(val){
     filterLabel='Last '+months+' Months';
     const cutoff=new Date(now.getFullYear(),now.getMonth()-months,1);
     filteredSales=allSales.filter(s=>{
-      const parts=s.date.split(/[\s/-]/);
-      const d=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+      const d=parseDate(s);
       return d>=cutoff;
     });
   } else {
     filterLabel='All Time';
     filteredSales=allSales;
   }
+
   const total=filteredSales.reduce((a,s)=>a+s.total,0);
   document.querySelector('.dash-sale-amount').textContent=rs(total);
 
-  const dailySales={};
-  filteredSales.forEach(s=>{
-    const parts=s.date.split(/[\s/-]/);
-    const day=parseInt(parts[0]);
-    dailySales[day]=(dailySales[day]||0)+s.total;
-  });
   let chartHTML='';
-  const maxSale=Math.max(...Object.values(dailySales),1);
-  const daysInMonth=30;
-  const chartPoints=[];
-  for(let d=1;d<=daysInMonth;d++){
-    chartPoints.push({day:d,val:dailySales[d]||0});
-  }
   const chartW=700,chartH=200,padL=50,padR=20,padT=10,padB=40;
   const plotW=chartW-padL-padR,plotH=chartH-padT-padB;
-  if(chartPoints.some(p=>p.val>0)){
-    const svgPts=chartPoints.map((p,i)=>{
-      const x=padL+(i/(chartPoints.length-1||1))*plotW;
+  const gradId='dashGrad_'+Date.now();
+
+  function makeChart(pts,xLabelsArr,maxSale){
+    const svgPts=pts.map((p,i)=>{
+      const x=padL+(i/(pts.length-1||1))*plotW;
       const y=padT+plotH-(p.val/maxSale)*plotH;
-      return {x,y,val:p.val,day:p.day};
+      return {x,y,val:p.val,label:p.label};
     });
-    const pathD=svgPts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+    const pathD=smoothPath(svgPts);
     const areaD=pathD+' L'+svgPts[svgPts.length-1].x.toFixed(1)+','+(padT+plotH)+' L'+svgPts[0].x.toFixed(1)+','+(padT+plotH)+' Z';
-    const yTicks=[0,5000,10000,15000,20000].filter(v=>v<=maxSale*1.2);
-    const yLines=yTicks.map(v=>{
+    const yT=chartTicks(maxSale);
+    const yLines=yT.ticks.map(v=>{
       const y=padT+plotH-(v/maxSale)*plotH;
-      return `<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#eee" stroke-width="1"/>
-              <text x="${padL-8}" y="${y+4}" text-anchor="end" fill="#999" font-size="11">${v>=1000?(v/1000)+'k':v}</text>`;
+      return `<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#f0f0f0" stroke-width="1"/>
+              <text x="${padL-8}" y="${y+4}" text-anchor="end" fill="#aaa" font-size="11" font-weight="500">${chartFmt(v)}</text>`;
     }).join('');
-    const xLabels=chartPoints.filter((p,i)=>i%Math.max(1,Math.floor(chartPoints.length/8))===0||p.day===daysInMonth).map(p=>{
-      const x=padL+((p.day-1)/(chartPoints.length-1||1))*plotW;
-      return `<text x="${x}" y="${chartH-8}" text-anchor="middle" fill="#999" font-size="11">${p.day}</text>`;
-    }).join('');
-    chartHTML=`<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;height:200px">
-      <defs><linearGradient id="areaGrad2" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(47,109,246,0.2)"/>
-        <stop offset="100%" stop-color="rgba(47,109,246,0.02)"/>
+    const xLab=xLabelsArr.map(p=>
+      `<text x="${p.x}" y="${chartH-6}" text-anchor="middle" fill="#aaa" font-size="11" font-weight="500">${p.label}</text>`
+    ).join('');
+    return `<svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%;height:200px">
+      <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(47,109,246,0.18)"/>
+        <stop offset="100%" stop-color="rgba(47,109,246,0.01)"/>
       </linearGradient></defs>
       ${yLines}
-      <path d="${areaD}" fill="url(#areaGrad2)"/>
-      <path d="${pathD}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round"/>
-      ${svgPts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--blue)" stroke="#fff" stroke-width="1.5"/>`).join('')}
-      ${xLabels}
+      <path d="${areaD}" fill="url(#${gradId})"/>
+      <path d="${pathD}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${svgPts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--blue)" stroke="#fff" stroke-width="2" data-label="${p.label}" data-val="${p.val}"/>`).join('')}
+      ${xLab}
     </svg>`;
+  }
+
+  if(val==='today'){
+    const hourlySales={};
+    filteredSales.forEach(s=>{
+      const timeParts=(s.time||'12:00').split(':');
+      const h=parseInt(timeParts[0])||12;
+      hourlySales[h]=(hourlySales[h]||0)+s.total;
+    });
+    const hours=[];
+    for(let h=0;h<=23;h++){
+      const ampm=h<12?'AM':'PM';
+      const h12=h===0?12:h>12?h-12:h;
+      hours.push({label:h12+' '+ampm,val:hourlySales[h]||0,hour:h});
+    }
+    const maxSale=Math.max(...hours.map(h=>h.val),1);
+    if(hours.some(h=>h.val>0)){
+      const xLabelsArr=hours.filter((_,i)=>i%4===0||i===hours.length-1).map(h=>{
+        const x=padL+(h.hour/(hours.length-1||1))*plotW;
+        return {x,label:h.label};
+      });
+      chartHTML=makeChart(hours,xLabelsArr,maxSale);
+    } else {
+      chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
+        <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales today</div></div>`;
+    }
+  } else if(val==='3days'||val==='week'){
+    const days=val==='3days'?3:7;
+    const dayLabels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dailySales={};
+    const dayDates=[];
+    for(let i=days-1;i>=0;i--){
+      const d=new Date(now);
+      d.setDate(now.getDate()-i);
+      const key=d.toDateString();
+      dailySales[key]=0;
+      dayDates.push({key,label:dayLabels[d.getDay()]+' '+d.getDate(),date:d});
+    }
+    filteredSales.forEach(s=>{
+      const d=parseDate(s);
+      const key=d.toDateString();
+      if(dailySales[key]!==undefined) dailySales[key]+=s.total;
+    });
+    const points=dayDates.map(dd=>({label:dd.label,val:dailySales[dd.key]||0}));
+    const maxSale=Math.max(...points.map(p=>p.val),1);
+    if(points.some(p=>p.val>0)){
+      const xLabelsArr=points.map((p,i)=>{
+        const x=padL+(i/(points.length-1||1))*plotW;
+        return {x,label:p.label};
+      });
+      chartHTML=makeChart(points,xLabelsArr,maxSale);
+    } else {
+      chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
+        <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
+    }
   } else {
-    chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
-      <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
+    const dailySales={};
+    filteredSales.forEach(s=>{
+      const parts=s.date.split(/[\s/-]/);
+      const day=parseInt(parts[0]);
+      dailySales[day]=(dailySales[day]||0)+s.total;
+    });
+    const daysInMonth=30;
+    const chartPoints=[];
+    for(let d=1;d<=daysInMonth;d++){
+      chartPoints.push({day:d,label:d+'',val:dailySales[d]||0});
+    }
+    const maxSale=Math.max(...chartPoints.map(p=>p.val),1);
+    if(chartPoints.some(p=>p.val>0)){
+      const xLabelsArr=chartPoints.filter((p,i)=>i%Math.max(1,Math.floor(chartPoints.length/8))===0||p.day===daysInMonth).map(p=>{
+        const x=padL+((p.day-1)/(chartPoints.length-1||1))*plotW;
+        return {x,label:p.day+''};
+      });
+      chartHTML=makeChart(chartPoints,xLabelsArr,maxSale);
+    } else {
+      chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
+        <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
+    }
   }
   document.getElementById('dashChart').innerHTML=chartHTML;
+  attachChartTooltips('dashChart');
 }
 
 function dashOpenReport(type){
@@ -700,13 +983,14 @@ function quickSale(){
   const rows=homeRows.filter(r=>r.item&&r.qty);
   const total=homeTotal();
   if(total<=0) return toast('Add at least one item with price');
-  store.sales.push({id:id(),no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone,date:dispDate(),rows,total,received:recv});
+  const saleId=id();
+  store.sales.push({id:saleId,no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone,date:dispDate(),rows,total,received:recv,mode:'Cash'});
   store.counters.sale++;
   rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item); if(it)it.stock-=r.qty;});
   let p=store.parties.find(x=>x.name===cust);
   if(!p){ p={id:id(),name:cust,phone,type:'customer',balance:0}; store.parties.push(p); }
   p.balance += total-recv;
-  if(recv>0) store.payments.push({id:id(),dir:'in',party:cust,amount:recv,mode:'Cash',date:dispDate()});
+  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:recv,mode:'Cash',date:dispDate()});
   persist(); refreshView(); toast(recv>0?'Invoice + payment saved!':'Invoice created!');
   showInvoiceView(store.sales[store.sales.length-1]);
 }
@@ -796,6 +1080,7 @@ function editInvItemChange(){
 }
 function showInvoiceView(s){ viewInv=s; document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s);
   const rf=document.getElementById('iv_refund'); if(rf){ rf.style.display=s.refunded?'none':''; if(s.refunded){ document.getElementById('iv_body').insertAdjacentHTML('afterbegin','<div class="refunded-stamp">REFUNDED</div>'); } }
+  const sv=document.getElementById('iv_save'); if(sv){ sv.style.display=(s.id&&s.id.indexOf('tmp_')!==0)?'none':''; }
   showModal('invViewModal'); }
 function toggleItemAction(idx,ev){
   ev.stopPropagation();
@@ -928,6 +1213,40 @@ function printInvoice(){
   const w=window.open('','_blank','width=820,height=900');
   w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>{ w.print(); },300);
+}
+function saveInvoiceFromPreview(){
+  if(!viewInv)return;
+  if(viewInv.id&&viewInv.id.indexOf('tmp_')!==0){toast('Invoice already saved');return;}
+  const s=store.settings||{};
+  const mode=viewInv._posMode||'Cash';
+  const invNo=viewInv.no||(s.invPrefix||'INV-')+String(store.counters.sale).padStart(2,'0');
+  const saleDate=s.addTime?viewInv.date+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):viewInv.date;
+  const newId=id();
+  const savedInv={
+    id:newId,no:invNo,party:viewInv.party,phone:viewInv.phone||'',date:saleDate,
+    rows:(viewInv.rows||[]).map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),
+    total:viewInv.total,received:viewInv.received||0,mode:mode,
+    status:viewInv.received>=viewInv.total?'paid':'unpaid'
+  };
+  store.sales.push(savedInv);
+  store.counters.sale++;
+  if(s.stockMaintain!==false){
+    (savedInv.rows||[]).forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it&&typeof it.stock==='number')it.stock-=r.qty;});
+  }
+  let p=store.parties.find(x=>x.name===savedInv.party);
+  if(!p){p={id:id(),name:savedInv.party,phone:savedInv.phone,type:'customer',balance:0};store.parties.push(p);}
+  else if(savedInv.phone)p.phone=savedInv.phone;
+  p.balance+=savedInv.total-savedInv.received;
+  store.payments.push({id:id(),saleId:newId,dir:'in',party:savedInv.party,amount:savedInv.received,mode:mode,date:savedInv.date});
+  persist();
+  viewInv.id=savedInv.id;
+  viewInv.no=savedInv.no;
+  toast('Invoice saved! '+invNo);
+  logActivity('invoice','Created invoice: '+invNo+' | '+savedInv.party+' | '+rs(savedInv.total));
+}
+function printAndSaveInvoice(){
+  saveInvoiceFromPreview();
+  printInvoice();
 }
 function downloadInvoice(){
   const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style></head><body>${buildInvoiceHTML(viewInv)}<script>window.onload=()=>window.print()<\/script></body></html>`); w.document.close();
@@ -1388,14 +1707,15 @@ function posSaveBill(){
   }
   const saveDirect=(s.noPreview||s.posPrimary==='new');
   if(saveDirect){
-    store.sales.push({id:id(),no:invNo,party:cust,phone:phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
+    const saleId=id();
+    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
     store.counters.sale++;
     if(s.stockMaintain!==false)rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it&&typeof it.stock==='number')it.stock-=r.qty;});
     let p=store.parties.find(x=>x.name===cust);
     if(!p){p={id:id(),name:cust,phone:phone,type:'customer',balance:0};store.parties.push(p);}
     else if(phone)p.phone=phone;
     p.balance+=total-recv;
-    if(recv>0)store.payments.push({id:id(),dir:'in',party:cust,amount:recv,mode:mode,date:dispDate()});
+    store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:recv,mode:mode,date:dispDate()});
     persist();
     if(s.posPrimary==='new'){
       toast('Invoice saved — new bill');
@@ -1406,7 +1726,7 @@ function posSaveBill(){
     }
     return;
   }
-  const tmpInv={id:'tmp_'+Date.now(),no:invNo,party:cust,phone:phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,status:isPaid?'paid':'unpaid'};
+  const tmpInv={id:'tmp_'+Date.now(),no:invNo,party:cust,phone:phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,status:isPaid?'paid':'unpaid',_posMode:mode};
   showInvoiceView(tmpInv);
   document.getElementById('iv_body').insertAdjacentHTML('beforeend',`<div style="padding:16px 24px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end">
     <button onclick="closeModal('invViewModal');posCloseTab(posActiveTab)" style="padding:10px 20px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:600;cursor:pointer;font-size:13px">Cancel</button>
@@ -1468,14 +1788,15 @@ function confirmSaveAndPrint(){
       return;
     }
   }
-  store.sales.push({id:id(),no:invNo,party:cust,phone:phone,date:saleDate,rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,status:isPaid?'paid':'unpaid'});
+  const saleId=id();
+  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid'});
   store.counters.sale++;
   if(s.stockMaintain!==false)rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it&&typeof it.stock==='number')it.stock-=r.qty;});
   let p=store.parties.find(x=>x.name===cust);
   if(!p){p={id:id(),name:cust,phone:phone,type:'customer',balance:0};store.parties.push(p);}
   else if(phone)p.phone=phone;
   p.balance+=total-recv;
-  if(recv>0)store.payments.push({id:id(),dir:'in',party:cust,amount:recv,mode:mode,date:dispDate()});
+  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:recv,mode:mode,date:dispDate()});
   persist(); refreshView();
   closeModal('invViewModal');
   const printContent=document.getElementById('iv_body').innerHTML;
@@ -2348,19 +2669,33 @@ function vPurchase(){
   const curMonth=now.getMonth(), curYear=now.getFullYear();
   const firstDay='01/'+String(curMonth+1).padStart(2,'0')+'/'+curYear;
   const lastDay=new Date(curYear,curMonth+1,0).getDate()+'/'+String(curMonth+1).padStart(2,'0')+'/'+curYear;
-  const filteredPurchases=purchases.filter(p=>{
-    if(!p.date)return true;
-    const parts=p.date.split(/[\s/-]/);
-    const d=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
-    return d.getMonth()===curMonth&&d.getFullYear()===curYear;
-  });
+  let filterFrom=firstDay, filterTo=lastDay, filterFirm='ALL FIRMS', filterUser='ALL USERS';
+  function applyFilters(){
+    let list=[...(store.purchases||[])].reverse();
+    if(filterFrom&&filterTo){
+      list=list.filter(p=>{
+        if(!p.date)return true;
+        const parts=p.date.split(/[\s/-]/);
+        const d=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+        const f=filterFrom.split(/[\s/-]/); const t=filterTo.split(/[\s/-]/);
+        const from=new Date(f[2]+'-'+f[1]+'-'+f[0]);
+        const to=new Date(t[2]+'-'+t[1]+'-'+t[0]);
+        return d>=from&&d<=to;
+      });
+    }
+    if(filterFirm!=='ALL FIRMS') list=list.filter(p=>(p.firm||s.business?.name||'My Business')===filterFirm);
+    if(filterUser!=='ALL USERS') list=list.filter(p=>(p.user||'Admin')===filterUser);
+    return list;
+  }
+  const filteredPurchases=applyFilters();
   let paidTotal=0, unpaidTotal=0;
   filteredPurchases.forEach(p=>{
     const bal=p.total-p.received;
     if(bal<=0) paidTotal+=p.total; else unpaidTotal+=bal;
   });
   const grandTotal=paidTotal+unpaidTotal;
-  const firms=[(store.business.name||'My Business'),...(store.companies||[]).map(c=>c.name)].filter((v,i,a)=>a.indexOf(v)===i);
+  const firms=[(store.business?.name||'My Business'),...(store.companies||[]).map(c=>c.name)].filter((v,i,a)=>a.indexOf(v)===i);
+  const users=[...new Set((store.purchases||[]).map(p=>p.user||'Admin'))];
   content.innerHTML=`
   <div class="hub-header">
     <h2>Purchase Bills</h2>
@@ -2368,18 +2703,20 @@ function vPurchase(){
   </div>
   <div class="hub-card">
     <div class="hub-filters">
-      <div class="hub-filter-chip">This Month <span>▾</span></div>
+      <select id="pfMonth" onchange="vPurchase()" style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-weight:600">
+        <option value="this">This Month</option><option value="last">Last Month</option><option value="3">Last 3 Months</option><option value="all">All Time</option>
+      </select>
       <div class="hub-filter-chip red">Between</div>
-      <div class="hub-filter-date"><input type="text" value="${firstDay}"></div>
+      <div class="hub-filter-date"><input type="date" id="pfFrom" value="${filterFrom.split('/').reverse().join('-')}" onchange="vPurchase()"></div>
       <span style="font-size:12px;color:var(--muted)">To</span>
-      <div class="hub-filter-date"><input type="text" value="${lastDay}"></div>
-      <div class="hub-select"><select><option>ALL FIRMS</option>${firms.map(f=>`<option>${f}</option>`).join('')}</select></div>
-      <div class="hub-select"><select><option>ALL USERS</option></select></div>
+      <div class="hub-filter-date"><input type="date" id="pfTo" value="${filterTo.split('/').reverse().join('-')}" onchange="vPurchase()"></div>
+      <div class="hub-select"><select id="pfFirm" onchange="vPurchase()"><option>ALL FIRMS</option>${firms.map(f=>`<option>${f}</option>`).join('')}</select></div>
+      <div class="hub-select"><select id="pfUser" onchange="vPurchase()"><option>ALL USERS</option>${users.map(u=>`<option>${u}</option>`).join('')}</select></div>
       <div style="flex:1"></div>
-      <div class="hub-action-icon" onclick="toast('Excel coming soon')" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px">
-        <span style="font-size:20px">📊</span><span style="font-size:10px;color:var(--muted)">Excel</span>
+      <div class="hub-action-icon" onclick="exportPurchaseExcel()" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px;cursor:pointer">
+        <span style="font-size:20px">📊</span><span style="font-size:10px;color:var(--muted)">Excel Report</span>
       </div>
-      <div class="hub-action-icon" onclick="window.print()" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px">
+      <div class="hub-action-icon" onclick="printPurchaseList()" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px;cursor:pointer">
         <span style="font-size:20px">🖨️</span><span style="font-size:10px;color:var(--muted)">Print</span>
       </div>
     </div>
@@ -2401,18 +2738,18 @@ function vPurchase(){
         <thead><tr>
           <th>DATE <span style="font-size:9px">⊞</span></th>
           <th>INVOICE NO. <span style="font-size:9px">⊞</span></th>
-          <th>CUSTOMER NAME <span style="font-size:9px">⊞</span></th>
+          <th>PARTY NAME <span style="font-size:9px">⊞</span></th>
           <th>PAYMENT TYPE <span style="font-size:9px">⊞</span></th>
           <th class="right">AMOUNT <span style="font-size:9px">⊞</span></th>
           <th class="right">BALANCE DUE <span style="font-size:9px">⊞</span></th>
           <th>STATUS <span style="font-size:9px">⊞</span></th>
-          <th style="width:90px"></th>
+          <th style="width:120px"></th>
         </tr></thead>
         <tbody id="purchaseBody">
-          ${filteredPurchases.length?filteredPurchases.map(p=>{
+          ${filteredPurchases.length?filteredPurchases.map((p,idx)=>{
             const bal=p.total-p.received;
             const isPaid=bal<=0;
-            return `<tr class="purchase-row">
+            return `<tr class="purchase-row" data-idx="${idx}">
               <td>${p.date||'-'}</td>
               <td>${p.no||'-'}</td>
               <td style="font-weight:500">${p.party||'-'}</td>
@@ -2421,9 +2758,10 @@ function vPurchase(){
               <td class="right" style="font-weight:600;color:${isPaid?'var(--green)':'var(--red)'}">${rs(bal)}</td>
               <td><span class="hub-pill ${isPaid?'hub-pill-paid':'hub-pill-unpaid'}">${isPaid?'Paid':'Unpaid'}</span></td>
               <td><div class="hub-actions">
-                <span class="hub-action-icon" onclick="toast('Print coming soon')" title="Print">🖨️</span>
-                <span class="hub-action-icon" onclick="toast('Share coming soon')" title="Share">↗️</span>
-                <span class="hub-action-icon" onclick="toast('More')" title="More">⋮</span>
+                <span class="hub-action-icon" onclick="viewPurchase(${purchases.indexOf(p)})" title="View">👁️</span>
+                <span class="hub-action-icon" onclick="printPurchase(${purchases.indexOf(p)})" title="Print">🖨️</span>
+                <span class="hub-action-icon" onclick="sharePurchase(${purchases.indexOf(p)})" title="Share">↗️</span>
+                <span class="hub-action-icon" onclick="deletePurchase(${purchases.indexOf(p)})" title="Delete">🗑️</span>
               </div></td>
             </tr>`;
           }).join(''):`<tr><td colspan="8" class="hub-empty">
@@ -2435,6 +2773,86 @@ function vPurchase(){
       </table>
     </div>
   </div>`;
+  document.getElementById('pfMonth').value='this';
+}
+
+function viewPurchase(idx){
+  const p=(store.purchases||[])[idx];
+  if(!p)return;
+  const bal=p.total-p.received;
+  const rows=(p.rows||[]).map(r=>`<tr><td>${r.item||'-'}</td><td class="right">${r.qty||0}</td><td class="right">${rs(r.price||0)}</td><td class="right">${rs((r.qty||0)*(r.price||0))}</td></tr>`).join('');
+  const html=`<div class="modal-overlay" id="purchViewModal" onclick="closeModal('purchViewModal')">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:600px;width:95%">
+      <div class="modal-head"><span>Purchase ${p.no||''}</span><span class="modal-close" onclick="closeModal('purchViewModal')">✕</span></div>
+      <div style="padding:20px">
+        <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap">
+          <div><div style="font-size:12px;color:#888">Party</div><div style="font-weight:600">${p.party||'-'}</div></div>
+          <div><div style="font-size:12px;color:#888">Date</div><div style="font-weight:600">${p.date||'-'}</div></div>
+          <div><div style="font-size:12px;color:#888">Status</div><div style="font-weight:600;color:${bal<=0?'#27ae60':'#e74c3c'}">${bal<=0?'Paid':'Unpaid'}</div></div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="border-bottom:2px solid #eee"><th style="text-align:left;padding:8px 0">Item</th><th style="text-align:right;padding:8px 0">Qty</th><th style="text-align:right;padding:8px 0">Price</th><th style="text-align:right;padding:8px 0">Total</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr style="border-top:2px solid #eee;font-weight:700"><td style="padding:8px 0">Total</td><td></td><td></td><td style="text-align:right">${rs(p.total)}</td></tr>
+          <tr><td style="padding:4px 0">Received</td><td></td><td></td><td style="text-align:right;color:#27ae60">${rs(p.received||0)}</td></tr>
+          <tr style="font-weight:700"><td style="padding:4px 0">Balance Due</td><td></td><td></td><td style="text-align:right;color:${bal>0?'#e74c3c':'#27ae60'}">${rs(bal)}</td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+function printPurchase(idx){
+  const p=(store.purchases||[])[idx];
+  if(!p)return;
+  const rows=(p.rows||[]).map(r=>`<tr><td>${r.item||''}</td><td style="text-align:right">${r.qty||0}</td><td style="text-align:right">${rs(r.price||0)}</td><td style="text-align:right">${rs((r.qty||0)*(r.price||0))}</td></tr>`).join('');
+  const w=window.open('','','width=800,height=600');
+  w.document.write(`<html><head><title>Purchase ${p.no||''}</title><style>body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}th{background:#f5f5f5}.r{text-align:right}.total{font-weight:700;border-top:2px solid #333}</style></head><body>
+    <h2>Purchase Invoice</h2>
+    <p><b>Party:</b> ${p.party||'-'} | <b>Date:</b> ${p.date||'-'} | <b>Invoice:</b> ${p.no||'-'}</p>
+    <table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr class="total"><td>Total</td><td></td><td></td><td class="r">${rs(p.total)}</td></tr>
+    <tr><td>Received</td><td></td><td></td><td class="r" style="color:green">${rs(p.received||0)}</td></tr>
+    <tr class="total"><td>Balance Due</td><td></td><td></td><td class="r" style="color:red">${rs(p.total-p.received)}</td></tr></tfoot></table>
+    </body></html>`);
+  w.document.close(); w.print();
+}
+
+function sharePurchase(idx){
+  const p=(store.purchases||[])[idx];
+  if(!p)return;
+  const txt=`Purchase Invoice: ${p.no}\nParty: ${p.party}\nDate: ${p.date}\nTotal: ${rs(p.total)}\nReceived: ${rs(p.received||0)}\nBalance: ${rs(p.total-p.received)}`;
+  if(navigator.share){navigator.share({title:'Purchase',text:txt}).catch(()=>{})}
+  else{navigator.clipboard.writeText(txt);toast('Copied to clipboard!')}
+}
+
+function deletePurchase(idx){
+  const p=(store.purchases||[])[idx];
+  if(!p)return;
+  if(!confirm(`Delete purchase ${p.no}? This cannot be undone.`))return;
+  (p.rows||[]).forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it)it.stock+=r.qty});
+  store.purchases.splice(idx,1);
+  persist();toast('Purchase deleted');vPurchase();
+}
+
+function exportPurchaseExcel(){
+  const rows=[['Date','Invoice No','Party','Payment Type','Amount','Balance Due','Status']];
+  (store.purchases||[]).forEach(p=>{
+    const bal=p.total-p.received;
+    rows.push([p.date||'',p.no||'',p.party||'',bal<=0?'Cash':'Credit',p.total,bal,bal<=0?'Paid':'Unpaid']);
+  });
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='purchase_bills.csv';a.click();
+  toast('Excel exported!');
+}
+
+function printPurchaseList(){
+  const rows=(store.purchases||[]).map(p=>`<tr><td>${p.date||''}</td><td>${p.no||''}</td><td>${p.party||''}</td><td style="text-align:right">${rs(p.total)}</td><td style="text-align:right">${rs(p.total-p.received)}</td><td>${p.total-p.received<=0?'Paid':'Unpaid'}</td></tr>`).join('');
+  const w=window.open('','','width=900,height=600');
+  w.document.write(`<html><head><title>Purchase Bills</title><style>body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}th{background:#f5f5f5}.r{text-align:right}</style></head><body><h2>Purchase Bills Report</h2><table><thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th class="r">Amount</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+  w.document.close(); w.print();
 }
 function filterPurchaseRows(q){
   q=(q||'').toLowerCase();
@@ -3540,7 +3958,8 @@ function nciSave(action){
   const invNo=(s.invPrefix||'INV-')+String(store.counters.sale).padStart(2,'0');
   const saleDate=s.addTime?dispDate()+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):dispDate();
   const saleRows=rows.map(r=>({item:r.name||r.item,qty:+r.qty||0,price:+r.price||0,disc:0}));
-  const sale={id:id(),no:invNo,party:cust,phone:phone,date:saleDate,rows:saleRows,total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,status:t.received>=t.total?'paid':'unpaid'};
+  const saleId=id();
+  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:saleRows,total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,status:t.received>=t.total?'paid':'unpaid'};
   store.sales.push(sale);
   store.counters.sale++;
   if(s.stockMaintain!==false)saleRows.forEach(r=>{ const it=store.items.find(x=>x.name===r.item); if(it&&typeof it.stock==='number')it.stock-=r.qty; });
@@ -3548,7 +3967,7 @@ function nciSave(action){
   if(!p){ p={id:id(),name:cust,phone:phone,type:'customer',balance:0}; store.parties.push(p); }
   else if(phone)p.phone=phone;
   p.balance+=t.total-t.received;
-  if(t.received>0)store.payments.push({id:id(),dir:'in',party:cust,amount:t.received,mode:'Cash',date:dispDate()});
+  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:t.received,mode:'Cash',date:dispDate()});
   persist();
   viewInv=sale;
   toast('Invoice saved! '+invNo);
@@ -5206,7 +5625,16 @@ const content=document.getElementById('content');
 function pf(id){ return parseFloat(document.getElementById(id).value)||0 }
 function dispDate(){ const d=new Date(); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear(); }
 function showModal(id){ document.getElementById(id).classList.add('show') }
-function closeModal(id){ document.getElementById(id).classList.remove('show') }
+function closeModal(id){ 
+  const el=document.getElementById(id);
+  if(el){
+    if(el.classList.contains('modal-overlay')&&el.parentElement===document.body){
+      el.remove();
+    } else {
+      el.classList.remove('show');
+    }
+  }
+}
 function formModal(t,html,onSave,label){ document.getElementById('formTitle').textContent=t; document.getElementById('formBody').innerHTML=html; document.getElementById('formSave').onclick=onSave||function(){closeModal('formModal')}; document.getElementById('formSave').textContent=label||'Save'; showModal('formModal'); }
 let tT; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2000); }
 
@@ -5291,4 +5719,140 @@ function logoutUser(){
   if(!confirm('Logout '+store.currentUser?.name+'?'))return;
   logActivity('user',store.currentUser?.name+' logged out');
   store.currentUser=null;persist();showLoginModal();toast('Logged out');
+}
+
+/* ============ PAYMENT MODE BREAKDOWN ============ */
+function showPaymentBreakdown(){
+  const fromEl=document.getElementById('pmFrom');
+  const toEl=document.getElementById('pmTo');
+  if(!fromEl.value){
+    fromEl.value='2020-01-01';
+    toEl.value='2099-12-31';
+  }
+  renderPaymentBreakdown();
+  showModal('paymentModal');
+}
+function renderPaymentBreakdown(){
+  const fromDate=document.getElementById('pmFrom').value;
+  const toDate=document.getElementById('pmTo').value;
+  const fromParts=fromDate.split('-');
+  const toParts=toDate.split('-');
+  const from=new Date(+fromParts[0],+fromParts[1]-1,+fromParts[2]);
+  const to=new Date(+toParts[0],+toParts[1]-1,+toParts[2]);
+  to.setHours(23,59,59,999);
+  const payments=(store.payments||[]).filter(p=>{
+    if(p.dir!=='in')return false;
+    const pd=parsePmDate(p.date);
+    if(!pd)return false;
+    return pd>=from&&pd<=to;
+  });
+  const modes={};
+  payments.forEach(p=>{
+    const m=p.mode||'Cash';
+    if(!modes[m])modes[m]={total:0,count:0};
+    modes[m].total+=p.amount||0;
+    modes[m].count++;
+  });
+  const cards=[
+    {key:'Cash',label:'Cash',icon:'\uD83D\uDCB5',cls:'paym-card-cash'},
+    {key:'Bank Transfer',label:'Bank Transfer',icon:'\uD83C\uDFE6',cls:'paym-card-bank'},
+    {key:'QR Code',label:'QR Code',icon:'\uD83D\uDCF1',cls:'paym-card-qr'},
+    {key:'Cheque',label:'Cheque',icon:'\uD83D\uDCC4',cls:'paym-card-cheque'}
+  ];
+  const container=document.getElementById('pmCards');
+  container.innerHTML=cards.map(c=>{
+    const d=modes[c.key]||{total:0,count:0};
+    return '<div class="paym-card '+c.cls+'">'+
+      '<div class="paym-card-icon">'+c.icon+'</div>'+
+      '<div class="paym-card-label">'+c.label+'</div>'+
+      '<div class="paym-card-value">'+rs(d.total)+'</div>'+
+      '<div class="paym-card-count">'+d.count+' payment'+(d.count!==1?'s':'')+'</div>'+
+    '</div>';
+  }).join('');
+  const grandTotal=Object.values(modes).reduce((a,m)=>a+m.total,0);
+  const totalPayments=Object.values(modes).reduce((a,m)=>a+m.count,0);
+  document.getElementById('pmTotalRow').innerHTML=
+    '<span class="paym-total-label">Total Collection ('+totalPayments+' payments)</span>'+
+    '<span class="paym-total-val">'+rs(grandTotal)+'</span>';
+}
+function parsePmDate(dateStr){
+  if(!dateStr)return null;
+  const parts=dateStr.split(/[\s/-]/);
+  if(parts.length<3)return null;
+  const day=parseInt(parts[0]),month=parseInt(parts[1])-1,year=parseInt(parts[2]);
+  if(isNaN(day)||isNaN(month)||isNaN(year))return null;
+  return new Date(year,month,day);
+}
+function showProfitView(){
+  const profitDiv=document.getElementById('pmProfitView');
+  const cardsDiv=document.getElementById('pmCards');
+  const totalRow=document.getElementById('pmTotalRow');
+  const btn=document.querySelector('.paym-profit-btn');
+  const isProfitView=profitDiv.style.display!=='none';
+  if(isProfitView){
+    profitDiv.style.display='none';
+    cardsDiv.style.display='';
+    totalRow.style.display='';
+    btn.textContent='💰 See Profits';
+    btn.classList.remove('active');
+    return;
+  }
+  const fromDate=document.getElementById('pmFrom').value;
+  const toDate=document.getElementById('pmTo').value;
+  const fromParts=fromDate.split('-');
+  const toParts=toDate.split('-');
+  const from=new Date(+fromParts[0],+fromParts[1]-1,+fromParts[2]);
+  const to=new Date(+toParts[0],+toParts[1]-1,+toParts[2]);
+  to.setHours(23,59,59,999);
+  const sales=(store.sales||[]).filter(s=>{
+    if(s.refunded)return false;
+    const pd=parsePmDate(s.date);
+    if(!pd)return false;
+    return pd>=from&&pd<=to;
+  });
+  let totalRevenue=0;
+  let totalCost=0;
+  sales.forEach(s=>{
+    totalRevenue+=s.total||0;
+    (s.rows||[]).forEach(r=>{
+      const item=store.items.find(x=>x.name===r.item);
+      const purchasePrice=item?(item.pprice||0):0;
+      totalCost+=purchasePrice*(r.qty||0);
+    });
+  });
+  const profit=totalRevenue-totalCost;
+  const margin=totalRevenue>0?((profit/totalRevenue)*100).toFixed(1):0;
+  document.getElementById('pmProfitCards').innerHTML=
+    '<div class="paym-pcard paym-pcard-revenue">'+
+      '<div class="paym-pcard-icon">\uD83D\uDCB0</div>'+
+      '<div class="paym-pcard-label">Total Revenue</div>'+
+      '<div class="paym-pcard-val">'+rs(totalRevenue)+'</div>'+
+    '</div>'+
+    '<div class="paym-pcard paym-pcard-cost">'+
+      '<div class="paym-pcard-icon">\uD83D\uDED2</div>'+
+      '<div class="paym-pcard-label">Total Cost</div>'+
+      '<div class="paym-pcard-val">'+rs(totalCost)+'</div>'+
+    '</div>'+
+    '<div class="paym-pcard paym-pcard-profit">'+
+      '<div class="paym-pcard-icon">\uD83D\uDCB5</div>'+
+      '<div class="paym-pcard-label">Net Profit</div>'+
+      '<div class="paym-pcard-val">'+rs(profit)+'</div>'+
+    '</div>';
+  const barColor=profit>=0?'#27ae60':'#e74c3c';
+  const barWidth=Math.min(Math.abs(margin),100);
+  document.getElementById('pmProfitSummary').innerHTML=
+    '<div class="paym-profit-row"><span>Total Sales</span><span>'+sales.length+' invoices</span></div>'+
+    '<div class="paym-profit-row"><span>Revenue</span><span>'+rs(totalRevenue)+'</span></div>'+
+    '<div class="paym-profit-row"><span>Cost of Goods</span><span>'+rs(totalCost)+'</span></div>'+
+    '<div class="paym-profit-row total"><span>Net Profit</span><span style="color:'+barColor+'">'+rs(profit)+'</span></div>'+
+    '<div class="paym-profit-margin">'+
+      '<span style="font-size:12px;color:#888">Profit Margin</span>'+
+      '<div class="paym-profit-bar"><div class="paym-profit-bar-fill" style="width:'+barWidth+'%;background:'+barColor+'"></div></div>'+
+      '<span class="paym-profit-pct" style="color:'+barColor+'">'+margin+'%</span>'+
+    '</div>';
+  profitDiv.style.display='';
+  cardsDiv.style.display='none';
+  totalRow.style.display='none';
+  btn.textContent='📊 See Payments';
+  btn.classList.add('active');
 }

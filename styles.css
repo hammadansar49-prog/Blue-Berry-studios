@@ -18,6 +18,10 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .tb-profit-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;background:var(--blue);color:#fff;border-radius:14px;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;transition:opacity .2s;flex-shrink:0}
 .tb-profit-btn:hover{opacity:.85}
 .tb-spacer{flex:1}
+.tb-center{position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap}
+.tb-designer{font-size:12px;font-weight:500;color:#222;letter-spacing:.3px}
+.tb-designer-name{color:var(--red);font-weight:700}
+.tb-designer-phone{color:#555;font-weight:500}
 .tb-right{display:flex;gap:10px;align-items:center;flex-shrink:0}
 .tb-win{cursor:pointer;color:#555;font-size:12px}
 .tb-win.close:hover{color:var(--red)}
@@ -283,7 +287,14 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .dash-sale-amount{font-size:24px;font-weight:800;color:#222}
 .dash-sale-filter select{border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;color:#333;background:#fff;cursor:pointer;outline:none}
 .dash-sale-filter select:focus{border-color:var(--blue)}
-.dash-chart{min-height:200px}
+.dash-chart{min-height:200px;position:relative}
+.chart-tooltip{position:absolute;pointer-events:none;background:#1a1a2e;color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:100;opacity:0;transition:opacity .15s,transform .15s;transform:translateY(4px);white-space:nowrap}
+.chart-tooltip.show{opacity:1;transform:translateY(0)}
+.chart-tooltip::after{content:'';position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:12px;height:12px;background:#1a1a2e;border-radius:2px;transform:translateX(-50%) rotate(45deg)}
+.chart-tooltip .tt-date{font-size:11px;color:#a0aec0;font-weight:500;margin-bottom:2px}
+.chart-tooltip .tt-val{font-size:15px;font-weight:700;color:#48bb78}
+.dash-chart svg circle{cursor:pointer;transition:r .15s}
+.dash-chart svg circle:hover{r:6}
 .dash-reports-section{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 20px}
 .dash-reports-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .dash-reports-title{font-size:14px;color:var(--blue);font-weight:600}
@@ -1471,6 +1482,7 @@ textarea.pm-in{min-height:110px;resize:vertical}
 @media(max-width:680px){
   .titlebar{padding:0 6px}
   .tb-left{gap:10px}.tb-menu{display:none}.tb-profit-btn{font-size:10px;padding:3px 8px}.tb-logo{display:flex}
+  .tb-center{display:none}
   .sidebar{width:62px}
   .side-search{justify-content:center;font-size:0;padding:11px 0}
   .side-search .collapse{display:none}
@@ -1820,4 +1832,56 @@ input[data-1p-ignore]:autofill{animation:onAutoFillStart 0s forwards}
 .dbar-page .dbar-track{flex:1;height:30px;background:#f0f2f5;border-radius:15px;overflow:hidden}
 .dbar-page .dbar-fill{height:100%;border-radius:15px;transition:width .6s ease;min-width:4px}
 .dbar-page .dbar-val{width:120px;text-align:right;font-size:16px;font-weight:700;flex-shrink:0}
+
+/* ===== PAYMENT MODE BREAKDOWN MODAL ===== */
+#paymentModal .paym-modal{background:#fff;border-radius:16px;width:680px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+.paym-head{display:flex;align-items:center;justify-content:space-between;padding:22px 28px 14px}
+.paym-head h2{margin:0;font-size:20px;font-weight:800;color:#222}
+.paym-head-btns{display:flex;align-items:center;gap:10px}
+.paym-profit-btn{background:linear-gradient(135deg,#27ae60,#2ecc71);color:#fff;border:0;border-radius:10px;padding:10px 20px;font-weight:700;font-size:13px;cursor:pointer;transition:.15s;white-space:nowrap}
+.paym-profit-btn:hover{opacity:.9;transform:translateY(-1px)}
+.paym-profit-btn.active{background:linear-gradient(135deg,#e74c3c,#e0413e)}
+.paym-close{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;display:grid;place-items:center;cursor:pointer;font-size:16px;color:#888;transition:.15s}
+.paym-close:hover{background:#f5f5f5;color:#333}
+.paym-filters{display:flex;align-items:center;gap:10px;padding:0 28px 18px;font-size:13px;color:#666}
+.paym-filters label{font-weight:600}
+.paym-filters input{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;outline:none}
+.paym-filters input:focus{border-color:var(--blue)}
+.paym-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:0 28px 20px}
+.paym-card{border-radius:14px;padding:22px 24px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden}
+.paym-card-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:8px}
+.paym-card-label{font-size:13px;font-weight:600;opacity:.85}
+.paym-card-value{font-size:26px;font-weight:800}
+.paym-card-count{font-size:12px;opacity:.7;margin-top:2px}
+.paym-card-cash{background:linear-gradient(135deg,#e8f5e9,#c8e6c9);color:#1b5e20}
+.paym-card-cash .paym-card-icon{background:#a5d6a7;color:#1b5e20}
+.paym-card-bank{background:linear-gradient(135deg,#e3f2fd,#bbdefb);color:#0d47a1}
+.paym-card-bank .paym-card-icon{background:#90caf9;color:#0d47a1}
+.paym-card-qr{background:linear-gradient(135deg,#f3e5f5,#e1bee7);color:#4a148c}
+.paym-card-qr .paym-card-icon{background:#ce93d8;color:#4a148c}
+.paym-card-cheque{background:linear-gradient(135deg,#fff3e0,#ffe0b2);color:#e65100}
+.paym-card-cheque .paym-card-icon{background:#ffcc80;color:#e65100}
+.paym-total-row{display:flex;justify-content:space-between;align-items:center;padding:16px 28px;border-top:1px solid var(--line);background:#fafbfc;font-size:15px}
+.paym-total-label{font-weight:700;color:#333}
+.paym-total-val{font-weight:800;font-size:20px;color:var(--blue)}
+@media(max-width:600px){.paym-cards{grid-template-columns:1fr}}
+
+/* Profit View */
+.paym-profit-view{padding:0 28px 20px}
+.paym-profit-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px}
+.paym-pcard{border-radius:12px;padding:18px 20px;text-align:center}
+.paym-pcard-icon{font-size:28px;margin-bottom:8px}
+.paym-pcard-label{font-size:12px;font-weight:600;opacity:.8;margin-bottom:4px}
+.paym-pcard-val{font-size:22px;font-weight:800}
+.paym-pcard-revenue{background:linear-gradient(135deg,#e3f2fd,#bbdefb);color:#0d47a1}
+.paym-pcard-cost{background:linear-gradient(135deg,#fce4ec,#f8bbd0);color:#880e4f}
+.paym-pcard-profit{background:linear-gradient(135deg,#e8f5e9,#c8e6c9);color:#1b5e20}
+.paym-profit-summary{background:#f8f9fa;border-radius:10px;padding:16px 20px}
+.paym-profit-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555}
+.paym-profit-row.total{border-top:1px solid var(--line);padding-top:10px;margin-top:6px;font-weight:800;font-size:16px;color:#222}
+.paym-profit-margin{display:flex;align-items:center;gap:8px;margin-top:10px}
+.paym-profit-bar{flex:1;height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden}
+.paym-profit-bar-fill{height:100%;border-radius:4px;transition:width .5s}
+.paym-profit-pct{font-weight:700;font-size:14px}
+@media(max-width:600px){.paym-profit-cards{grid-template-columns:1fr}}
 
