@@ -1721,8 +1721,9 @@ function posSaveBill(){
   total+=posAdditional-posBillDisc-posLoyalty-(+document.getElementById('pos_disc')?.value||0);
   if(total<0)total=0;
   if(s.posRoundOff)total=Math.round(total);
-  const recv=+document.getElementById('pos_recv').value||0;
+  let recv=+document.getElementById('pos_recv').value||0;
   const mode=document.getElementById('pos_paymode').value;
+  if(mode!=='Credit'&&recv===0)recv=total;   // paid mode with no amount entered = full bill paid via that mode
   const isPaid=(mode==='Cash'&&recv>=total)||(recv>=total);
   const invNo=(s.invPrefix||'INV-')+String(store.counters.sale).padStart(2,'0');
   if(posEditingId){
@@ -1738,7 +1739,7 @@ function posSaveBill(){
       if(!p){p={id:id(),name:cust,phone:phone,type:'customer',balance:0};store.parties.push(p);}
       else if(phone)p.phone=phone;
       p.balance+=total-recv;
-      Object.assign(old,{party:cust,phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
+      Object.assign(old,{party:cust,phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
       persist();refreshView();posCloseTab(posActiveTab);posEditingId=null;toast('Invoice updated');return;
     }
   }
@@ -1791,8 +1792,9 @@ function confirmSaveAndPrint(){
     const negItem=rows.find(r=>{const it=store.items.find(x=>x.name===r.item);return it&&typeof it.stock==='number'&&(it.stock<=0||it.stock<r.qty);});
     if(negItem)return toast('"'+negItem.item+'" - Out of stock or insufficient quantity');
   }
-  const recv=+document.getElementById('pos_recv').value||0;
+  let recv=+document.getElementById('pos_recv').value||0;
   const mode=document.getElementById('pos_paymode').value;
+  if(mode!=='Credit'&&recv===0)recv=total;   // paid mode with no amount entered = full bill paid via that mode
   const isPaid=(mode==='Cash'&&recv>=total)||(recv>=total);
   const invNo=(s.invPrefix||'INV-')+String(store.counters.sale).padStart(2,'0');
   const saleDate=s.addTime?dispDate()+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):dispDate();
@@ -5108,15 +5110,17 @@ function nciSave(action){
   const saleDate=s.addTime?dispDate()+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):dispDate();
   const saleRows=rows.map(r=>({item:r.name||r.item,qty:+r.qty||0,price:+r.price||0,disc:0}));
   const saleId=id();
-  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:saleRows,total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:t.received>=t.total?'paid':'unpaid'};
+  // A paid mode (Cash/Bank/QR/Cheque) with no "Received" entered = bill fully paid via that mode.
+  const effRecv=(nciPayMode!=='Credit' && (+t.received||0)===0) ? t.total : t.received;
+  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid'};
   store.sales.push(sale);
   store.counters.sale++;
   if(s.stockMaintain!==false)saleRows.forEach(r=>{ const it=store.items.find(x=>x.name===r.item); if(it&&typeof it.stock==='number')it.stock-=r.qty; });
   let p=store.parties.find(x=>x.name===cust);
   if(!p){ p={id:id(),name:cust,phone:phone,type:'customer',balance:0}; store.parties.push(p); }
   else if(phone)p.phone=phone;
-  p.balance+=t.total-t.received;
-  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:t.received,mode:nciPayMode,date:dispDate()});
+  p.balance+=t.total-effRecv;
+  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:effRecv,mode:nciPayMode,date:dispDate()});
   persist();
   viewInv=sale;
   toast('Invoice saved! '+invNo);
@@ -6943,7 +6947,7 @@ document.querySelectorAll('#partyModal .pm-tab').forEach(t=>t.onclick=()=>partyT
 if(store.business.name) document.getElementById('bizName').textContent=store.business.name;
 document.querySelector('.side-search').onclick=openAnything;
 if(!store.currentUser){
-  showLoginModal();
+  // Local "select your account" screen removed — the cloud login gate handles identity.
 }else{
   const cu=store.currentUser;
   document.getElementById('currentUserBadge').textContent=cu.name+' ('+cu.role.charAt(0).toUpperCase()+cu.role.slice(1)+')';
@@ -6963,6 +6967,9 @@ function verifyPasscode(){
   }
 }
 function showLoginModal(){
+  // Disabled: cloud login gate handles identity now. Never show the local account picker.
+  try{ closeModal('loginModal'); }catch(e){}
+  return;
   const users=store.users||[];
   const allOpts=[{name:'Owner (Admin)',role:'owner',pass:window._adminPass||'hmdx'}].concat(users.map(u=>({name:u.name,role:u.role,pass:u.pass,id:u.id})));
   showModal('loginModal');
@@ -6998,9 +7005,10 @@ function doLogin(){
   nav('home');
 }
 function logoutUser(){
-  if(!confirm('Logout '+store.currentUser?.name+'?'))return;
-  logActivity('user',store.currentUser?.name+' logged out');
-  store.currentUser=null;persist();showLoginModal();toast('Logged out');
+  if(!confirm('Logout '+(store.currentUser?store.currentUser.name:'')+'?'))return;
+  // Full cloud logout -> wipes local data and returns to the empty cloud login gate.
+  if(window.fbLogout){ window.fbLogout(); }
+  else { store.currentUser=null; persist(); }
 }
 
 /* ============ PAYMENT MODE BREAKDOWN ============ */
