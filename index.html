@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="autocomplete" content="off">
 <title>My Business - Billing</title>
-<link rel="stylesheet" href="styles.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Pirata+One&family=MedievalSharp&family=Grenze+Gotisch:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=12">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Pirata+One&family=MedievalSharp&family=Grenze+Gotisch:wght@500;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -13,19 +14,16 @@
 <div class="titlebar">
   <div class="tb-left">
     <div class="tb-logo">V</div>
-    <span class="tb-menu">Company</span>
+    <span class="tb-menu" id="tbCompany" onclick="toggleCompanyMenu(event)">Company
+      <div class="tb-dropdown" id="tbCompanyMenu">
+        <div onclick="event.stopPropagation();openCompanyList()">Change Company</div>
+      </div>
+    </span>
     <span class="tb-menu">Help</span>
     <span class="tb-menu">Versions</span>
     <span class="tb-menu">Shortcuts</span>
+    <span class="tb-menu tb-profit-btn" onclick="toast('Coming soon')">💰 How Customers Paying / See Profits</span>
     <span class="tb-refresh">⟳</span>
-  </div>
-  <div class="tb-center">
-    <span class="tb-sup">Call / Chat Support</span>
-    <span class="tb-phone">📞</span>
-    <span class="tb-wa">🟢</span>
-    <a class="tb-num">(+971) 4 549 0404</a>
-    <span class="tb-divider">|</span>
-    <a class="tb-online">(((•))) Get Instant Online Support</a>
   </div>
   <div class="tb-right">
     <span class="tb-win">—</span><span class="tb-win">▢</span><span class="tb-win close">✕</span>
@@ -36,6 +34,11 @@
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
     <div class="side-search">🔍 Open Anything (Ctrl+F) <span class="collapse">‹</span></div>
+    <div id="userBadge" style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);font-size:12px;cursor:pointer" onclick="logoutUser()">
+      <span style="font-size:18px">👤</span>
+      <span id="currentUserBadge" style="flex:1;font-weight:600">Owner</span>
+      <span style="color:#aaa;font-size:10px">Logout ›</span>
+    </div>
     <nav class="menu" id="menu"></nav>
     <div class="side-bottom">
       <div class="mycompany"><span class="mc-ic">⊕</span> My Company <span class="mc-arr">›</span></div>
@@ -46,78 +49,153 @@
   <main class="main">
     <div class="biz-header"><span class="dot">●</span> <span id="bizName">Enter Business Name</span></div>
     <section class="content" id="content"></section>
-    <div class="brand-footer"><span class="by">Design by</span> <span class="nm">Hammad Ansar</span></div>
+    <div class="brand-footer"><span class="by">Design by</span> <span class="nm">Hammad Ansar</span> <span style="color:var(--muted);font-size:12px">03341100761</span></div>
   </main>
 </div>
 <div class="credit-corner">Web designer <b>Hammad Ansar</b> 03341100761</div>
 
-<!-- ============ CREATE INVOICE MODAL ============ -->
+<!-- ============ POS INVOICE MODAL ============ -->
 <div class="modal-overlay" id="saleModal">
-  <div class="sale-modal">
-    <div class="sm-head"><h3 id="smTitle">Create Your First Invoice</h3><button class="x" onclick="closeModal('saleModal')">✕</button></div>
-    <div class="sm-body">
-      <!-- LEFT FORM -->
-      <div class="sm-left">
-        <div class="sm-cust">
-          <div class="sm-fld"><label>Customer Name<b>*</b></label><input id="s_cust" placeholder="Enter Name" oninput="drawInv()"></div>
-          <div class="sm-fld"><label>Customer Phone Number</label>
-            <div class="phone-in"><span class="cc">+92</span><input id="s_phone" placeholder="Enter Number" oninput="drawInv()"></div>
-            <div class="wa-note"><span>🟢</span> Enter your number for getting the invoice on your phone</div>
-          </div>
+  <div class="pos-invoice-modal">
+    <div class="pos-inv-top">
+      <div class="pos-inv-tabs" id="posInvTabs">
+        <!-- rendered dynamically by posRenderTabs() -->
+      </div>
+      <button class="pos-exchange-btn" onclick="closeModal('saleModal');nav('sale')">Exchange / Refund</button>
+      <div class="pos-settings-gear" onclick="togglePosSettings()">⚙</div>
+    </div>
+    <div class="pos-settings-panel" id="posSettingsPanel" style="display:none">
+      <div class="pos-set-head"><h3>Settings</h3><div><span class="pos-set-close" onclick="togglePosSettings()">✕</span> <span class="pos-set-esc">[Esc]</span></div></div>
+      <div class="pos-set-body">
+        <div class="pos-set-section">
+          <div class="pos-set-title">General</div>
+          <label class="pos-set-check"><input type="checkbox" id="posSetBillDisc" checked onchange="posSaveSettings()"> Bill Discount <span class="info-icon">ⓘ</span></label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetBillTax" onchange="posSaveSettings()"> Bill Tax <span class="info-icon">ⓘ</span></label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetFreeQty" onchange="posSaveSettings()"> Free Item Quantity <span class="info-icon">ⓘ</span></label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetLoyalty" onchange="posSaveSettings()"> Enable Loyalty Points <span class="info-icon">ⓘ</span></label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetRoundOff" onchange="posSaveSettings()"> Round of Total <span class="info-icon">ⓘ</span></label>
         </div>
-        <div class="sm-divider"></div>
-        <table class="sm-items">
-          <thead><tr><th>#</th><th>ITEM</th><th>QTY</th><th>PRICE</th><th class="right">TOTAL <span class="addc" onclick="addSaleRow()">⊕</span></th></tr></thead>
-          <tbody id="s_rows"></tbody>
+        <div class="pos-set-section">
+          <div class="pos-set-title">PoS Settings</div>
+          <div class="pos-set-subtitle">Primary Action For Bill <span class="info-icon">ⓘ</span></div>
+          <label class="pos-set-radio"><input type="radio" name="posPrimary" value="print" checked onchange="posSaveSettings()"> Save & Print Bill</label>
+          <label class="pos-set-radio"><input type="radio" name="posPrimary" value="new" onchange="posSaveSettings()"> Save & New Bill</label>
+          <div class="pos-set-subtitle">Pricing <span class="info-icon">ⓘ</span></div>
+          <label class="pos-set-radio"><input type="radio" name="posPricing" value="without" checked onchange="posSaveSettings()"> Price Is Without Tax</label>
+          <label class="pos-set-radio"><input type="radio" name="posPricing" value="with" onchange="posSaveSettings()"> Price Is With Tax</label>
+        </div>
+        <div class="pos-set-section">
+          <div class="pos-set-title">Payment Modes</div>
+          <div class="pos-set-subtitle">1/3 selected</div>
+          <label class="pos-set-check"><input type="checkbox" checked disabled> Cash</label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetBank" onchange="posSaveSettings()"> Bank Transfer</label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetQr" onchange="posSaveSettings()"> QR Code</label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetCheque" onchange="posSaveSettings()"> Cheque</label>
+        </div>
+      </div>
+      <div class="pos-set-foot"><a class="pos-set-more" href="#" onclick="nav('settings');closeModal('saleModal');return false">⚙ More Settings</a></div>
+    </div>
+    <div class="pos-inv-search">
+      <input id="posSearchItem" name="pos_search_x9k2m" placeholder="Search by item name, item code, hsn code, mrp, sale price, purchase price... [F1]" oninput="posSearchItems()" autocomplete="one-time-code" data-1p-ignore="true">
+      <span class="pos-search-icon">🔍</span>
+      <div class="pos-search-dropdown" id="posSearchDrop"></div>
+    </div>
+    <div class="pos-inv-body">
+      <div class="pos-inv-left">
+        <table class="pos-inv-table">
+          <thead><tr>
+            <th>#</th><th>ITEM CODE</th><th>ITEM NAME</th><th>QTY</th><th>UNIT</th><th>PRICE/UNIT(Rs)</th><th>DISCOUNT (%)</th><th>SIZE</th><th></th></tr></thead>
+          <tbody id="pos_rows"></tbody>
         </table>
-        <div class="sm-addrow"><span class="link" onclick="addSaleRow()">＋ Add Row</span>
-          <span class="subt">Sub Total <b id="s_sub">0</b></span></div>
-        <div class="sm-divider"></div>
-        <div class="sm-calc">
-          <div class="cl-row"><span>Discount</span>
-            <span class="cl-inp"><span class="pct"><input id="s_discp" value="" placeholder="" oninput="recalcSale()"><i>%</i></span>
-            <input id="s_disc" value="0" oninput="recalcSale()"></span></div>
-          <div class="cl-row"><span>Tax</span>
-            <span class="cl-inp"><select id="s_taxsel" onchange="recalcSale()"><option value="0">NONE</option><option value="5">GST @5%</option><option value="12">GST @12%</option><option value="18">GST @18%</option></select>
-            <input id="s_tax" value="0" readonly></span></div>
-          <div class="cl-row"><span>Received</span>
-            <span class="cl-inp"><label class="fr"><input type="checkbox" id="s_full" onchange="fullRecv()"> Fully Received</label>
-            <input id="s_recv" value="0" oninput="recalcSale()"></span></div>
-          <div class="cl-bal">Balance: <b id="s_bal">0</b></div>
-        </div>
-        <div class="sm-total"><span>Total Amount (Rs)</span><b id="s_total">0</b></div>
+        <div class="pos-inv-addrow" onclick="posAddRow()">+ Add Item Row</div>
       </div>
-      <!-- RIGHT PREVIEW -->
-      <div class="sm-right">
-        <div class="inv-card">
-          <div class="inv-title">Invoice</div>
-          <div class="inv-co"><div class="logo-box" id="p_logo">LOGO</div>
-            <div class="co-info"><div class="co-name" id="p_co">My Company</div><div class="co-phone">Phone: <b id="p_cophone">3341100761</b></div></div></div>
-          <div class="inv-band">Invoice Details:</div>
-          <div class="inv-det"><div>Invoice No.: <b>1</b></div><div>Date: <b id="p_date"></b></div></div>
-          <table class="inv-tbl"><thead><tr><th>#</th><th>Item name</th><th class="right">Quantity</th><th class="right">Price/ Unit(Rs)</th><th class="right">Amount(Rs)</th></tr></thead>
-            <tbody id="p_rows"></tbody>
-            <tfoot><tr class="ttl"><td></td><td><b>Total</b></td><td></td><td></td><td class="right"><b id="p_ttl">Rs 0.00</b></td></tr></tfoot></table>
-          <div class="inv-sum">
-            <div class="sr"><span>Sub Total</span><span>:</span><span id="p_sub">Rs 0.00</span></div>
-            <div class="sr bold band2"><span>Total</span><span>:</span><span id="p_total">Rs 0.00</span></div>
+      <div class="pos-inv-right">
+        <div class="pos-inv-date">Invoice Date: <b id="pos_inv_date"></b></div>
+        <div class="pos-inv-cust-row">
+          <div class="pos-inv-cust">
+            <label>Customer Name *</label>
+            <input id="pos_cust" name="pos_cust_x9k2m" placeholder="Enter customer name" autocomplete="one-time-code" data-1p-ignore="true" type="text">
           </div>
-          <div class="inv-band">Invoice Amount in Words:</div>
-          <div class="inv-words" id="p_words">Zero Rupees only</div>
-          <div class="inv-sum">
-            <div class="sr"><span>Received</span><span>:</span><span id="p_recv">Rs 0.00</span></div>
-            <div class="sr"><span>Balance</span><span>:</span><span id="p_balance">Rs 0.00</span></div>
-          </div>
-          <div class="inv-band">Terms &amp; Conditions:</div>
-          <div class="inv-terms">Thanks for doing business with us!</div>
-          <div class="inv-qr"><img id="p_qr" alt="QR"><span>Scan for invoice &amp; store contact</span></div>
-          <div class="inv-sign">For <span id="p_co2">My Company</span>:</div>
-          <div class="inv-actions">
-            <button class="save-red" onclick="saveSale()">Save</button>
-            <span class="act-ic">🟢</span><span class="act-ic">🖨️</span><span class="act-ic">⬇️</span>
+          <div class="pos-inv-cust">
+            <label>Phone Number</label>
+            <input id="pos_phone" name="pos_phone_x9k2m" placeholder="Phone number" autocomplete="one-time-code" data-1p-ignore="true" type="tel">
           </div>
         </div>
+        <div class="pos-inv-summary">
+          <div class="pos-inv-total-row">
+            <span class="pos-inv-total-icon">📄</span>
+            <div class="pos-inv-total-info">
+              <div>Total <b id="pos_total">Rs 0</b></div>
+              <div class="pos-inv-total-sub">Items: <span id="pos itemCount">0</span> , Quantity: <span id="pos_qty">0</span></div>
+            </div>
+            <div class="pos-inv-breakup">Full Breakup<br><span>[Ctrl+F]</span></div>
+          </div>
+        </div>
+        <div class="pos-inv-payment">
+          <div class="pos-pay-row">
+            <span class="pos-pay-label">Payment Mode</span>
+            <span class="pos-pay-label">Discount (Rs)</span>
+            <span class="pos-pay-label">Amount Received</span>
+          </div>
+          <div class="pos-pay-row">
+            <select id="pos_paymode"><option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option></select>
+            <div class="pos-pay-amt pos-pay-disc"><span>Rs</span><input id="pos_disc" type="text" inputmode="decimal" value="0" onfocus="clearZero(this)" oninput="posCalcTotal()"></div>
+            <div class="pos-pay-amt"><span>Rs</span><input id="pos_recv" type="text" inputmode="decimal" value="0" onfocus="clearZero(this)" oninput="posCalcTotal()"></div>
+          </div>
+        </div>
+        <div class="pos-inv-return">Change to Return: <b id="pos_return">Rs 0</b></div>
       </div>
+    </div>
+    <div class="pos-inv-bottom">
+      <div class="pos-inv-actions">
+        <button class="pos-inv-btn" onclick="posChangeQty()">Change Quantity [F2]</button>
+        <button class="pos-inv-btn" onclick="posItemDiscount()">Item Discount [F3]</button>
+        <button class="pos-inv-btn" onclick="posRemoveItem()">Remove Item [F4]</button>
+        <button class="pos-inv-btn" onclick="posChangeUnit()">Change Unit [F6]</button>
+        <button class="pos-inv-btn save-btn" onclick="posSaveBill()">Save & Print Bill [Ctrl+P]</button>
+      </div>
+      <div class="pos-inv-actions2">
+        <button class="pos-inv-btn" onclick="posAdditionalCharges()">Additional Charges [F8]</button>
+        <button class="pos-inv-btn" id="posBtnBillDisc" onclick="posBillDiscount()">Bill Discount [F9]</button>
+        <button class="pos-inv-btn" id="posBtnLoyalty" onclick="posLoyaltyPoints()">Loyalty Points [F10]</button>
+        <button class="pos-inv-btn" onclick="posRemarks()">Remarks [F12]</button>
+        <button class="pos-inv-btn" onclick="posCreditPay()">Other/Credit Payments [Ctrl+M]</button>
+        <button class="pos-inv-btn return-btn" onclick="posReturnExchange()">Return/Exchange</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODIFY ITEM MODAL ============ -->
+<div class="modal-overlay" id="modifyItemModal">
+  <div class="modify-modal">
+    <div class="mm-head">
+      <h3>Modify Item</h3>
+      <div class="mm-head-right">
+        <span class="mm-weigh">Connect Weighing Scale ›</span>
+        <button class="x" onclick="closeModal('modifyItemModal')">✕ [Esc]</button>
+      </div>
+    </div>
+    <div class="mm-body">
+      <div class="mm-info">
+        <div class="mm-row"><span class="mm-label">Item Name:</span> <b id="mm_name">-</b></div>
+        <div class="mm-row"><span class="mm-label">Price/Unit:</span> <b id="mm_price">Rs 0</b></div>
+      </div>
+      <div class="mm-fields">
+        <div class="mm-field"><label>Quantity</label><input id="mm_qty" type="number" value="1" oninput="posCalcModify()"></div>
+        <div class="mm-field"><label>Unit</label><select id="mm_unit"><option>PIECES (Pcs)</option><option>KILOGRAMS (Kg)</option><option>METERS (Mtr)</option><option>LITRE (Ltr)</option><option>BOX (Box)</option></select></div>
+        <div class="mm-field"><label>Discount in %</label><div class="mm-disc-input"><span>%</span><input id="mm_discp" type="number" value="0" oninput="posCalcModify()"></div></div>
+        <div class="mm-field"><label>OR</label></div>
+        <div class="mm-field"><label>Discount in Rs</label><div class="mm-disc-input"><span>Rs</span><input id="mm_discr" type="number" value="0" oninput="posCalcModify()"></div></div>
+      </div>
+      <div class="mm-fields2">
+        <div class="mm-field"><label>Price/Unit</label><input id="mm_finalprice" type="number" readonly></div>
+        <div class="mm-field"><label>Free Quantity</label><input id="mm_freeqty" type="number" value="0"></div>
+      </div>
+    </div>
+    <div class="mm-foot">
+      <button class="mm-save" onclick="posSaveModify()">Save</button>
+      <button class="mm-cancel" onclick="closeModal('modifyItemModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -139,27 +217,67 @@
           <div class="cat-dd-field" id="i_catfield" onclick="toggleCatDD()"><span id="i_catlabel">Category</span><span class="caret">▾</span></div>
           <input type="hidden" id="i_cat">
           <div class="cat-dd-panel" id="i_catpanel">
-            <div class="cat-search">🔍<input id="i_catsearch" placeholder="Search Category" oninput="renderCatDD()"><span onclick="document.getElementById('i_catsearch').value='';renderCatDD()">✕</span></div>
+            <div class="cat-search">🔍<input id="i_catsearch" placeholder="Search Category" oninput="renderCatDD()"></div>
             <div class="cat-add" onclick="addNewCatInline()">＋ Add New Category</div>
             <div class="cat-list" id="i_catlist"></div>
           </div>
         </div>
         <button class="im-unit" id="i_unitbtn" onclick="openUnit()">Select Unit</button>
         <input type="hidden" id="i_unit">
+        <button class="im-unit" id="i_sizebtn" onclick="openSize()">Select Size</button>
+        <input type="hidden" id="i_size">
         <button class="im-img">⊞ Add Item Image</button>
       </div>
       <div class="im-row2">
         <div class="code-field"><input id="i_code" placeholder="Item Code"><button class="assign" onclick="assignCode()">Assign Code</button></div>
       </div>
-      <div class="im-tabs"><span class="im-tab active">Pricing</span><span class="im-tab">Stock</span></div>
-      <div class="im-section">
-        <div class="im-sec-title">Sale Price</div>
-        <input class="im-input" id="i_price" placeholder="Sale Price">
-        <div class="im-link">+ Add Wholesale Price</div>
+      <div class="im-desc-row">
+        <textarea class="im-input im-desc" id="i_desc" placeholder="Item Description (optional)" rows="2"></textarea>
       </div>
-      <div class="im-section">
-        <div class="im-sec-title">Purchase Price</div>
-        <input class="im-input" id="i_pprice" placeholder="Purchase Price">
+      <div class="im-tabs"><span class="im-tab active" onclick="switchImTab(0)">Pricing</span><span class="im-tab" onclick="switchImTab(1)">Stock</span></div>
+      <div class="im-section im-pricing-section">
+        <div class="im-price-grid">
+          <div class="im-price-col">
+            <div class="im-sec-title">Sale Price</div>
+            <input class="im-input" id="i_price" placeholder="Sale Price" oninput="calcItemDiscount()">
+            <div class="im-link" onclick="toggleDiscountField()">+ Add Discount</div>
+            <div class="im-discount-row" id="i_discRow" style="display:none">
+              <div class="im-disc-wrap">
+                <input class="im-input" id="i_discp" type="number" placeholder="%" min="0" max="100" oninput="calcItemDiscount()">
+                <span class="im-disc-pct">%</span>
+              </div>
+              <div class="im-disc-final">Final: <b id="i_finalPrice">0</b></div>
+            </div>
+          </div>
+          <div class="im-price-col">
+            <div class="im-sec-title">Wholesale Price</div>
+            <input class="im-input" id="i_wprice" placeholder="Wholesale Price">
+          </div>
+          <div class="im-price-col">
+            <div class="im-sec-title">Purchase Price</div>
+            <input class="im-input" id="i_pprice" placeholder="Purchase Price" oninput="calcItemPpDiscount()">
+            <div class="im-link" onclick="togglePpDiscountField()">+ Add Discount</div>
+            <div class="im-discount-row" id="i_ppDiscRow" style="display:none">
+              <div class="im-disc-wrap">
+                <input class="im-input" id="i_ppdiscp" type="number" placeholder="%" min="0" max="100" oninput="calcItemPpDiscount()">
+                <span class="im-disc-pct">%</span>
+              </div>
+              <div class="im-disc-final">Final: <b id="i_ppFinalPrice">0</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="im-section im-stock-section" style="display:none">
+        <div class="im-price-grid">
+          <div class="im-price-col">
+            <div class="im-sec-title">Opening Stock *</div>
+            <input class="im-input" id="i_stock" type="number" placeholder="Quantity" min="0" value="0">
+          </div>
+          <div class="im-price-col">
+            <div class="im-sec-title">Low Stock Alert</div>
+            <input class="im-input" id="i_lowstock" type="number" placeholder="Min quantity" min="0" value="0">
+          </div>
+        </div>
       </div>
     </div>
     <div class="im-foot">
@@ -178,6 +296,7 @@
       <button class="btn btn-outline" onclick="closeModal('invViewModal')">Close</button>
       <button class="btn btn-ghost" id="iv_refund" onclick="refundInvoice()">↩️ Refund</button>
       <button class="btn btn-ghost" id="iv_replace" onclick="replaceInvoice()">🔄 Replacement</button>
+      <button class="btn btn-ghost" style="color:#e67e22" onclick="trashCurrentInvoice()">🗑 Trash</button>
       <button class="btn btn-outline-blue" onclick="downloadInvoice()">⬇️ Download</button>
       <button class="btn btn-red" onclick="printInvoice()">🖨️ Print</button>
     </div>
@@ -191,7 +310,7 @@
     <div class="pm-body">
       <div class="pm-top">
         <div class="float-field"><label>Party Name *</label><input id="pa_name"></div>
-        <input class="pm-phone" id="pa_phone" placeholder="Phone Number">
+        <div class="pm-phone-wrap"><div class="float-field"><label>Phone Number</label><input id="pa_phone" type="tel"></div></div>
       </div>
       <div class="pm-tabs">
         <span class="pm-tab active" data-pt="address">Address</span>
@@ -200,10 +319,14 @@
       </div>
       <div class="pm-tabc" id="pt_address">
         <div class="pm-3col">
-          <input class="pm-in" id="pa_email" placeholder="Email ID">
+          <div class="float-field"><label>Email ID</label><input id="pa_email" type="email"></div>
           <div><div class="pm-lbl">Billing Address</div><textarea class="pm-in" id="pa_billing" placeholder="Billing Address"></textarea>
             <div class="pm-link2">👁 Show Detailed Address</div></div>
           <div><div class="pm-lbl">Shipping Address</div><div class="pm-link2">＋ Enable Shipping Address</div></div>
+        </div>
+        <div class="pm-tab-foot">
+          <button class="btn-cancel" onclick="closeModal('partyModal')">Cancel</button>
+          <button class="btn-save-blue" onclick="saveParty(false)">Save</button>
         </div>
       </div>
       <div class="pm-tabc" id="pt_credit" style="display:none">
@@ -235,7 +358,87 @@
   </div>
 </div>
 
+<!-- ============ OPEN ANYTHING MODAL ============ -->
+<div class="modal-overlay" id="anythingModal">
+  <div class="anything-modal">
+    <div class="anything-search">
+      <span class="anything-icon">🔍</span>
+      <input id="anythingInput" placeholder="Search anything... (items, parties, invoices, menus)" oninput="anythingSearch(this.value)" autocomplete="off">
+      <span class="anything-esc" onclick="closeModal('anythingModal')">ESC</span>
+    </div>
+    <div class="anything-list" id="anythingList"></div>
+    <div class="anything-footer">
+      <span><kbd>↑↓</kbd> Navigate</span>
+      <span><kbd>Enter</kbd> Open</span>
+      <span><kbd>Esc</kbd> Close</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ COMPANY LIST MODAL ============ -->
+<div class="modal-overlay" id="companyModal">
+  <div class="company-modal">
+    <div class="cm-header">
+      <h2>Company List</h2>
+      <div class="cm-search"><span>🔍</span><input id="cmSearch" placeholder="Search Company" oninput="renderCompanies()" autocomplete="off"></div>
+      <button class="cm-x" onclick="closeModal('companyModal')">✕</button>
+    </div>
+    <div class="cm-tabs">
+      <div class="cm-tab" data-ct="shared" onclick="companyTab('shared')">Companies Shared with Me</div>
+      <div class="cm-tab active" data-ct="my" onclick="companyTab('my')">My Companies</div>
+    </div>
+    <div class="cm-body">
+      <div class="cm-subrow">
+        <span class="cm-sub" id="cmSub">Below are the company that are created by you</span>
+        <span class="cm-browse"><span class="cm-browse-link" onclick="toast('Browse .vyp file (demo)')">Browse Files (.vyp)</span><span class="cm-sep">|</span><span class="cm-refresh" onclick="renderCompanies()">↻</span></span>
+      </div>
+      <div class="cm-list" id="cmList"></div>
+    </div>
+    <div class="cm-foot">
+      <div class="cm-phone">Currently logged in with Phone:<br><b id="cmPhone">3341100761</b></div>
+      <div class="cm-foot-btns">
+        <button class="btn btn-outline-blue" onclick="restoreCompanyBackup()">Restore backup</button>
+        <button class="btn btn-blue" onclick="newCompany()">New Company</button>
+      </div>
+    </div>
+    <div class="cm-note">
+      <span class="cm-note-txt" id="cmNote"></span>
+      <div class="cm-logout"><span class="lo" onclick="companyLogout()">Logout</span><span class="lo-sub">Logging out will stop syncing data</span></div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
-<script src="app.js"></script>
+
+<!-- Login Modal -->
+<div id="loginModal" class="modal-overlay" style="z-index:9999">
+  <div class="modal" style="max-width:420px;padding:30px;border-radius:16px">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:36px;margin-bottom:8px">🔐</div>
+      <h2 style="margin:0;font-size:20px">Welcome Back</h2>
+      <p class="muted" style="font-size:13px">Select your account to continue</p>
+    </div>
+    <div id="loginUserList" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:20px"></div>
+    <div class="field" style="position:relative">
+      <input id="loginPass" type="password" placeholder="Enter Password" style="width:100%;padding:12px 40px 12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px" onkeydown="if(event.key==='Enter')doLogin()">
+      <span onclick="const p=document.getElementById('loginPass');p.type=p.type==='password'?'text':'password'" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;opacity:0.5">👁</span>
+    </div>
+    <div id="loginError" style="color:#e74c3c;font-size:12px;text-align:center;margin:8px 0;min-height:16px"></div>
+    <button class="btn btn-red" onclick="doLogin()" style="width:100%;padding:12px;font-size:15px;font-weight:700;border-radius:10px">Login</button>
+  </div>
+</div>
+<div class="modal-overlay" id="passcodeModal" style="display:none">
+  <div class="modal" style="max-width:340px;text-align:center;padding:30px">
+    <div style="font-size:40px;margin-bottom:10px">🔒</div>
+    <h3 style="margin:0 0 6px">Enter Passcode</h3>
+    <p style="font-size:12px;color:#888;margin:0 0 16px">Enter 4-digit passcode to access the app</p>
+    <input type="password" id="passcodeInput" maxlength="4" style="width:100%;text-align:center;font-size:24px;letter-spacing:12px;padding:12px;border:2px solid #ddd;border-radius:10px;margin-bottom:14px" onkeydown="if(event.key==='Enter')verifyPasscode()">
+    <button class="btn btn-red" onclick="verifyPasscode()" style="width:100%;padding:12px;font-size:15px;font-weight:700;border-radius:10px">Unlock</button>
+    <div id="passcodeError" style="color:#e74c3c;font-size:12px;text-align:center;margin:8px 0;min-height:16px"></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>
