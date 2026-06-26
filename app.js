@@ -961,6 +961,7 @@ function hDeleteLogo(){ store.business.logo=''; persist(); refreshView(); docume
 function hLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ store.business.logo=e.target.result; persist(); refreshView(); document.getElementById('h_logo').innerHTML=`<img src="${e.target.result}">`; toast('Logo saved'); }; r.readAsDataURL(f); }
 document.addEventListener('click',e=>{ const m=document.getElementById('h_logomenu'); if(m&&m.classList.contains('show')&&!e.target.closest('.hlogo-wrap')) m.classList.remove('show'); });
+document.addEventListener('click',e=>{ const dd=document.getElementById('sharedItemDrop'); if(dd&&dd.style.display==='block'&&!e.target.closest('#sharedItemDrop')&&!e.target.closest('[onfocus*="Filter"]')) dd.style.display='none'; });
 function hPreview(){
   const cust=document.getElementById('h_cust').value.trim(), phone=document.getElementById('h_phone')?document.getElementById('h_phone').value.trim():'';
   const total=homeTotal(), recv=pf('h_recv');
@@ -1969,10 +1970,6 @@ function vParties(){
           <span class="pl-name">${p.name}</span>
           <span class="pl-amt ${(p.balance||0)>0?'due':(p.balance||0)<0?'paid':''}">${rs(Math.abs(p.balance||0))}</span></div>`).join('')}
       </div>
-      <div class="pl-bottom">
-        <div class="pl-bottom-icon">📱</div>
-        <div class="pl-bottom-text">Use contacts from your Phone or<br>Gmail to <b>quickly create parties</b></div>
-      </div>
     </div>
     <div class="parties-right">
       ${selParty?`<div class="pr-detail">
@@ -2939,7 +2936,7 @@ function renderPOForm(){
     const amt=(r.qty||0)*(r.price||0)-(r.discA||0);
     return `<tr>
       <td style="width:30px;text-align:center;color:#999;font-size:12px">${idx+1}</td>
-      <td style="position:relative"><input value="${r.item}" onfocus="poFilterItems(this,'')" onblur="setTimeout(()=>this.nextElementSibling.style.display='none',200)" oninput="poUpdateItem(${idx},this.value);poFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"><div class="po-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:250px;overflow-y:auto">${itemList}</div></td>
+      <td><input value="${r.item}" onfocus="poFilterItems(this,'')" onblur="setTimeout(hideSharedItemDropdown,200)" oninput="poUpdateItem(${idx},this.value);poFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.desc}" oninput="poData.rows[${idx}].desc=this.value" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.count}" oninput="poData.rows[${idx}].count=this.value" style="width:70px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.size}" oninput="poData.rows[${idx}].size=this.value" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
@@ -3031,15 +3028,45 @@ function poSelectItem(it){
 }
 
 function poUpdateItem(idx,val){poData.rows[idx].item=val;}
-function poFilterItems(input,val){
-  const dd=input.nextElementSibling;
-  if(!dd)return;
-  const q=val.toLowerCase();
+function showSharedItemDropdown(input,itemsHtml,filterVal,onSelectFn){
+  let dd=document.getElementById('sharedItemDrop');
+  if(!dd){dd=document.createElement('div');dd.id='sharedItemDrop';dd.style.cssText='display:none;position:fixed;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:9999;max-height:250px;overflow-y:auto;min-width:200px';document.body.appendChild(dd);}
+  dd.innerHTML=itemsHtml;
+  const r=input.getBoundingClientRect();
+  dd.style.left=r.left+'px';
+  dd.style.top=r.bottom+'px';
+  dd.style.width=Math.max(r.width,200)+'px';
   dd.style.display='block';
+  const q=(filterVal||'').toLowerCase();
   Array.from(dd.children).forEach(opt=>{
     const name=(opt.getAttribute('data-name')||'').toLowerCase();
     const code=(opt.getAttribute('data-code')||'').toLowerCase();
     opt.style.display=(!q||name.includes(q)||code.includes(q))?'flex':'none';
+  });
+  dd._onSelect=onSelectFn;
+}
+function hideSharedItemDropdown(){const dd=document.getElementById('sharedItemDrop');if(dd)dd.style.display='none';}
+function sharedItemPick(id){
+  const dd=document.getElementById('sharedItemDrop');if(!dd||!dd._onSelect)return;
+  const item=store.items.find(x=>x.id===id);
+  if(item) dd._onSelect(item);
+  dd.style.display='none';
+}
+function poFilterItems(input,val){
+  const itemList=(store.items||[]).map(it=>`<div class="po-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+    <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
+    <div style="text-align:right;min-width:50px"><div style="font-size:11px;color:#888">STOCK</div><div style="font-weight:700;font-size:13px;color:${(it.stock||0)>0?'#27ae60':'#e74c3c'}">${it.stock||0}</div></div>
+  </div>`).join('');
+  showSharedItemDropdown(input,itemList,val,(it)=>{
+    const lastRow=poData.rows[poData.rows.length-1];
+    if(lastRow.item&&lastRow.qty>0) poData.rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});
+    const idx=poData.rows.length-1;
+    poData.rows[idx].item=it.name;
+    poData.rows[idx].price=it.pprice||it.price||0;
+    poData.rows[idx].desc=it.code||'';
+    renderPOForm();
   });
 }
 function poUpdateRow(idx,field,val){
@@ -3254,7 +3281,7 @@ function vPurchaseForm(){
               </div>`).join('');
               return `<tr>
                 <td class="pf-td-num">${i+1}</td>
-                <td style="position:relative"><input placeholder="Search item..." value="${r.item}" onfocus="pfFilterItems(this,'',${i})" onblur="setTimeout(()=>this.nextElementSibling.style.display='none',200)" oninput="pfTabs[${pfActiveTab}].rows[${i}].item=this.value;pfFilterItems(this,this.value,${i})" autocomplete="off" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"><div class="pf-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:250px;overflow-y:auto">${pfItemList}</div></td>
+                <td><input placeholder="Search item..." value="${r.item}" onfocus="pfFilterItems(this,'',${i})" onblur="setTimeout(hideSharedItemDropdown,200)" oninput="pfTabs[${pfActiveTab}].rows[${i}].item=this.value;pfFilterItems(this,this.value,${i})" autocomplete="off" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
                 <td><input placeholder="Description" value="${r.desc}" oninput="pfTabs[${pfActiveTab}].rows[${i}].desc=this.value"></td>
                 <td><input type="number" value="${r.count}" oninput="pfTabs[${pfActiveTab}].rows[${i}].count=this.value"></td>
                 <td><input placeholder="Size" value="${r.size}" oninput="pfTabs[${pfActiveTab}].rows[${i}].size=this.value"></td>
@@ -3329,14 +3356,21 @@ function pfSelectItem(idx,it){
   vPurchaseForm();
 }
 function pfFilterItems(input,val,idx){
-  const dd=input.nextElementSibling;
-  if(!dd)return;
-  const q=(val||'').toLowerCase();
-  dd.style.display='block';
-  Array.from(dd.children).forEach(opt=>{
-    const name=(opt.getAttribute('data-name')||'').toLowerCase();
-    const code=(opt.getAttribute('data-code')||'').toLowerCase();
-    opt.style.display=(!q||name.includes(q)||code.includes(q))?'flex':'none';
+  const itemList=(store.items||[]).map(it=>`<div class="pf-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+    <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
+    <div style="text-align:right;min-width:50px"><div style="font-size:11px;color:#888">STOCK</div><div style="font-weight:700;font-size:13px;color:${(it.stock||0)>0?'#27ae60':'#e74c3c'}">${it.stock||0}</div></div>
+  </div>`).join('');
+  showSharedItemDropdown(input,itemList,val,(it)=>{
+    const lastRow=pfTabs[pfActiveTab].rows[pfTabs[pfActiveTab].rows.length-1];
+    if(lastRow.item&&lastRow.qty>0) pfTabs[pfActiveTab].rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});
+    const ri=pfTabs[pfActiveTab].rows.length-1;
+    const target=Math.min(idx,ri);
+    pfTabs[pfActiveTab].rows[target].item=it.name;
+    pfTabs[pfActiveTab].rows[target].price=it.pprice||it.price||0;
+    pfTabs[pfActiveTab].rows[target].desc=it.code||'';
+    vPurchaseForm();
   });
 }
 function pfAddRow(){
@@ -3528,7 +3562,7 @@ function renderDebitNoteForm(){
     const amt=(r.qty||0)*(r.price||0)-(r.discA||0);
     return `<tr>
       <td style="width:30px;text-align:center;color:#999;font-size:12px">${idx+1}</td>
-      <td style="position:relative"><input value="${r.item}" onfocus="dnFilterItems(this,'')" onblur="setTimeout(()=>this.nextElementSibling.style.display='none',200)" oninput="dnUpdateItem(${idx},this.value);dnFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"><div class="dn-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:250px;overflow-y:auto">${itemList}</div></td>
+      <td><input value="${r.item}" onfocus="dnFilterItems(this,'')" onblur="setTimeout(hideSharedItemDropdown,200)" oninput="dnUpdateItem(${idx},this.value);dnFilterItems(this,this.value)" placeholder="Search item..." style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.desc}" oninput="dnData.rows[${idx}].desc=this.value" style="width:100%;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.count}" oninput="dnData.rows[${idx}].count=this.value" style="width:70px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
       <td><input value="${r.size}" oninput="dnData.rows[${idx}].size=this.value" style="width:60px;padding:6px 8px;border:1px solid #eee;border-radius:4px;font-size:13px"></td>
@@ -3620,14 +3654,20 @@ function dnSelectItem(it){
 }
 function dnUpdateItem(idx,val){dnData.rows[idx].item=val;}
 function dnFilterItems(input,val){
-  const dd=input.nextElementSibling;
-  if(!dd)return;
-  const q=val.toLowerCase();
-  dd.style.display='block';
-  Array.from(dd.children).forEach(opt=>{
-    const name=(opt.getAttribute('data-name')||'').toLowerCase();
-    const code=(opt.getAttribute('data-code')||'').toLowerCase();
-    opt.style.display=(!q||name.includes(q)||code.includes(q))?'flex':'none';
+  const itemList=(store.items||[]).map(it=>`<div class="dn-item-opt" data-name="${it.name}" data-code="${it.code||''}" onclick="sharedItemPick('${it.id}')" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f5f5;gap:12px">
+    <div style="flex:1"><div style="font-weight:600;font-size:13px">${it.name}</div><div style="font-size:11px;color:#999">${it.code||''}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">SALE</div><div style="font-weight:600;font-size:13px">${rs(it.price)}</div></div>
+    <div style="text-align:right;min-width:70px"><div style="font-size:11px;color:#888">PURCHASE</div><div style="font-weight:600;font-size:13px">${rs(it.pprice||0)}</div></div>
+    <div style="text-align:right;min-width:50px"><div style="font-size:11px;color:#888">STOCK</div><div style="font-weight:700;font-size:13px;color:${(it.stock||0)>0?'#27ae60':'#e74c3c'}">${it.stock||0}</div></div>
+  </div>`).join('');
+  showSharedItemDropdown(input,itemList,val,(it)=>{
+    const lastRow=dnData.rows[dnData.rows.length-1];
+    if(lastRow.item&&lastRow.qty>0) dnData.rows.push({item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0});
+    const idx=dnData.rows.length-1;
+    dnData.rows[idx].item=it.name;
+    dnData.rows[idx].price=it.pprice||it.price||0;
+    dnData.rows[idx].desc=it.code||'';
+    renderDebitNoteForm();
   });
 }
 function dnUpdateRow(idx,field,val){
