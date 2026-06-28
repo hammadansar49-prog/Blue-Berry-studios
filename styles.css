@@ -769,6 +769,19 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .nci-total-box{background:#eef4fc;border-radius:10px;padding:13px 20px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
 .nci-total-box .t{font-size:17px;font-weight:800}
 .nci-total-box .v{font-size:20px;font-weight:800;text-decoration:underline}
+.nci-slip-modal{background:#fff;border-radius:16px;width:460px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
+.nci-slip-head{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid var(--line);flex-shrink:0}
+.nci-slip-head b{font-size:17px;color:#222}
+.nci-slip-x{cursor:pointer;color:#888;font-size:18px}
+.nci-slip-x:hover{color:var(--red)}
+.nci-slip-body{overflow-y:auto;padding:10px 14px;background:#f7f8fb;flex:1}
+.nci-slip-body .nci-inv{background:#fff;border-radius:10px;border:1px solid var(--line)}
+.nci-slip-actions{display:flex;gap:12px;padding:16px 22px;border-top:1px solid var(--line);flex-shrink:0}
+.nci-slip-btn{flex:1;padding:14px;border:0;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;transition:.15s}
+.nci-slip-btn.save{background:#eef4fc;color:var(--blue)}
+.nci-slip-btn.save:hover{background:#dfeafb}
+.nci-slip-btn.print{background:var(--red);color:#fff}
+.nci-slip-btn.print:hover{background:var(--red-dark)}
 .nci-preview{flex:1;overflow-y:auto;background:#fff;border-radius:10px;border:1px solid var(--line)}
 .nci-inv{padding:22px 26px;font-size:13px;color:#333}
 .nci-inv-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}

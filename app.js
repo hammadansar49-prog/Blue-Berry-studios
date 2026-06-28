@@ -5630,7 +5630,7 @@ function vCreateInvoice(){
       <div class="nci-right">
         <div class="nci-preview" id="nciPreview"></div>
         <div class="nci-actions">
-          <button class="nci-save" onclick="nciSave()">Save &amp; New</button>
+          <button class="nci-save" onclick="nciShowSlip()">Save &amp; New</button>
           <span class="nci-rnd wa" onclick="nciSave('whatsapp')" title="Save &amp; WhatsApp">🟢</span>
           <span class="nci-rnd" onclick="nciSave('print')" title="Save &amp; Print">🖨️</span>
           <span class="nci-rnd" onclick="nciSave('download')" title="Save &amp; Download">⬇️</span>
@@ -5757,6 +5757,23 @@ function nciPreview(){
   }catch(e){}
 }
 function nciSwitchFull(){ openSale(); }
+// "Save & New" -> open a full slip preview popup with Save and Print buttons.
+function nciShowSlip(){
+  if(!hasPermission('create','invoices')){showNoAccess();return;}
+  const cust=(document.getElementById('nciCust')?.value||'').trim();
+  if(!cust)return toast('Enter Customer Name');
+  const rows=nciRows.filter(r=>(r.name||r.item)&&(+r.qty>0));
+  if(!rows.length)return toast('Add at least one item');
+  const t=nciTotals();
+  if(t.total<=0)return toast('Enter item price');
+  nciPreview(); // make sure the slip (logo, barcode, QR, totals) is up to date
+  const body=document.getElementById('nciSlipBody');
+  const pv=document.getElementById('nciPreview');
+  if(body&&pv) body.innerHTML=pv.innerHTML;
+  showModal('nciSlipModal');
+}
+function nciSlipSave(){ closeModal('nciSlipModal'); nciSave(); }
+function nciSlipPrint(){ closeModal('nciSlipModal'); nciSave('print'); }
 function nciReset(){ nciRows=[{name:'',item:'',qty:1,price:0,size:''}]; nciDiscP=0; nciDiscAmt=0; nciTaxRate=0; nciReceived=0; nciFully=false; nciCustName=''; nciCustPhone=''; nciPayMode='Cash'; }
 function nciWhatsApp(s){
   let digits=(s.phone||'').replace(/\D/g,'').replace(/^0+/,''); digits=digits.replace(/^92/,'');
