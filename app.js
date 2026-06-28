@@ -7943,9 +7943,12 @@ async function renderAllBranches() {
               ${branch.status === 'active' ? '● Active' : '● Inactive'}
             </span>
           </td>
-          <td>
+          <td style="display:flex;gap:6px">
             <button onclick="copyBranchCode('${branch.branchCode}')" class="branch-action-btn">
               📋 Copy
+            </button>
+            <button onclick="deleteBranch('${branch.branchCode}','${branch.name}')" class="branch-action-btn" style="background:#fff0f0;color:#e74c3c;border:1px solid #fdd">
+              🗑 Delete
             </button>
           </td>
         </tr>`;
@@ -7960,6 +7963,37 @@ async function renderAllBranches() {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:40px">Error loading branches</td></tr>';
     table.style.display = 'table';
     console.error('renderAllBranches error', e);
+  }
+}
+
+// Delete a branch
+async function deleteBranch(branchCode, branchName) {
+  if (!confirm('Are you sure you want to delete branch "' + branchName + '" (' + branchCode + ')?\n\nThis action cannot be undone.')) return;
+
+  const ownerUid = window.fbAuth.currentUser.uid;
+  const branchId = 'branch_' + branchCode;
+
+  try {
+    // 1) Delete from branches collection
+    await window.fbDB.collection('branches').doc(branchId).delete();
+
+    // 2) Delete from branchLookup
+    await window.fbDB.collection('branchLookup').doc(branchCode).delete();
+
+    // 3) Try to delete from globalBranchCodes
+    try { await window.fbDB.collection('globalBranchCodes').doc(branchCode).delete(); } catch(e){}
+
+    // 4) Remove branchId from owner's memberUids
+    await window.fbDB.collection('users').doc(ownerUid).update({
+      memberUids: firebase.firestore.FieldValue.arrayRemove(branchId)
+    });
+
+    toast('Branch deleted successfully');
+    logActivity('branch', 'Deleted branch: ' + branchName + ' (' + branchCode + ')');
+    await renderAllBranches();
+  } catch (e) {
+    toast('Delete failed: ' + (e.message || e.code));
+    console.error('deleteBranch error', e);
   }
 }
 
