@@ -96,10 +96,23 @@ Do mein se koi ek kar lo, phir dobara `npm run dist`:
   → Settings → Privacy & Security → For Developers → "Developer Mode" = On.
 - **Ya:** Terminal (CMD/PowerShell) ko **"Run as administrator"** se kholo, phir command chalao.
 
+**Developer Mode on nahi karna chahte?** To ek dafa ye command chala lo (symlink wali macOS
+files ko skip karke cache t* taiyar kar deta hai), phir `npm run dist`:
+
+```bash
+node_modules\7zip-bin\win\x64\7za.exe x "%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\*.7z" -o"%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0" -x!darwin -y
+```
+
 > Agar phir bhi installer na bane to bhi ghabrane ki baat nahi — `dist\win-unpacked\` folder
 > mein **`KAROBAR.exe`** ready hota hai. Poora folder copy karke kisi bhi Windows par
 > chala sakte ho (yeh portable version hai, install ki zaroorat nahi). Installer sirf ek single
 > setup file banata hai jo zyada convenient hota hai.
+
+### Login error: `auth/operation-not-supported-in-this-environment`
+
+Yeh tab aata tha jab app `file://` se chalti thi (Firebase login file:// par kaam nahi karta).
+**Fix ho chuka hai** — ab Electron app ke andar ek chhota local server chalta hai aur UI
+`http://127.0.0.1` se load hoti hai, jahan login theek chalta hai. (Code: `electron/main.js`.)
 
 ---
 
