@@ -1166,7 +1166,7 @@ function buildInvoiceHTML(s){
   const sub=rows.reduce((a,r)=>a+r.qty*r.price,0);
   const discTotal=sub-s.total;
   const invoicePhone=s.branchPhone||b.phone||'';
-  const data=encodeURIComponent(`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)} | ${invoicePhone}`);
+  const qrData=invoicePhone?('tel:'+invoicePhone.replace(/[^0-9+]/g,'')):encodeURIComponent(`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)}`);
   const totalQty=rows.reduce((a,r)=>a+r.qty,0);
   return `<div class="print-invoice">
     <div class="pi-top">
@@ -1188,7 +1188,7 @@ function buildInvoiceHTML(s){
       }).join('')}</tbody></table>
     <div class="pi-bottom">
       <div class="pi-words"><b>Amount in words:</b><br>${words(s.total)} Rupees only
-        ${st.showQR!==false?`<br><img class="pi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${data}">`:''}</div>
+        ${st.showQR!==false?`<br><img class="pi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${qrData}">`:''}</div>
       <div class="pi-tot">
         <div class="tr"><span>Sub Total</span><span>${rs(sub)}</span></div>
         ${discTotal>0?`<div class="tr" style="color:var(--red)"><span>Discount</span><span>-${rs(discTotal)}</span></div>`:''}
@@ -1199,7 +1199,7 @@ function buildInvoiceHTML(s){
     </div>
     ${st.showTerms!==false?`<div class="pi-terms"><b>Terms &amp; Conditions:</b> ${st.terms||'Thanks for doing business with us!'}</div>`:''}
     <div class="pi-barcode" style="text-align:center;margin-top:12px"><svg class="inv-barcode-svg" data-code="${s.no}"></svg>
-      <div style="font-size:11px;color:#888;margin-top:4px">${invoicePhone?'Scan for branch info: '+invoicePhone:''}</div></div>
+      <div style="font-size:11px;color:#888;margin-top:4px">${invoicePhone?'Scan QR to call: '+invoicePhone:''}</div></div>
     ${st.showSign!==false?`<div class="pi-sign">For ${b.name||'My Company'}<br><br>Authorised Signatory</div>`:''}
   </div>`;
 }
@@ -2197,9 +2197,11 @@ function drawInv(){
   document.getElementById('p_recv').textContent=f(t.recv);
   document.getElementById('p_balance').textContent = t.balance<0 ? 'Return '+f(Math.abs(t.balance)) : f(t.balance);
   document.getElementById('p_words').textContent=words(t.total)+' Rupees only';
-  const co=store.business.name||'My Company', ph=store.business.phone||'3341100761';
-  const data=encodeURIComponent(`Invoice from ${co} | Total Rs ${t.total} | Contact ${ph}`);
-  document.getElementById('p_qr').src=`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${data}`;
+  const co=store.business.name||'My Company';
+  const branchPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
+  const ph=branchPhone||store.business.phone||'';
+  const qrData=ph?('tel:'+ph.replace(/[^0-9+]/g,'')):encodeURIComponent(`Invoice from ${co} | Total Rs ${t.total}`);
+  document.getElementById('p_qr').src=`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${qrData}`;
   // apply Settings show/hide
   const s=store.settings||{}, q=sel=>document.querySelector(sel);
   if(document.getElementById('p_logo')) document.getElementById('p_logo').style.display=s.showLogo===false?'none':'';
