@@ -5582,7 +5582,7 @@ function vCreateInvoice(){
           <div class="nci-fld"><label>Customer Name<b>*</b></label><input id="nciCust" value="${nciCustName}" placeholder="Enter Name" oninput="nciCustName=this.value;nciPreview()" autocomplete="off"></div>
           <div class="nci-fld"><label>Customer Phone Number</label><div class="nci-phone"><span class="cc">+92</span><input id="nciPhone" value="${nciCustPhone}" placeholder="Enter Number" oninput="nciCustPhone=this.value;nciPreview()"></div></div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:#f8f9fa;border-radius:10px;margin-bottom:12px;border:1px solid #e0e0e0">
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:#f8f9fa;border-radius:10px;margin-bottom:8px;border:1px solid #e0e0e0">
           <div id="nciScannerDot" title="Scanner status" style="width:10px;height:10px;border-radius:50%;background:#e74c3c;box-shadow:0 0 6px rgba(231,76,60,0.5);transition:all 0.3s"></div>
           <span style="font-size:11px;color:#888" id="nciScannerLabel">Scanner: Not connected</span>
         </div>

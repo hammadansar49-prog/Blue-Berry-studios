@@ -725,22 +725,22 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .nci-x{font-size:20px;color:#888;cursor:pointer}
 .nci-x:hover{color:var(--red)}
 .nci-body{flex:1;display:flex;min-height:0}
-.nci-left{flex:1;padding:18px 30px;overflow-y:auto;min-width:0}
+.nci-left{flex:1;padding:14px 30px;overflow-y:auto;min-width:0}
 .nci-right{width:520px;background:#f7f8fb;border-left:1px solid var(--line);display:flex;flex-direction:column;padding:16px;flex-shrink:0;min-height:0}
-.nci-cust-row{display:flex;gap:28px;margin-bottom:14px}
+.nci-cust-row{display:flex;gap:28px;margin-bottom:10px}
 .nci-fld{flex:1;position:relative}
-.nci-fld label{display:block;font-size:13px;color:#444;margin-bottom:7px;font-weight:600}
+.nci-fld label{display:block;font-size:13px;color:#444;margin-bottom:5px;font-weight:600}
 .nci-fld label b{color:var(--red)}
-.nci-fld>input{width:100%;border:1px solid var(--line);border-radius:8px;padding:12px;outline:none}
+.nci-fld>input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;outline:none}
 .nci-fld>input:focus{border-color:var(--blue)}
 .nci-phone{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.nci-phone .cc{padding:12px;border-right:1px solid var(--line);color:#444}
-.nci-phone input{border:0;padding:12px;flex:1;outline:none}
-.nci-tbl{width:100%;border-collapse:collapse;margin-top:6px}
-.nci-tbl th{text-align:left;font-size:12px;color:#888;font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line)}
+.nci-phone .cc{padding:10px;border-right:1px solid var(--line);color:#444}
+.nci-phone input{border:0;padding:10px;flex:1;outline:none}
+.nci-tbl{width:100%;border-collapse:collapse;margin-top:4px}
+.nci-tbl th{text-align:left;font-size:12px;color:#888;font-weight:700;padding:5px 8px;border-bottom:1px solid var(--line)}
 .nci-tbl th.right{text-align:right}
-.nci-tbl td{padding:6px 8px;vertical-align:middle}
-.nci-tbl input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;outline:none}
+.nci-tbl td{padding:5px 8px;vertical-align:middle}
+.nci-tbl input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;outline:none}
 .nci-tbl input:focus{border-color:var(--blue)}
 .nci-add-ic{color:var(--blue);cursor:pointer;font-size:17px;vertical-align:middle;margin-left:4px}
 .nci-item-cell{position:relative;min-width:200px}
@@ -754,19 +754,19 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .nci-drop-name{font-weight:600;font-size:13px;color:#222}
 .nci-drop-name small{color:#999;font-weight:400}
 .nci-drop-price{color:var(--blue);font-weight:600;font-size:13px}
-.nci-addrow{color:var(--blue);font-weight:600;cursor:pointer;margin:10px 0 4px}
-.nci-subtotal{display:flex;justify-content:space-between;padding:11px 4px;border-top:1px solid var(--line);font-weight:700;margin-top:6px}
-.nci-sumline{display:flex;justify-content:space-between;align-items:center;padding:9px 4px;border-top:1px solid var(--line)}
+.nci-addrow{color:var(--blue);font-weight:600;cursor:pointer;margin:8px 0 4px}
+.nci-subtotal{display:flex;justify-content:space-between;padding:8px 4px;border-top:1px solid var(--line);font-weight:700;margin-top:4px}
+.nci-sumline{display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-top:1px solid var(--line)}
 .nci-sumline .lbl{font-weight:600;color:#333}
 .nci-money{display:flex;align-items:center;gap:10px}
-.nci-money>input{width:96px;border:1px solid var(--line);border-radius:8px;padding:9px;outline:none;text-align:right}
+.nci-money>input{width:96px;border:1px solid var(--line);border-radius:8px;padding:8px;outline:none;text-align:right}
 .nci-pct{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:82px}
-.nci-pct input{border:0;width:46px;padding:9px;text-align:right;outline:none}
-.nci-pct span{padding:9px 8px;color:#888;background:#fafbfc;border-left:1px solid var(--line)}
-.nci-tax-sel{border:1px solid var(--line);border-radius:8px;padding:9px;outline:none;color:#555;background:#fff}
+.nci-pct input{border:0;width:46px;padding:8px;text-align:right;outline:none}
+.nci-pct span{padding:8px;color:#888;background:#fafbfc;border-left:1px solid var(--line)}
+.nci-tax-sel{border:1px solid var(--line);border-radius:8px;padding:8px;outline:none;color:#555;background:#fff}
 .nci-fully{display:flex;align-items:center;gap:6px;font-size:13px;color:#444;cursor:pointer}
-.nci-bal{text-align:right;color:#666;font-size:13px;margin:6px 4px}
-.nci-total-box{background:#eef4fc;border-radius:10px;padding:13px 20px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.nci-bal{text-align:right;color:#666;font-size:13px;margin:4px 4px}
+.nci-total-box{background:#eef4fc;border-radius:10px;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;margin-top:8px}
 .nci-total-box .t{font-size:17px;font-weight:800}
 .nci-total-box .v{font-size:20px;font-weight:800;text-decoration:underline}
 .nci-slip-modal{background:#fff;border-radius:16px;width:460px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
