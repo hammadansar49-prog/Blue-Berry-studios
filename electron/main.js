@@ -1,5 +1,5 @@
 // ============================================================
-// Blue Berry Studios - Electron main process
+// KAROBAR - Electron main process
 // Wraps the existing web app (index.html + app.js) into a
 // downloadable Windows desktop application.
 //
@@ -23,7 +23,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     backgroundColor: '#ffffff',
-    title: 'Blue Berry Studios',
+    title: 'KAROBAR',
     icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     webPreferences: {
       contextIsolation: true,

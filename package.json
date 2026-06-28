@@ -1,7 +1,7 @@
 {
-  "name": "blue-berry-studios",
+  "name": "karobar",
   "version": "1.0.0",
-  "description": "Blue Berry Studios - Billing & POS desktop app",
+  "description": "KAROBAR - Billing & POS desktop app",
   "main": "electron/main.js",
   "author": "Hammad Ansar",
   "license": "UNLICENSED",
@@ -19,8 +19,8 @@
     "png-to-ico": "^2.1.8"
   },
   "build": {
-    "appId": "com.blueberry.studios",
-    "productName": "Blue Berry Studios",
+    "appId": "com.karobar.app",
+    "productName": "KAROBAR",
     "copyright": "Copyright © Hammad Ansar",
     "files": [
       "electron/**/*",
@@ -41,7 +41,7 @@
           ]
         }
       ],
-      "artifactName": "BlueBerryStudios-Setup-${version}.${ext}"
+      "artifactName": "KAROBAR-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -49,7 +49,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Blue Berry Studios",
+      "shortcutName": "KAROBAR",
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico"
     }
