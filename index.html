@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="autocomplete" content="off">
 <title>My Business - Billing</title>
-<link rel="stylesheet" href="styles.css?v=12">
+<link rel="stylesheet" href="styles.css?v=13">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Pirata+One&family=MedievalSharp&family=Grenze+Gotisch:wght@500;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -126,8 +126,7 @@
         <div class="pos-inv-cust-row">
           <div class="pos-inv-cust" style="position:relative">
             <label>Customer Name *</label>
-            <input id="pos_cust" name="pos_cust_x9k2m" placeholder="Enter customer name" autocomplete="one-time-code" data-1p-ignore="true" type="text" oninput="posSearchCust()" onfocus="posSearchCust()" onblur="setTimeout(()=>{const d=document.getElementById('posCustDrop');if(d)d.style.display='none'},200)">
-            <div id="posCustDrop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:100;max-height:200px;overflow-y:auto"></div>
+            <input id="pos_cust" name="pos_cust_x9k2m" placeholder="Enter customer name" autocomplete="one-time-code" data-1p-ignore="true" type="text">
           </div>
           <div class="pos-inv-cust">
             <label>Phone Number</label>
@@ -539,6 +538,33 @@
   </div>
 </div>
 
+<!-- Generic Confirm Modal -->
+<div class="modal-overlay" id="confirmModal" style="z-index:99999">
+  <div style="background:#fff;border-radius:16px;padding:32px;max-width:400px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.15)">
+    <div id="confirmIcon" style="width:64px;height:64px;border-radius:50%;background:#fff0f0;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px">&#x2753;</div>
+    <h3 id="confirmTitle" style="margin:0 0 8px;font-size:18px;color:#1a1a2e">Are you sure?</h3>
+    <p id="confirmMsg" style="color:#666;font-size:14px;margin:0 0 24px;line-height:1.5">This action cannot be undone.</p>
+    <div style="display:flex;gap:12px;justify-content:center">
+      <button id="confirmNoBtn" style="padding:10px 28px;border:1px solid #e0e0e0;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#555;cursor:pointer">Cancel</button>
+      <button id="confirmYesBtn" style="padding:10px 28px;border:none;border-radius:10px;background:#e74c3c;color:#fff;font-size:14px;font-weight:600;cursor:pointer">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic Prompt Modal -->
+<div class="modal-overlay" id="promptModal" style="z-index:99999">
+  <div style="background:#fff;border-radius:16px;padding:32px;max-width:400px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.15)">
+    <div id="promptIcon" style="width:64px;height:64px;border-radius:50%;background:#eff6ff;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px">&#x270F;&#xFE0F;</div>
+    <h3 id="promptTitle" style="margin:0 0 8px;font-size:18px;color:#1a1a2e">Input Required</h3>
+    <p id="promptMsg" style="color:#666;font-size:14px;margin:0 0 16px;line-height:1.5">Enter a value</p>
+    <input id="promptInput" type="text" style="width:100%;padding:10px 12px;border:1.5px solid #e2e2e2;border-radius:10px;font-size:14px;box-sizing:border-box;margin-bottom:20px;text-align:center;font-weight:600">
+    <div style="display:flex;gap:12px;justify-content:center">
+      <button id="promptNoBtn" style="padding:10px 28px;border:1px solid #e0e0e0;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#555;cursor:pointer">Cancel</button>
+      <button id="promptYesBtn" style="padding:10px 28px;border:none;border-radius:10px;background:#e0413e;color:#fff;font-size:14px;font-weight:600;cursor:pointer">OK</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <!-- ============ PAYMENT MODE BREAKDOWN MODAL ============ -->
@@ -547,6 +573,7 @@
     <div class="paym-head">
       <h2>How Customers Are Paying</h2>
       <div class="paym-head-btns">
+        <button class="paym-branch-btn" onclick="toggleBranchBar()">🏢 Check Branches Payments</button>
         <button class="paym-profit-btn" onclick="showProfitView()">💰 See Profits</button>
         <button class="paym-close" onclick="closeModal('paymentModal')">✕</button>
       </div>
@@ -557,6 +584,7 @@
       <label>To:</label>
       <input type="date" id="pmTo" onchange="renderPaymentBreakdown()">
     </div>
+    <div class="paym-branch-bar" id="pmBranchBar" style="display:none"></div>
     <div class="paym-cards" id="pmCards"></div>
     <div class="paym-total-row" id="pmTotalRow"></div>
     <div class="paym-profit-view" id="pmProfitView" style="display:none">
@@ -652,12 +680,13 @@
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <!-- Firebase (compat SDK) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=24"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>

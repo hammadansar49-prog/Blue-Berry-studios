@@ -18,7 +18,11 @@ function refreshAll(){ refreshView(); refreshOpenModals(); }
 function refreshOpenModals(){
   try{
     var pm=document.getElementById('paymentModal');
-    if(pm&&pm.classList.contains('show')&&typeof renderPaymentBreakdown==='function') renderPaymentBreakdown();
+    if(pm&&pm.classList.contains('show')){
+      var pv=document.getElementById('pmProfitView');
+      if(pv&&pv.style.display!=='none'&&typeof computeProfitView==='function') computeProfitView();
+      else if(typeof renderPaymentBreakdown==='function') renderPaymentBreakdown();
+    }
   }catch(e){}
 }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
@@ -926,14 +930,56 @@ function dashChangeMonth(val){
       chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
         <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
     }
+  } else if(val==='3'||val==='6'||val==='all'){
+    // Multi-month ranges: bucket by month so different months never collapse into one point.
+    let startMonths;
+    if(val==='all'){
+      // Find earliest sale month; default to last 12 months if none.
+      let earliest=now;
+      filteredSales.forEach(s=>{const d=parseDate(s);if(d<earliest)earliest=d;});
+      startMonths=(now.getFullYear()-earliest.getFullYear())*12+(now.getMonth()-earliest.getMonth());
+      if(!isFinite(startMonths)||startMonths<0)startMonths=0;
+      if(startMonths>23)startMonths=23; // cap at 24 months for readability
+    } else {
+      startMonths=parseInt(val)-1;
+    }
+    const monthNamesShort=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const buckets=[];
+    const keyIndex={};
+    for(let i=startMonths;i>=0;i--){
+      const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+      const key=d.getFullYear()+'-'+d.getMonth();
+      keyIndex[key]=buckets.length;
+      buckets.push({label:monthNamesShort[d.getMonth()]+' '+String(d.getFullYear()).slice(2),val:0});
+    }
+    filteredSales.forEach(s=>{
+      const d=parseDate(s);
+      const key=d.getFullYear()+'-'+d.getMonth();
+      if(keyIndex[key]!==undefined) buckets[keyIndex[key]].val+=s.total;
+    });
+    const maxSale=Math.max(...buckets.map(p=>p.val),1);
+    if(buckets.some(p=>p.val>0)){
+      const step=Math.max(1,Math.floor(buckets.length/8));
+      const xLabelsArr=buckets.filter((p,i)=>i%step===0||i===buckets.length-1).map((p,i,arr)=>{
+        const realIdx=buckets.indexOf(p);
+        const x=padL+(realIdx/(buckets.length-1||1))*plotW;
+        return {x,label:p.label};
+      });
+      chartHTML=makeChart(buckets,xLabelsArr,maxSale);
+    } else {
+      chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
+        <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
+    }
   } else {
+    // 'this' / 'last' month: bucket by day-of-month using the real number of days.
+    const targetMonth=val==='last'?new Date(now.getFullYear(),now.getMonth()-1,1):now;
+    const daysInMonth=new Date(targetMonth.getFullYear(),targetMonth.getMonth()+1,0).getDate();
     const dailySales={};
     filteredSales.forEach(s=>{
       const parts=s.date.split(/[\s/-]/);
       const day=parseInt(parts[0]);
       dailySales[day]=(dailySales[day]||0)+s.total;
     });
-    const daysInMonth=30;
     const chartPoints=[];
     for(let d=1;d<=daysInMonth;d++){
       chartPoints.push({day:d,label:d+'',val:dailySales[d]||0});
@@ -1271,15 +1317,17 @@ function refundItem(idx){
   if(!hasPermission('edit','invoices')){showNoAccess();return;}
   const s=viewInv; if(!s||!s.rows||!s.rows[idx])return;
   const r=s.rows[idx];
-  if(!confirm(`Refund ${r.item} (x${r.qty}) for ${rs(r.qty*r.price)}?`))return;
-  restoreItemStock(r);
-  s.rows.splice(idx,1);
-  s.total=s.rows.reduce((a,x)=>a+x.qty*x.price,0);
-  if(s.total<=0){s.received=0;s.refunded=true;}
-  else if(s.received>s.total)s.received=s.total;
-  persist(); refreshView();
-  document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s);
-  toast('Item refunded');logActivity('return','Refunded item from invoice');
+  confirmAsync('Refund <b>'+r.item+'</b> (x'+r.qty+') for <b>'+rs(r.qty*r.price)+'?</b>',{icon:'&#x1F504;',iconBg:'#fff0f0',title:'Refund Item',yesLabel:'Refund',yesColor:'#e74c3c'}).then(function(ok){
+    if(!ok)return;
+    restoreItemStock(r);
+    s.rows.splice(idx,1);
+    s.total=s.rows.reduce((a,x)=>a+x.qty*x.price,0);
+    if(s.total<=0){s.received=0;s.refunded=true;}
+    else if(s.received>s.total)s.received=s.total;
+    persist(); refreshView();
+    document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s);
+    toast('Item refunded');logActivity('return','Refunded item from invoice');
+  });
 }
 function replaceItem(idx){
   if(!hasPermission('edit','invoices')){showNoAccess();return;}
@@ -1330,29 +1378,33 @@ function updateReplacePreview(idx){
 function refundInvoice(){
   if(!hasPermission('edit','invoice')){showNoAccess();return;}
   const s=viewInv; if(s.refunded) return toast('Already refunded');
-  if(!confirm(`Refund invoice ${s.no} for ${rs(s.total)}? Stock will be restored and money recorded as refund.`)) return;
-  s.refunded=true;
-  (s.rows||[]).forEach(r=>restoreItemStock(r));
-  const p=store.parties.find(x=>x.name===s.party); if(p) p.balance-=(s.total-s.received);
-  store.refunds.push({id:id(),no:s.no,party:s.party,date:dispDate(),amount:s.total,orig:s.no});
-  if(s.received>0) store.payments.push({id:id(),dir:'out',party:s.party,amount:s.received,mode:'Cash',date:dispDate(),note:'Refund '+s.no});
-  persist(); refreshView(); toast('Refund done — sales recalculated'); closeModal('invViewModal'); nav('sale');
+  confirmAsync('Refund invoice <b>'+s.no+'</b> for <b>'+rs(s.total)+'?</b><br><span style="color:#888;font-size:12px">Stock will be restored and money recorded as refund.</span>',{icon:'&#x1F504;',iconBg:'#fff0f0',title:'Refund Invoice',yesLabel:'Refund',yesColor:'#e74c3c'}).then(function(ok){
+    if(!ok)return;
+    s.refunded=true;
+    (s.rows||[]).forEach(r=>restoreItemStock(r));
+    const p=store.parties.find(x=>x.name===s.party); if(p) p.balance-=(s.total-s.received);
+    store.refunds.push({id:id(),no:s.no,party:s.party,date:dispDate(),amount:s.total,orig:s.no});
+    if(s.received>0) store.payments.push({id:id(),dir:'out',party:s.party,amount:s.received,mode:'Cash',date:dispDate(),note:'Refund '+s.no,createdBy:s.createdBy||pmCurBranchCode(),createdByName:s.createdByName||pmCurBranchName()});
+    persist(); refreshView(); toast('Refund done — sales recalculated'); closeModal('invViewModal'); nav('sale');
+  });
 }
 function replaceInvoice(){
   if(!hasPermission('edit','invoices')){showNoAccess();return;}
   const s=viewInv;
-  if(!confirm(`Start replacement for ${s.no}? Original stays, and a NEW slip opens for new products.`)) return;
-  s.replaced=true;
-  (s.rows||[]).forEach(r=>restoreItemStock(r));
-  persist(); refreshView(); closeModal('invViewModal');
-  replaceFor=s.party;
-  openSale(); document.getElementById('pos_cust').value=s.party; toast('Add new products for replacement');
+  confirmAsync('Start replacement for <b>'+s.no+'?</b><br><span style="color:#888;font-size:12px">Original stays, and a NEW slip opens for new products.</span>',{icon:'&#x1F500;',iconBg:'#eff6ff',title:'Start Replacement',yesLabel:'Start',yesColor:'#6366f1'}).then(function(ok){
+    if(!ok)return;
+    s.replaced=true;
+    (s.rows||[]).forEach(r=>restoreItemStock(r));
+    persist(); refreshView(); closeModal('invViewModal');
+    replaceFor=s.party;
+    openSale(); document.getElementById('pos_cust').value=s.party; toast('Add new products for replacement');
+  });
 }
 let replaceFor=null;
-function trashCurrentInvoice(){
+async function trashCurrentInvoice(){
   if(!hasPermission('delete','invoices')){showNoAccess();return;}
   const s=viewInv;if(!s)return;
-  if(!confirm('Move invoice '+s.no+' to Recycle Bin?'))return;
+  if(!await confirmAsync('Move invoice <b>'+s.no+'</b> to Recycle Bin?',{title:'Move to Recycle Bin',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Move',yesColor:'#e74c3c'}))return;
   const idx=store.sales.findIndex(x=>x.id===s.id);
   if(idx>=0){
     const removed=store.sales.splice(idx,1)[0];
@@ -1362,10 +1414,10 @@ function trashCurrentInvoice(){
   toast('Invoice moved to recycle bin');
   logActivity('return','Moved '+s.no+' to recycle bin');
 }
-function trashItemById(iid){
+async function trashItemById(iid){
   if(!hasPermission('delete','item')){showNoAccess();return;}
   const it=store.items.find(x=>x.id===iid);if(!it)return;
-  if(!confirm('Move "'+it.name+'" to Recycle Bin?'))return;
+  if(!await confirmAsync('Move <b>"'+it.name+'"</b> to Recycle Bin?',{title:'Move to Recycle Bin',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Move',yesColor:'#e74c3c'}))return;
   const idx=store.items.findIndex(x=>x.id===iid);
   if(idx>=0){
     const removed=store.items.splice(idx,1)[0];
@@ -1375,10 +1427,10 @@ function trashItemById(iid){
   toast('Item moved to recycle bin');
   logActivity('return','Moved item "'+it.name+'" to recycle bin');
 }
-function trashPartyById(pid){
+async function trashPartyById(pid){
   if(!hasPermission('delete','party')){showNoAccess();return;}
   const p=store.parties.find(x=>x.id===pid);if(!p)return;
-  if(!confirm('Move "'+p.name+'" to Recycle Bin?'))return;
+  if(!await confirmAsync('Move <b>"'+p.name+'"</b> to Recycle Bin?',{title:'Move to Recycle Bin',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Move',yesColor:'#e74c3c'}))return;
   const idx=store.parties.findIndex(x=>x.id===pid);
   if(idx>=0){
     const removed=store.parties.splice(idx,1)[0];
@@ -1912,7 +1964,7 @@ function posRemarks(){
   ()=>{ posRemarksTxt=document.getElementById('f_remarks').value; closeModal('formModal'); toast('Remarks saved'); },'SAVE');
 }
 function posCreditPay(){
-  formModal('Other / Credit Payment',`<div class="field"><label>Payment Mode</label><select id="f_cmode"><option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Card Payment</option><option>Credit</option></select></div>
+  formModal('Other / Credit Payment',`<div class="field"><label>Payment Mode</label><select id="f_cmode"><option>Cash</option><option>Bank Transfer</option><option>Card Payment</option><option>Credit</option></select></div>
     <div class="field"><label>Amount</label><input id="f_camt" type="number" value="0"></div>
     <div class="field"><label>Reference / Note</label><input id="f cref" placeholder="Transaction ID or note"></div>`,
   ()=>{ const mode=document.getElementById('f_cmode').value; const amt=+document.getElementById('f_camt').value||0;
@@ -2516,9 +2568,9 @@ function renameCategory(old){
     const idx=store.categories.indexOf(old);if(idx>=0)store.categories[idx]=c;
     store.items.forEach(i=>{if(i.cat===old)i.cat=c;});persist();refreshView();closeModal('formModal');selCategory=c;vItems();toast('Category renamed');},'RENAME');
 }
-function deleteCategory(cat){
+async function deleteCategory(cat){
   if(!hasPermission('delete','item')){showNoAccess();return;}
-  if(!confirm(`Delete category "${cat}"? Items in this category will become uncategorized.`))return;
+  if(!await confirmAsync('Delete category <b>"'+cat+'"</b>?<br><span style="color:#888;font-size:12px">Items in this category will become uncategorized.</span>',{title:'Delete Category',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Delete',yesColor:'#e74c3c'}))return;
   store.categories=store.categories.filter(c=>c!==cat);persist();refreshView();selCategory='Items not in any Category';vItems();toast('Category deleted');logActivity('item','Deleted category: '+cat);
 }
 function moveToCategory(){
@@ -3259,11 +3311,11 @@ function sharePurchase(idx){
   else{navigator.clipboard.writeText(txt);toast('Copied to clipboard!')}
 }
 
-function deletePurchase(idx){
+async function deletePurchase(idx){
   if(!hasPermission('delete','item')){showNoAccess();return;}
   const p=(store.purchases||[])[idx];
   if(!p)return;
-  if(!confirm(`Delete purchase ${p.no}? This cannot be undone.`))return;
+  if(!await confirmAsync('Delete purchase <b>'+p.no+'</b>?<br><span style="color:#888;font-size:12px">This cannot be undone.</span>',{title:'Delete Purchase',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Delete',yesColor:'#e74c3c'}))return;
   (p.rows||[]).forEach(r=>restoreItemStock(r));
   store.purchases.splice(idx,1);
   persist();toast('Purchase deleted');vPurchase();
@@ -3596,9 +3648,9 @@ function printPurchaseOrder(idx){
   w.document.close();w.print();
 }
 
-function deletePurchaseOrder(idx){
+async function deletePurchaseOrder(idx){
   if(!hasPermission('delete','item')){showNoAccess();return;}
-  if(!confirm('Delete this Purchase Order?'))return;
+  if(!await confirmAsync('Delete this Purchase Order?',{title:'Delete Purchase Order',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Delete',yesColor:'#e74c3c'}))return;
   store.purchaseOrders.splice(idx,1);
   persist();toast('Deleted');vPurchaseOrder();
 }
@@ -3732,7 +3784,7 @@ function vPurchaseForm(){
         <div class="pf-bottom-left">
           <div class="pf-label">Payment Type</div>
           <select class="pf-pay-select" id="pfPayMode" onchange="pfTabs[${pfActiveTab}].payMode=this.value">
-            <option ${cur.payMode==='Cash'?'selected':''}>Cash</option><option ${cur.payMode==='Credit'?'selected':''}>Credit</option><option ${cur.payMode==='Card Payment'?'selected':''}>Card Payment</option><option ${cur.payMode==='UPI'?'selected':''}>UPI</option><option ${cur.payMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
+            <option ${cur.payMode==='Cash'?'selected':''}>Cash</option><option ${cur.payMode==='Credit'?'selected':''}>Credit</option><option ${cur.payMode==='Card Payment'?'selected':''}>Card Payment</option><option ${cur.payMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
           </select>
           <div class="pf-add-payment" onclick="toast('Multiple payment types coming soon')">+ Add Payment type</div>
         </div>
@@ -5527,7 +5579,7 @@ function vCreateInvoice(){
     <div class="nci-body">
       <div class="nci-left">
         <div class="nci-cust-row">
-          <div class="nci-fld"><label>Customer Name<b>*</b></label><input id="nciCust" value="${nciCustName}" placeholder="Enter Name" oninput="nciCustName=this.value;nciSearchCust();nciPreview()" onfocus="nciSearchCust()" autocomplete="off"><div class="nci-drop" id="nciCustDrop"></div></div>
+          <div class="nci-fld"><label>Customer Name<b>*</b></label><input id="nciCust" value="${nciCustName}" placeholder="Enter Name" oninput="nciCustName=this.value;nciPreview()" autocomplete="off"></div>
           <div class="nci-fld"><label>Customer Phone Number</label><div class="nci-phone"><span class="cc">+92</span><input id="nciPhone" value="${nciCustPhone}" placeholder="Enter Number" oninput="nciCustPhone=this.value;nciPreview()"></div></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:#f8f9fa;border-radius:10px;margin-bottom:12px;border:1px solid #e0e0e0">
@@ -5657,9 +5709,17 @@ function nciPreview(){
   const phone=(document.getElementById('nciPhone')?.value||'').trim();
   const rows=nciRows.filter(r=>(r.name||r.item)||r.price);
   const previewPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:b.phone;
+  const bizName=b.name||'My Business';
   pv.innerHTML=`<div class="nci-inv">
-    <div class="nci-inv-logo">${b.logo?`<img src="${b.logo}">`:`<div class="nci-inv-logotext">${b.name||'My Business'}</div>`}</div>
-    <div class="nci-inv-contact">${previewPhone?`Ph.No.: ${previewPhone}`:''}${b.email?`<br>Email: ${b.email}`:''}</div>
+    <div class="nci-inv-head">
+      <div class="nci-inv-logo">${b.logo?`<img src="${b.logo}">`:`<div class="nci-inv-logobox">${(bizName[0]||'B').toUpperCase()}</div>`}</div>
+      <div class="nci-inv-bizinfo">
+        <div class="nci-inv-bizname">${bizName}</div>
+        ${previewPhone?`<div class="nci-inv-bizline">Ph: ${previewPhone}</div>`:''}
+        ${b.email?`<div class="nci-inv-bizline">${b.email}</div>`:''}
+        ${b.address?`<div class="nci-inv-bizline">${b.address}</div>`:''}
+      </div>
+    </div>
     <div class="nci-dash"></div>
     <div class="nci-inv-title">Invoice</div>
     <div class="nci-inv-meta"><span>Invoice No.: ${invNo}</span><span>Date: ${dispDate()}</span></div>
@@ -5674,8 +5734,27 @@ function nciPreview(){
       <div class="nci-inv-tot-row"><span>Balance</span><span>:</span><span>${nciFmt(t.balance)}</span></div>
     </div>
     <div class="nci-dash"></div>
+    <div class="nci-inv-codes">
+      <div class="nci-inv-code-col">
+        <svg class="nci-inv-barcode" id="nciBarcodeSvg"></svg>
+        <div class="nci-inv-code-lbl">${invNo}</div>
+      </div>
+      <div class="nci-inv-code-col">
+        <div class="nci-inv-qr" id="nciQrBox"></div>
+        <div class="nci-inv-code-lbl">${previewPhone?'Scan: '+previewPhone:'Contact'}</div>
+      </div>
+    </div>
+    <div class="nci-dash"></div>
     ${st.showTerms!==false?`<div class="nci-inv-terms"><b>Terms &amp; Conditions</b><div>${st.terms||'Thanks for doing business with us!'}</div></div>`:''}
   </div>`;
+  // Render a scannable CODE128 barcode of the invoice number and a QR of the branch phone.
+  try{ if(window.JsBarcode){ JsBarcode('#nciBarcodeSvg', invNo, {format:'CODE128',width:1.5,height:42,fontSize:11,margin:0,displayValue:false}); } }catch(e){}
+  try{
+    const qb=document.getElementById('nciQrBox');
+    if(qb){ qb.innerHTML='';
+      if(window.QRCode && previewPhone){ new QRCode(qb,{text:String(previewPhone),width:80,height:80,correctLevel:QRCode.CorrectLevel.M}); }
+    }
+  }catch(e){}
 }
 function nciSwitchFull(){ openSale(); }
 function nciReset(){ nciRows=[{name:'',item:'',qty:1,price:0,size:''}]; nciDiscP=0; nciDiscAmt=0; nciTaxRate=0; nciReceived=0; nciFully=false; nciCustName=''; nciCustPhone=''; nciPayMode='Cash'; }
@@ -5903,7 +5982,7 @@ function savePaymentOut(dir){
   const formattedDate=dateParts[2]+'/'+dateParts[1]+'/'+dateParts[0];
   const finalAmount=amount-disc;
   if(finalAmount<=0) return toast('Enter a valid amount');
-  store.payments.push({id:id(),dir,party,amount:finalAmount,mode,date:formattedDate||dispDate(),receipt,desc,disc});
+  store.payments.push({id:id(),dir,party,amount:finalAmount,mode,date:formattedDate||dispDate(),receipt,desc,disc,createdBy:pmCurBranchCode(),createdByName:pmCurBranchName()});
   const pt=store.parties.find(x=>x.name===party);
   if(pt) pt.balance+=dir==='in'?-finalAmount:finalAmount;
   persist();
@@ -6002,12 +6081,12 @@ function viewUsers(){
     ${filteredUsers.length===0 && !adminRow ? '<tr><td colspan="'+(isBranch?6:7)+'" style="text-align:center;color:#888;padding:30px">No users yet. Click "+ Add User" to create one.</td></tr>' : ''}
     </tbody></table></div>`;
 }
-function deleteUser(uid){
+async function deleteUser(uid){
   if(!hasPermission('admin','admin-users')){showNoAccess();return;}
   const u=(store.users||[]).find(x=>x.id===uid);if(!u)return;
   var isBranch = store.currentUser && store.currentUser.role === 'branch';
   if(isBranch && u.createdBy !== store.currentUser.branchCode){toast('Cannot delete this user');return;}
-  if(!confirm('Delete user "'+u.name+'"? This action cannot be undone.'))return;
+  if(!await confirmAsync('Delete user <b>"'+u.name+'"</b>?<br><span style="color:#888;font-size:12px">This action cannot be undone.</span>',{title:'Delete User',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Delete',yesColor:'#e74c3c'}))return;
   store.users=(store.users||[]).filter(x=>x.id!==uid);
   persist();
   updateBadge();
@@ -6568,9 +6647,9 @@ function bcAddItem(){
   document.getElementById('bc_header').value='';document.getElementById('bc_line1').value='';document.getElementById('bc_line2').value='';
   bcUpdatePreview();
 }
-function bcEditQty(i){
+async function bcEditQty(i){
   const b=barcodeItems[i];if(!b)return;
-  const newQty=prompt('Enter quantity for '+b.name,b.qty);
+  const newQty=await promptAsync('Enter quantity for '+b.name,b.qty,{title:'Edit Quantity',type:'number',okLabel:'Update'});
   if(newQty===null)return;
   const q=parseInt(newQty);if(q<=0)return;
   b.qty=q;
@@ -6878,18 +6957,18 @@ function rbRestore(){
   toast(restored+' item(s) restored');
   logActivity('return','Restored '+restored+' item(s) from recycle bin');
 }
-function rbDeletePermanently(){
+async function rbDeletePermanently(){
   if(!trashSelected.size)return toast('Select items to delete');
-  if(!confirm('Permanently delete '+trashSelected.size+' item(s)? This cannot be undone.'))return;
+  if(!await confirmAsync('Permanently delete <b>'+trashSelected.size+'</b> item(s)?<br><span style="color:#888;font-size:12px">This cannot be undone.</span>',{title:'Delete Permanently',icon:'&#x26A0;&#xFE0F;',yesLabel:'Delete Forever',yesColor:'#e74c3c'}))return;
   store.trash=(store.trash||[]).filter(r=>!trashSelected.has(r.id));
   trashSelected=new Set();
   persist();vRecycle();
   toast('Items permanently deleted');
   logActivity('settings','Permanently deleted items from recycle bin');
 }
-function emptyTrash(){
+async function emptyTrash(){
   if(!store.trash||!store.trash.length)return toast('Recycle bin is already empty');
-  if(!confirm('Empty entire recycle bin? All '+store.trash.length+' items will be permanently deleted.'))return;
+  if(!await confirmAsync('Empty entire recycle bin?<br><span style="color:#888;font-size:12px">All '+store.trash.length+' items will be permanently deleted.</span>',{title:'Empty Recycle Bin',icon:'&#x26A0;&#xFE0F;',yesLabel:'Empty Bin',yesColor:'#e74c3c'}))return;
   const count=store.trash.length;
   store.trash=[];
   trashSelected=new Set();
@@ -7646,7 +7725,7 @@ function saveSettings(){
 }
 function restoreBackup(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ try{ const d=JSON.parse(e.target.result); localStorage.setItem(KEY,JSON.stringify(d)); toast('Backup restored'); location.reload(); }catch(err){ toast('Invalid backup file'); } }; r.readAsText(f); }
-function resetAll(){ if(confirm('Delete ALL data and start fresh?')){ localStorage.removeItem(KEY); location.reload(); } }
+async function resetAll(){ if(await confirmAsync('Delete <b>ALL</b> data and start fresh?<br><span style="color:#888;font-size:12px">This permanently erases everything on this device.</span>',{title:'Reset Everything',icon:'&#x26A0;&#xFE0F;',yesLabel:'Delete All',yesColor:'#e74c3c'})){ localStorage.removeItem(KEY); location.reload(); } }
 
 /* ============ COMPANY LIST ============ */
 let companyTabSel='my';
@@ -7855,6 +7934,54 @@ function closeModal(id){
 function formModal(t,html,onSave,label){ document.getElementById('formTitle').textContent=t; document.getElementById('formBody').innerHTML=html; document.getElementById('formSave').onclick=onSave||function(){closeModal('formModal')}; document.getElementById('formSave').textContent=label||'Save'; showModal('formModal'); }
 let tT; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2000); }
 
+/* ============ GENERIC CONFIRM / PROMPT (replace ugly browser dialogs) ============ */
+function confirmAsync(msg, opts){
+  opts=opts||{};
+  return new Promise(function(resolve){
+    var icon=document.getElementById('confirmIcon');
+    var title=document.getElementById('confirmTitle');
+    var msgEl=document.getElementById('confirmMsg');
+    var yesBtn=document.getElementById('confirmYesBtn');
+    var noBtn=document.getElementById('confirmNoBtn');
+    icon.innerHTML=opts.icon||'&#x2753;';
+    icon.style.background=opts.iconBg||'#fff0f0';
+    title.textContent=opts.title||'Are you sure?';
+    msgEl.innerHTML=msg;
+    yesBtn.textContent=opts.yesLabel||'Confirm';
+    yesBtn.style.background=opts.yesColor||'#e74c3c';
+    noBtn.textContent=opts.noLabel||'Cancel';
+    function cleanup(val){ closeModal('confirmModal'); yesBtn.onclick=null; noBtn.onclick=null; resolve(val); }
+    yesBtn.onclick=function(){ cleanup(true); };
+    noBtn.onclick=function(){ cleanup(false); };
+    showModal('confirmModal');
+    noBtn.focus();
+  });
+}
+function promptAsync(msg, defaultVal, opts){
+  opts=opts||{};
+  return new Promise(function(resolve){
+    var icon=document.getElementById('promptIcon');
+    var title=document.getElementById('promptTitle');
+    var msgEl=document.getElementById('promptMsg');
+    var input=document.getElementById('promptInput');
+    var yesBtn=document.getElementById('promptYesBtn');
+    var noBtn=document.getElementById('promptNoBtn');
+    icon.innerHTML=opts.icon||'&#x270F;&#xFE0F;';
+    icon.style.background=opts.iconBg||'#eff6ff';
+    title.textContent=opts.title||'Input Required';
+    msgEl.textContent=msg;
+    input.value=defaultVal||'';
+    input.type=opts.type||'text';
+    yesBtn.textContent=opts.okLabel||'OK';
+    function cleanup(val){ closeModal('promptModal'); yesBtn.onclick=null; noBtn.onclick=null; resolve(val); }
+    yesBtn.onclick=function(){ cleanup(input.value); };
+    noBtn.onclick=function(){ cleanup(null); };
+    input.onkeydown=function(e){ if(e.key==='Enter') cleanup(input.value); if(e.key==='Escape') cleanup(null); };
+    showModal('promptModal');
+    setTimeout(function(){ input.focus(); input.select(); },100);
+  });
+}
+
 /* item modal Product/Service toggle + tabs */
 document.querySelector('#itemModal .switch')?.addEventListener('click',function(){
   this.querySelector('i').style.left=this.querySelector('i').style.left==='22px'?'2px':'22px';
@@ -7956,6 +8083,120 @@ function logoutUser(){
 function confirmLogout(){}
 
 /* ============ PAYMENT MODE BREAKDOWN ============ */
+// Currently selected branch filter for the payments/profit modal ('all' or a branch code).
+window.pmBranchFilter = window.pmBranchFilter || 'all';
+// Best-effort cache of all created branches (so even zero-sale branches show as chips).
+window.pmBranchesCache = window.pmBranchesCache || [];
+
+// Branch code for the logged-in user ('admin' for owner/staff, branchCode for a branch login).
+function pmCurBranchCode(){
+  return (store.currentUser && store.currentUser.role==='branch') ? store.currentUser.branchCode : 'admin';
+}
+function pmCurBranchName(){
+  return (store.currentUser && store.currentUser.role==='branch') ? (store.currentUser.name||store.currentUser.branchCode) : 'Main / Admin';
+}
+// Map saleId -> branch code, used to attribute sale-linked payments to a branch.
+function pmSaleBranchMap(){
+  const m={};
+  (store.sales||[]).forEach(s=>{ m[s.id]=s.createdBy||'admin'; });
+  return m;
+}
+// Resolve which branch a payment belongs to.
+function pmPaymentBranch(p,saleMap){
+  if(p.createdBy) return p.createdBy;
+  if(p.saleId && saleMap[p.saleId]) return saleMap[p.saleId];
+  return 'admin';
+}
+// Build the list of branches that appear in the data, merged with the cached branch list.
+function pmBranchList(){
+  const map={};
+  (store.sales||[]).forEach(s=>{
+    const code=s.createdBy||'admin';
+    if(!map[code]) map[code]={code:code,name:code==='admin'?'Main / Admin':(s.createdByName||('Branch '+code))};
+    else if(code!=='admin' && s.createdByName && map[code].name.indexOf('Branch ')===0) map[code].name=s.createdByName;
+  });
+  if(!map['admin']) map['admin']={code:'admin',name:'Main / Admin'};
+  (window.pmBranchesCache||[]).forEach(b=>{
+    if(b && b.branchCode && !map[b.branchCode]) map[b.branchCode]={code:b.branchCode,name:b.name||('Branch '+b.branchCode)};
+  });
+  // Keep 'admin' first, then the rest alphabetically by name.
+  return Object.values(map).sort((a,b)=>a.code==='admin'?-1:b.code==='admin'?1:a.name.localeCompare(b.name));
+}
+// Sum of 'in' payments for a branch within the current date range (for chip labels).
+function pmBranchTotal(code,from,to,saleMap){
+  return (store.payments||[]).filter(p=>{
+    if(p.dir!=='in')return false;
+    const pd=parsePmDate(p.date); if(!pd||pd<from||pd>to)return false;
+    if(code==='all')return true;
+    return pmPaymentBranch(p,saleMap)===code;
+  }).reduce((a,p)=>a+(p.amount||0),0);
+}
+// Load all created branches from Firestore so empty branches still appear (owner only, best-effort).
+function pmLoadBranches(){
+  try{
+    if(!window.fbDB || !window.fbAuth || !window.fbAuth.currentUser) return;
+    window.fbDB.collection('branches').where('ownerUid','==',window.fbAuth.currentUser.uid).get().then(function(snap){
+      if(snap.empty) return;
+      const arr=[];
+      snap.forEach(d=>{ const b=d.data(); arr.push({branchCode:b.branchCode,name:b.name}); });
+      window.pmBranchesCache=arr;
+      if(document.getElementById('pmBranchBar') && document.getElementById('pmBranchBar').style.display!=='none') pmRenderBranchBar();
+    }).catch(function(){});
+  }catch(e){}
+}
+function toggleBranchBar(){
+  const bar=document.getElementById('pmBranchBar');
+  const btn=document.querySelector('.paym-branch-btn');
+  if(!bar) return;
+  if(bar.style.display==='none'){
+    bar.style.display='';
+    if(btn) btn.classList.add('active');
+    pmLoadBranches();
+    pmRenderBranchBar();
+  } else {
+    bar.style.display='none';
+    if(btn) btn.classList.remove('active');
+  }
+}
+function pmRenderBranchBar(){
+  const bar=document.getElementById('pmBranchBar');
+  if(!bar) return;
+  const fromDate=document.getElementById('pmFrom').value;
+  const toDate=document.getElementById('pmTo').value;
+  const fromParts=fromDate.split('-'),toParts=toDate.split('-');
+  const from=new Date(+fromParts[0],+fromParts[1]-1,+fromParts[2]);
+  const to=new Date(+toParts[0],+toParts[1]-1,+toParts[2]); to.setHours(23,59,59,999);
+  const saleMap=pmSaleBranchMap();
+  const chips=[{code:'all',name:'🏢 All Branches'}].concat(pmBranchList());
+  bar.innerHTML=chips.map(c=>{
+    const amt=pmBranchTotal(c.code,from,to,saleMap);
+    const active=window.pmBranchFilter===c.code?' active':'';
+    return '<div class="paym-branch-item'+active+'" onclick="pmSelectBranch(\''+c.code+'\')">'+
+      '<span>'+c.name+'</span>'+
+      '<span class="paym-branch-item-amt">'+rs(amt)+'</span>'+
+    '</div>';
+  }).join('');
+}
+// Update the toggle button text to reflect the currently selected branch.
+function pmUpdateBranchBtn(){
+  const btn=document.querySelector('.paym-branch-btn');
+  if(!btn) return;
+  const code=window.pmBranchFilter||'all';
+  if(code==='all'){ btn.innerHTML='🏢 Check Branches Payments'; }
+  else{ const b=pmBranchList().find(x=>x.code===code); btn.innerHTML='🏢 '+((b&&b.name)||'Branch'); }
+}
+function pmSelectBranch(code){
+  window.pmBranchFilter=code;
+  pmUpdateBranchBtn();
+  // Close the dropdown after a choice (toggle behaviour).
+  const bar=document.getElementById('pmBranchBar');
+  if(bar) bar.style.display='none';
+  const tbtn=document.querySelector('.paym-branch-btn');
+  if(tbtn) tbtn.classList.remove('active');
+  const profitDiv=document.getElementById('pmProfitView');
+  if(profitDiv && profitDiv.style.display!=='none') computeProfitView();
+  else renderPaymentBreakdown();
+}
 function showPaymentBreakdown(){
   const fromEl=document.getElementById('pmFrom');
   const toEl=document.getElementById('pmTo');
@@ -7963,6 +8204,13 @@ function showPaymentBreakdown(){
     fromEl.value='2020-01-01';
     toEl.value='2099-12-31';
   }
+  window.pmBranchFilter='all';
+  const bbar=document.getElementById('pmBranchBar');
+  if(bbar) bbar.style.display='none';
+  const bbtn=document.querySelector('.paym-branch-btn');
+  if(bbtn) bbtn.classList.remove('active');
+  pmUpdateBranchBtn();
+  pmLoadBranches();
   renderPaymentBreakdown();
   showModal('paymentModal');
 }
@@ -7974,11 +8222,15 @@ function renderPaymentBreakdown(){
   const from=new Date(+fromParts[0],+fromParts[1]-1,+fromParts[2]);
   const to=new Date(+toParts[0],+toParts[1]-1,+toParts[2]);
   to.setHours(23,59,59,999);
+  const saleMap=pmSaleBranchMap();
+  const branchFilter=window.pmBranchFilter||'all';
   const payments=(store.payments||[]).filter(p=>{
     if(p.dir!=='in')return false;
     const pd=parsePmDate(p.date);
     if(!pd)return false;
-    return pd>=from&&pd<=to;
+    if(pd<from||pd>to)return false;
+    if(branchFilter!=='all' && pmPaymentBranch(p,saleMap)!==branchFilter)return false;
+    return true;
   });
   const modes={};
   payments.forEach(p=>{
@@ -8005,9 +8257,12 @@ function renderPaymentBreakdown(){
   }).join('');
   const grandTotal=Object.values(modes).reduce((a,m)=>a+m.total,0);
   const totalPayments=Object.values(modes).reduce((a,m)=>a+m.count,0);
+  const branchLabel=(window.pmBranchFilter&&window.pmBranchFilter!=='all')?(()=>{const b=pmBranchList().find(x=>x.code===window.pmBranchFilter);return b?' · '+b.name:'';})():'';
   document.getElementById('pmTotalRow').innerHTML=
-    '<span class="paym-total-label">Total Collection ('+totalPayments+' payments)</span>'+
+    '<span class="paym-total-label">Total Collection ('+totalPayments+' payments)'+branchLabel+'</span>'+
     '<span class="paym-total-val">'+rs(grandTotal)+'</span>';
+  const bar=document.getElementById('pmBranchBar');
+  if(bar && bar.style.display!=='none') pmRenderBranchBar();
 }
 function parsePmDate(dateStr){
   if(!dateStr)return null;
@@ -8031,6 +8286,15 @@ function showProfitView(){
     btn.classList.remove('active');
     return;
   }
+  computeProfitView();
+  profitDiv.style.display='';
+  cardsDiv.style.display='none';
+  totalRow.style.display='none';
+  btn.textContent='📊 See Payments';
+  btn.classList.add('active');
+}
+function computeProfitView(){
+  const profitDiv=document.getElementById('pmProfitView');
   const fromDate=document.getElementById('pmFrom').value;
   const toDate=document.getElementById('pmTo').value;
   const fromParts=fromDate.split('-');
@@ -8038,11 +8302,14 @@ function showProfitView(){
   const from=new Date(+fromParts[0],+fromParts[1]-1,+fromParts[2]);
   const to=new Date(+toParts[0],+toParts[1]-1,+toParts[2]);
   to.setHours(23,59,59,999);
+  const branchFilter=window.pmBranchFilter||'all';
   const sales=(store.sales||[]).filter(s=>{
     if(s.refunded)return false;
     const pd=parsePmDate(s.date);
     if(!pd)return false;
-    return pd>=from&&pd<=to;
+    if(pd<from||pd>to)return false;
+    if(branchFilter!=='all' && (s.createdBy||'admin')!==branchFilter)return false;
+    return true;
   });
   let totalRevenue=0;
   let totalCost=0;
@@ -8084,11 +8351,8 @@ function showProfitView(){
       '<div class="paym-profit-bar"><div class="paym-profit-bar-fill" style="width:'+barWidth+'%;background:'+barColor+'"></div></div>'+
       '<span class="paym-profit-pct" style="color:'+barColor+'">'+margin+'%</span>'+
     '</div>';
-  profitDiv.style.display='';
-  cardsDiv.style.display='none';
-  totalRow.style.display='none';
-  btn.textContent='📊 See Payments';
-  btn.classList.add('active');
+  const bar=document.getElementById('pmBranchBar');
+  if(bar && bar.style.display!=='none') pmRenderBranchBar();
 }
 
 /* ============ BRANCH MANAGEMENT ============ */
@@ -8113,7 +8377,7 @@ async function checkBranchCodeExists(code) {
     
     return false;
   } catch (e) {
-    console.error('Error checking branch code: - app.js:8116', e.message);
+    console.error('Error checking branch code: - app.js:8170', e.message);
     // On error, assume not exists (safe to try this code)
     return false;
   }
@@ -8191,7 +8455,7 @@ async function saveBranch() {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     } catch (globalErr) {
-      console.warn('Could not save to globalBranchCodes: - app.js:8194', globalErr.message);
+      console.warn('Could not save to globalBranchCodes: - app.js:8248', globalErr.message);
       // Continue - this is optional
     }
 
@@ -8211,7 +8475,7 @@ async function saveBranch() {
 
   } catch (e) {
     errEl.textContent = 'Error: ' + (e.message || e.code);
-    console.error('saveBranch error - app.js:8214', e);
+    console.error('saveBranch error - app.js:8268', e);
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Branch'; }
   }
@@ -8376,7 +8640,7 @@ async function renderAllBranches() {
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:40px">Error loading branches</td></tr>';
     table.style.display = 'table';
-    console.error('renderAllBranches error - app.js:8379', e);
+    console.error('renderAllBranches error - app.js:8433', e);
   }
 }
 
@@ -8414,7 +8678,7 @@ async function doDeleteBranch(branchCode, branchName) {
     await renderAllBranches();
   } catch (e) {
     toast('Delete failed: ' + (e.message || e.code));
-    console.error('deleteBranch error - app.js:8417', e);
+    console.error('deleteBranch error - app.js:8471', e);
   }
 }
 
@@ -8495,7 +8759,7 @@ function fbBranchDoLogin() {
         setStatus('☁️ Saved · ' + new Date().toLocaleTimeString());
       }).catch(function(e){
         setStatus('⚠️ Save failed: ' + e.code);
-        console.error('cloudPush error - app.js:8498', e);
+        console.error('cloudPush error - app.js:8552', e);
       });
     }, 700);
   };
@@ -8512,7 +8776,7 @@ function fbBranchDoLogin() {
       updateBadge();
       if(typeof buildMenu==='function') buildMenu();
       if(typeof refreshAll==='function') refreshAll();
-    }catch(e){ console.error('applyRemote error - app.js:8515', e); }
+    }catch(e){ console.error('applyRemote error - app.js:8569', e); }
     finally{ applyingRemote = false; }
   }
 
@@ -8595,7 +8859,7 @@ function fbBranchDoLogin() {
             data: lastPushedJSON,
             memberUids: [],
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true }).catch(function(e){ console.error('create store doc error - app.js:8598', e); });
+          }, { merge: true }).catch(function(e){ console.error('create store doc error - app.js:8652', e); });
         }
         startSnapshot(dataUid);
         hideAuthModal();                             // data ready -> reveal the app
@@ -8605,7 +8869,7 @@ function fbBranchDoLogin() {
     }).catch(function(e){
       // No data loaded -> never fall back to in-memory data (could be another store's!)
       cloudReady = false; dataUid = null; isStaffSession = false;
-      console.error('loadUserData error - app.js:8608', e);
+      console.error('loadUserData error - app.js:8662', e);
       var errMsg = 'Please check your internet connection and try again.';
       if(e.code === 'user-deleted') errMsg = 'Your account has been removed. Contact admin.';
       else if(e.code === 'owner-store-missing') errMsg = 'Store data not found. Contact admin.';
@@ -8632,7 +8896,7 @@ function fbBranchDoLogin() {
       setStatus('☁️ Synced · ' + new Date().toLocaleTimeString());
     }, function(err){
       setStatus('⚠️ Sync error: ' + err.code);
-      console.error('onSnapshot error - app.js:8635', err);
+      console.error('onSnapshot error - app.js:8689', err);
     });
   }
 
@@ -8882,7 +9146,7 @@ function fbBranchDoLogin() {
 
   // ---- React to auth state ----
   function init(){
-    if(!window.fbAuth){ console.warn('Firebase not loaded - app.js:8885'); return; }
+    if(!window.fbAuth){ console.warn('Firebase not loaded - app.js:8939'); return; }
     showAuthModal();
     // Surface any error that happened during a Google redirect sign-in
     window.fbAuth.getRedirectResult().catch(function(e){ if(e&&e.code) setErr(gErr(e)); });
