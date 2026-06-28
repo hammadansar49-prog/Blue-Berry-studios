@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="autocomplete" content="off">
 <title>My Business - Billing</title>
-<link rel="stylesheet" href="styles.css?v=15">
+<link rel="stylesheet" href="styles.css?v=16">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Pirata+One&family=MedievalSharp&family=Grenze+Gotisch:wght@500;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -606,6 +606,23 @@
   </div>
 </div>
 
+<!-- ============ ADD UNIT CONVERSION ============ -->
+<div class="modal-overlay" id="convModal" style="z-index:9997">
+  <div class="conv-modal">
+    <div class="conv-head"><b>Add Conversion</b><span class="conv-x" onclick="closeModal('convModal')">✕</span></div>
+    <div class="conv-body">
+      <div class="conv-fld"><label>BASE UNIT</label><select id="convBase"></select></div>
+      <span class="conv-eq">=</span>
+      <div class="conv-fld conv-rate"><label>RATE</label><input id="convRate" type="number" value="0"></div>
+      <div class="conv-fld"><label>SECONDARY UNIT</label><select id="convSec"></select></div>
+    </div>
+    <div class="conv-actions">
+      <button class="conv-btn" onclick="saveConversion(false)">SAVE</button>
+      <button class="conv-btn" onclick="saveConversion(true)">SAVE &amp; NEW</button>
+    </div>
+  </div>
+</div>
+
 <!-- Login Modal -->
 <div id="loginModal" class="modal-overlay" style="z-index:9999">
   <div class="modal" style="max-width:420px;padding:30px;border-radius:16px">
@@ -699,6 +716,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=27"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>

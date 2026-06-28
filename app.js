@@ -2533,7 +2533,11 @@ function vItems(){
           <button class="cat-move-btn" onclick="addConversion()">Add Conversion</button>
         </div>
         <table class="cat-items-tbl"><thead><tr><th></th><th>CONVERSION</th></tr></thead>
-          <tbody><tr><td colspan="2" class="ip-empty">No Rows To Show</td></tr></tbody></table>
+          <tbody>${(()=>{const convs=(store.conversions||[]).filter(c=>selUnit&&c.base.split(' ')[0]===selUnit.full);
+            return convs.length?convs.map(c=>`<tr>
+              <td style="width:48px;text-align:center"><span class="conv-del" onclick="deleteConversion('${c.id}')" title="Remove" style="color:#bbb;cursor:pointer;font-size:15px">🗑</span></td>
+              <td>1 ${c.base} = <b>${c.rate}</b> ${c.secondary}</td></tr>`).join('')
+            :'<tr><td colspan="2" class="ip-empty">No Rows To Show</td></tr>';})()}</tbody></table>
       </div>
     </div>`;
   }
@@ -2595,7 +2599,41 @@ function addUnit(){
     persist();refreshView();closeModal('formModal');vItems();toast('Unit added');},'SAVE');
 }
 function addConversion(){
-  toast('Conversion feature coming soon');
+  if(!selUnit){toast('Select a unit first');return;}
+  const units=(store.units||[]).filter(u=>u&&u.toLowerCase()!=='none');
+  const baseSel=document.getElementById('convBase');
+  const secSel=document.getElementById('convSec');
+  if(!baseSel||!secSel){toast('Conversion dialog not found');return;}
+  const baseUnitStr=units.find(u=>u.split(' ')[0]===selUnit.full)||units[0]||'';
+  baseSel.innerHTML=units.map(u=>`<option value="${u}" ${u===baseUnitStr?'selected':''}>1${u}</option>`).join('');
+  secSel.innerHTML='<option value="None">None</option>'+units.map(u=>`<option value="${u}">${u}</option>`).join('');
+  document.getElementById('convRate').value=0;
+  showModal('convModal');
+}
+function saveConversion(andNew){
+  const baseEl=document.getElementById('convBase');
+  const rateEl=document.getElementById('convRate');
+  const secEl=document.getElementById('convSec');
+  if(!baseEl||!rateEl||!secEl)return;
+  const base=baseEl.value;
+  const rate=+rateEl.value||0;
+  const sec=secEl.value;
+  if(!sec||sec==='None')return toast('Select a secondary unit');
+  if(base===sec)return toast('Base and secondary unit cannot be the same');
+  if(rate<=0)return toast('Enter a valid rate');
+  if(!store.conversions)store.conversions=[];
+  if(store.conversions.some(c=>c.base===base&&c.secondary===sec))return toast('This conversion already exists');
+  store.conversions.push({id:id(),base:base,rate:rate,secondary:sec});
+  persist();
+  logActivity('item','Added unit conversion: 1 '+base+' = '+rate+' '+sec);
+  toast('Conversion added');
+  if(andNew){ rateEl.value=0; secEl.value='None'; }
+  else closeModal('convModal');
+  vItems();
+}
+function deleteConversion(cid){
+  store.conversions=(store.conversions||[]).filter(c=>c.id!==cid);
+  persist(); toast('Conversion removed'); vItems();
 }
 function renderItemList(q){
   const items=q?store.items.filter(i=>i.name.toLowerCase().includes(q)):store.items;
