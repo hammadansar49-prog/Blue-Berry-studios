@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAROBAR — Google Login</title>
+<style>
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f6fa;display:grid;place-items:center;min-height:100vh;margin:0}
+  .box{background:#fff;padding:34px 38px;border-radius:16px;box-shadow:0 12px 44px rgba(0,0,0,.12);text-align:center;max-width:380px;width:90%}
+  .cloud{font-size:34px}
+  h1{color:#e0413e;margin:6px 0 4px;font-size:26px}
+  .muted{color:#888;font-size:14px;margin-bottom:22px;line-height:1.5}
+  button{background:#fff;border:1.5px solid #e2e2e2;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:600;cursor:pointer;display:inline-flex;gap:10px;align-items:center;justify-content:center;width:100%}
+  button:hover{background:#f7f7f7}
+  .ok{color:#16a34a;font-weight:700;font-size:16px;line-height:1.5}
+  .err{color:#e0413e;font-size:13px;margin-top:12px;min-height:16px}
+  .g{width:20px;height:20px}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+</head>
+<body>
+<div class="box">
+  <div class="cloud">☁️</div>
+  <h1>KAROBAR</h1>
+  <div id="msg" class="muted">Apne Google account se login karein. Login hote hi KAROBAR app khud khul jayegi.</div>
+  <button id="btn">
+    <img class="g" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
+    Continue with Google
+  </button>
+  <div id="err" class="err"></div>
+</div>
+
+<script>
+// Same Firebase project as the app (auth only).
+var firebaseConfig = {
+  apiKey: "AIzaSyBu0chDs6uecU0wJmZJLnsix2-j9TT-TgQ",
+  authDomain: "karobar-3dad1.firebaseapp.com",
+  projectId: "karobar-3dad1",
+  storageBucket: "karobar-3dad1.firebasestorage.app",
+  messagingSenderId: "963401809133",
+  appId: "1:963401809133:web:1f041d69eb7f6400d0a0e4"
+};
+firebase.initializeApp(firebaseConfig);
+var auth = firebase.auth();
+var provider = new firebase.auth.GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
+
+function show(text){ document.getElementById('msg').innerHTML = '<span class="ok">' + text + '</span>'; document.getElementById('btn').style.display='none'; }
+function err(t){ document.getElementById('err').textContent = t; }
+
+// Send the captured Google credential back to the KAROBAR desktop app.
+function sendBack(cred){
+  var q = '/__google_done?idToken=' + encodeURIComponent(cred.idToken || '') +
+          '&accessToken=' + encodeURIComponent(cred.accessToken || '');
+  fetch(q).then(function(){
+    show('✅ Login ho gaya!<br>KAROBAR app khud khul jayegi.<br>Ye tab band kar dein.');
+  }).catch(function(){
+    show('✅ Google login ho gaya. Agar app na khule to dobara try karein.');
+  });
+}
+
+// If we came back from a redirect sign-in, finish it.
+auth.getRedirectResult().then(function(result){
+  if (result && result.credential) sendBack(result.credential);
+}).catch(function(e){ err(e.code || e.message); });
+
+document.getElementById('btn').onclick = function(){
+  err('');
+  auth.signInWithPopup(provider).then(function(result){
+    if (result && result.credential) sendBack(result.credential);
+  }).catch(function(e){
+    var c = e.code || '';
+    if (c.indexOf('popup') !== -1) {
+      // Popup blocked -> full page redirect (always works in a real browser)
+      auth.signInWithRedirect(provider).catch(function(e2){ err(e2.code || e2.message); });
+    } else {
+      err(e.code || e.message);
+    }
+  });
+};
+</script>
+</body>
+</html>

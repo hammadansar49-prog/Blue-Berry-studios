@@ -1896,10 +1896,29 @@ function posSearchKey(ev){
     posBarcodeAutoAdd(q);
   }
 }
+function findItemByScan(code){
+  var c=(code||'').trim().toLowerCase();
+  if(!c)return null;
+  // 1) exact item code, 2) exact barcode field, 3) exact name, 4) name contains
+  return store.items.find(function(x){return (x.code||'').toLowerCase()===c;})
+      || store.items.find(function(x){return (x.barcode||'').toLowerCase()===c;})
+      || store.items.find(function(x){return (x.name||'').toLowerCase()===c;})
+      || store.items.find(function(x){return (x.name||'').toLowerCase().indexOf(c)>=0;})
+      || null;
+}
 function posBarcodeAutoAdd(code){
   if(!code)return;
-  var it=store.items.find(function(x){return (x.code||'').toLowerCase()===code.toLowerCase();});
-  if(!it)return;
+  var it=findItemByScan(code);
+  if(!it){toast('❌ No item found for: '+code);return;}
+  // If the item is already in the bill, just bump its quantity.
+  var existIdx=-1;
+  for(var j=0;j<posRows.length;j++){ if(posRows[j].item===it.name){existIdx=j;break;} }
+  if(existIdx>=0){
+    posRows[existIdx].qty=(+posRows[existIdx].qty||0)+1;
+    posRenderRows(); posCalcTotal();
+    toast('⚡ '+it.name+' × '+posRows[existIdx].qty);
+    return;
+  }
   var targetIdx=-1;
   for(var i=0;i<posRows.length;i++){
     if(!posRows[i].item||posRows[i].item===''){targetIdx=i;break;}
@@ -1909,12 +1928,20 @@ function posBarcodeAutoAdd(code){
   posRows[targetIdx].qty=1;
   posRenderRows();
   posCalcTotal();
-  toast('⚡ Added: '+it.name+' ('+it.code+')');
+  toast('⚡ Added: '+it.name+(it.code?' ('+it.code+')':''));
 }
 function nciBarcodeAutoAdd(code){
   if(!code)return;
-  var it=store.items.find(function(x){return (x.code||'').toLowerCase()===code.toLowerCase();});
-  if(!it)return;
+  var it=findItemByScan(code);
+  if(!it){toast('❌ No item found for: '+code);return;}
+  var existIdx=-1;
+  for(var j=0;j<nciRows.length;j++){ if((nciRows[j].item||nciRows[j].name)===it.name){existIdx=j;break;} }
+  if(existIdx>=0){
+    nciRows[existIdx].qty=(+nciRows[existIdx].qty||0)+1;
+    nciRenderRows();nciCalc();
+    toast('⚡ '+it.name+' × '+nciRows[existIdx].qty);
+    return;
+  }
   var targetIdx=-1;
   for(var i=0;i<nciRows.length;i++){
     if(!nciRows[i].item||nciRows[i].item===''){targetIdx=i;break;}
@@ -1922,7 +1949,7 @@ function nciBarcodeAutoAdd(code){
   if(targetIdx===-1){nciAddRow();targetIdx=nciRows.length-1;}
   nciPickItem(targetIdx,it.id);
   nciRenderRows();nciCalc();
-  toast('⚡ Added: '+it.name+' ('+it.code+')');
+  toast('⚡ Added: '+it.name+(it.code?' ('+it.code+')':''));
 }
 
 let posAdditional=0, posBillDisc=0, posLoyalty=0, posRemarksTxt='';
@@ -9075,6 +9102,13 @@ function fbBranchDoLogin() {
   };
 
   window.fbGoogleLogin = function(){
+    // Desktop app: Google sign-in cannot run inside the Electron window, so
+    // open it in the user's real browser and finish via the returned token.
+    if (window.karobarDesktop && window.karobarDesktop.isDesktop) {
+      setErr('Google login aapke browser mein khul raha hai — wahan login karein, app khud chalu ho jayegi.');
+      try { window.karobarDesktop.openGoogleLogin(); } catch (e) { setErr('Browser khol nahi saka.'); }
+      return;
+    }
     setErr('Opening Google login...');
     var provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
@@ -9095,6 +9129,20 @@ function fbBranchDoLogin() {
     if(e.code==='auth/unauthorized-domain') return 'Please add this domain in Firebase Console > Authentication > Settings > Authorized domains.';
     if(e.code==='auth/account-exists-with-different-credential') return 'This email is already registered via a different sign-in method.';
     return e.code || e.message;
+  }
+
+  // Desktop app: receive the Google credential captured in the browser and
+  // complete sign-in inside the app.
+  if (window.karobarDesktop && typeof window.karobarDesktop.onGoogleCredential === 'function') {
+    window.karobarDesktop.onGoogleCredential(function(d){
+      try {
+        if (!d || !d.idToken) { setErr('Google login adhura raha — dobara try karein.'); return; }
+        setErr('Google login complete ho raha hai...');
+        var cred = firebase.auth.GoogleAuthProvider.credential(d.idToken, d.accessToken || null);
+        window.fbAuth.signInWithCredential(cred).then(function(){ setErr(''); })
+          .catch(function(e){ setErr(gErr(e)); });
+      } catch (e) { setErr('Google sign-in failed.'); }
+    });
   }
 
   // ---- Secondary Firebase app (creates staff accounts WITHOUT logging the owner out) ----

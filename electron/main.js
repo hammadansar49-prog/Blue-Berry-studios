@@ -11,7 +11,7 @@
 // Supports Windows 7, 8, 8.1, 10 and 11 (Electron 22.x is the last
 // line that still supports Windows 7/8).
 // ============================================================
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -23,6 +23,7 @@ app.disableHardwareAcceleration();
 
 let mainWindow = null;
 let localServer = null;
+let serverPort = 0;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -46,7 +47,23 @@ function startLocalServer(rootDir) {
   return new Promise(function (resolve, reject) {
     const server = http.createServer(function (req, res) {
       try {
-        let pathname = decodeURIComponent(url.parse(req.url).pathname || '/');
+        const parsed = url.parse(req.url, true);
+        // Google login helper (in the system browser) posts the captured
+        // credential here; relay it to the app window to finish sign-in.
+        if (parsed.pathname === '/__google_done') {
+          const tokens = {
+            idToken: parsed.query.idToken || '',
+            accessToken: parsed.query.accessToken || ''
+          };
+          if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.send('google-credential', tokens);
+            try { mainWindow.show(); mainWindow.focus(); } catch (e) {}
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end('<!doctype html><meta charset="utf-8"><body style="font-family:Segoe UI,Arial,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f5f6fa"><div style="text-align:center"><div style="font-size:40px">✅</div><h2 style="color:#16a34a">Login ho gaya!</h2><p style="color:#666">KAROBAR app khud khul jayegi. Ye tab band kar dein.</p></div></body>');
+          return;
+        }
+        let pathname = decodeURIComponent(parsed.pathname || '/');
         if (pathname === '/' || pathname === '') pathname = '/index.html';
         // strip leading slash and normalise to avoid path traversal
         const safe = path.normalize(pathname).replace(/^([/\\])+/, '');
@@ -83,7 +100,8 @@ function createWindow(startUrl) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      spellcheck: false
+      spellcheck: false,
+      preload: path.join(__dirname, 'preload.js')
     }
   });
 
@@ -111,6 +129,12 @@ function createWindow(startUrl) {
   });
 }
 
+// The app asks us to open the Google login page in the user's real browser.
+ipcMain.handle('karobar-open-google', function () {
+  if (serverPort) shell.openExternal('http://localhost:' + serverPort + '/google.html');
+  return true;
+});
+
 app.whenReady().then(function () {
   Menu.setApplicationMenu(null); // hide the default Electron menu bar
 
@@ -123,8 +147,9 @@ app.whenReady().then(function () {
     const rootDir = path.join(__dirname, '..');
     startLocalServer(rootDir).then(function (server) {
       localServer = server;
-      const port = server.address().port;
-      createWindow('http://127.0.0.1:' + port + '/index.html');
+      serverPort = server.address().port;
+      // Use localhost (an authorized Firebase domain) so Google sign-in works.
+      createWindow('http://localhost:' + serverPort + '/index.html');
     }).catch(function (e) {
       // Fallback to file:// if the server somehow can't start.
       createWindow('file://' + path.join(rootDir, 'index.html'));

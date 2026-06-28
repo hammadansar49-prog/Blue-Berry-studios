@@ -25,6 +25,7 @@
     "files": [
       "electron/**/*",
       "index.html",
+      "google.html",
       "app.js",
       "styles.css",
       "firebase-config.js",
