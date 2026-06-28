@@ -52,7 +52,7 @@ const PERMISSIONS = {
     admin:[]
   },
   cashier: {
-    view:['dashboard','parties','items','invoices'],
+    view:['dashboard','parties','items','invoices','barcode','recycle'],
     create:['invoice'],
     edit:[],
     delete:[],
@@ -167,15 +167,13 @@ const MENU=[
   {t:'Sync, Share & Backup', ic:'🔄', perm:'admin-users', sub:[
     {k:'useractivity', t:'User Activity', dot:true, perm:'admin-users'},
     {k:'restorebackup', t:'Restore Backup', perm:'restore-backup'}]},
-  {t:'Utilities', ic:'🛠️', perm:'import', sub:[
+  {t:'Utilities', ic:'🛠️', sub:[
     {k:'importitems', t:'Import Items', perm:'import'},
     {k:'barcode', t:'Barcode Generator', perm:'barcode'},
     {k:'bulkupdate', t:'Update Items In Bulk', perm:'import'},
     {k:'importparties', t:'Import Parties', perm:'import'},
     {k:'exportitems', t:'Export Items', perm:'export'},
-    {k:'recyclebin', t:'Recycle Bin', perm:'recycle'},
-    {k:'verifydata', t:'Verify My Data', perm:'import'},
-    {k:'closefy', t:'Close Financial Year', perm:'import'}]},
+    {k:'recyclebin', t:'Recycle Bin', perm:'recycle'}]},
   {k:'settings', t:'Settings', ic:'⚙️', perm:'settings'}
 ];
 
