@@ -23,6 +23,8 @@ function refreshOpenModals(){
       if(pv&&pv.style.display!=='none'&&typeof computeProfitView==='function') computeProfitView();
       else if(typeof renderPaymentBreakdown==='function') renderPaymentBreakdown();
     }
+    var cm=document.getElementById('companyModal');
+    if(cm&&cm.classList.contains('show')&&typeof renderCompanies==='function') renderCompanies();
   }catch(e){}
 }
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
@@ -4333,7 +4335,7 @@ function vReports(){
       <div id="rep_body"></div></div></div>`;
   drawRep();
 }
-function pickRep(r){ repSel=r; vReports(); }
+function pickRep(r){ repSel=r; window.branchFocus=null; vReports(); }
 function inRange(dateStr){ if(!repFrom&&!repTo)return true; const d=toISO(dateStr);
   if(repFrom&&d<repFrom)return false; if(repTo&&d>repTo)return false; return true; }
 function toISO(d){ if(d.includes('-')&&d.length===10&&d[2]==='-'){ const p=d.split('-'); return p[2]+'-'+p[1]+'-'+p[0]; } return d; }
@@ -4753,10 +4755,26 @@ function drawRep(){
         }
       });
     });
-    const branches=Object.values(branchMap).sort((a,b)=>b.total-a.total);
+    let branches=Object.values(branchMap).sort((a,b)=>b.total-a.total);
+    // If the admin opened a specific branch from the Company List, focus on it.
+    const focus=window.branchFocus;
+    let focusName='';
+    if(focus){
+      let only=branches.filter(b=>b.code===focus);
+      if(!only.length){
+        const bn=(typeof adminBranchList==='function'?(adminBranchList().find(x=>x.code===focus)||{}):{}).name||('Branch '+focus);
+        only=[{name:bn,code:focus,sales:[],total:0,received:0,items:{}}];
+      }
+      focusName=only[0].name;
+      branches=only;
+    }
     const grandTotal=branches.reduce((a,b)=>a+b.total,0);
     const grandReceived=branches.reduce((a,b)=>a+b.received,0);
     html=`
+    ${focus?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <button onclick="window.branchFocus=null;vReports()" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-weight:600;font-size:13px;cursor:pointer">← All Branches</button>
+      <div style="font-weight:800;font-size:16px">🏪 ${focusName}</div>
+    </div>`:''}
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
       <div style="flex:1;min-width:160px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:12px;padding:18px;color:#fff">
         <div style="font-size:12px;opacity:.8;margin-bottom:4px">Total Branches</div>
@@ -4795,7 +4813,7 @@ function drawRep(){
             <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width .5s"></div>
           </div>
         </div>
-        <div style="display:none">
+        <div style="display:${focus?'':'none'}">
           <div style="padding:12px 20px;font-size:13px;font-weight:700;color:#888;border-bottom:1px solid #f0f0f0">Item-wise breakdown</div>
           ${sortedItems.length?`<table class="hub-table"><thead><tr><th>#</th><th>ITEM</th><th class="right">QTY SOLD</th><th class="right">REVENUE</th><th>SIZE BREAKDOWN</th></tr></thead><tbody>
           ${sortedItems.map((it,idx)=>{
@@ -7789,13 +7807,36 @@ document.addEventListener('click',()=>document.getElementById('tbCompanyMenu')?.
 function openCompanyList(){ document.getElementById('tbCompanyMenu').classList.remove('show'); companyTabSel='my';
   const cur=(store.companies||[]).find(c=>c.current); if(cur&&store.business.name) cur.name=store.business.name;
   document.getElementById('cmPhone').textContent=(store.account&&store.account.phone)||'—'; companyTab('my'); showModal('companyModal'); }
-function companyTab(t){ companyTabSel=t; document.querySelectorAll('#companyModal .cm-tab').forEach(x=>x.classList.toggle('active',x.dataset.ct===t)); renderCompanies(); }
+function companyTab(t){ companyTabSel=t; document.querySelectorAll('#companyModal .cm-tab').forEach(x=>x.classList.toggle('active',x.dataset.ct===t)); if(t==='shared'){ try{ pmLoadBranches(); }catch(e){} } renderCompanies(); }
+// All branches the admin created — merged from the live cloud branch list and
+// from the (synced) sales data, so names stay realtime as the admin renames them.
+function adminBranchList(){
+  const map={};
+  (store.sales||[]).forEach(s=>{
+    const code=s.createdBy;
+    if(code&&code!=='admin'){
+      if(!map[code])map[code]={code:code,name:s.createdByName||('Branch '+code),phone:s.branchPhone||''};
+      else if(s.createdByName)map[code].name=s.createdByName;
+    }
+  });
+  // Cloud branch list (authoritative names set by the admin) overrides snapshots
+  (window.pmBranchesCache||[]).forEach(b=>{
+    if(b&&b.branchCode){
+      if(!map[b.branchCode])map[b.branchCode]={code:b.branchCode,name:b.name||('Branch '+b.branchCode),phone:b.phone||''};
+      else { if(b.name)map[b.branchCode].name=b.name; if(b.phone)map[b.branchCode].phone=b.phone; }
+    }
+  });
+  return Object.values(map).sort((a,b)=>a.name.localeCompare(b.name));
+}
 function renderCompanies(){
   const q=(document.getElementById('cmSearch').value||'').toLowerCase();
   const sub=document.getElementById('cmSub'), list=document.getElementById('cmList'), note=document.getElementById('cmNote');
   if(companyTabSel==='my'){
     sub.textContent='Below are the company that are created by you';
     note.textContent='';
+    // Keep the current company's name in sync with the admin's business name (realtime).
+    const cur=(store.companies||[]).find(c=>c.current);
+    if(cur&&store.business.name)cur.name=store.business.name;
     const rows=(store.companies||[]).filter(c=>(c.name||'').toLowerCase().includes(q));
     list.innerHTML=rows.length?rows.map(c=>`<div class="cm-card">
       <div class="cm-card-name">${c.name||'Untitled'} ${c.current?'<span class="cm-cur">● Current Company</span>':''}</div>
@@ -7806,16 +7847,23 @@ function renderCompanies(){
         <span class="cm-dots" onclick="toast('Company options (demo)')">⋮</span>
       </div></div>`).join(''):`<div class="cm-empty">No companies found</div>`;
   } else {
-    sub.textContent='Below are the company that are shared with you';
-    note.textContent='Note: These companies are not owned by you and are only available for working when internet connection is available.';
-    const rows=(store.sharedCompanies||[]).filter(c=>(c.name||'').toLowerCase().includes(q));
-    list.innerHTML=rows.length?rows.map(c=>`<div class="cm-card">
-      <div><div class="cm-card-name">${c.name}</div><div class="cm-card-sub">Admin Phone: ${c.adminPhone||'—'}</div></div>
+    sub.textContent='Below are your branches — open any branch to see its sales & items';
+    note.textContent='Tip: Branch data updates in real time. Open a branch to view everything created under it.';
+    const branches=adminBranchList().filter(b=>(b.name||'').toLowerCase().includes(q)||(b.code||'').indexOf(q)>=0);
+    list.innerHTML=branches.length?branches.map(b=>`<div class="cm-card">
+      <div><div class="cm-card-name">🏪 ${b.name}</div><div class="cm-card-sub">Branch Code: ${b.code}${b.phone?' · Ph: '+b.phone:''}</div></div>
       <div class="cm-card-right">
-        <button class="cm-open" onclick="openCompany('${c.id}')">Open</button>
-        <span class="cm-dots" onclick="toast('Company options (demo)')">⋮</span>
-      </div></div>`).join(''):`<div class="cm-empty">No companies shared with you</div>`;
+        <button class="cm-open" onclick="openBranchView('${b.code}')">Open</button>
+        <span class="cm-dots" onclick="toast('Branch options coming soon')">⋮</span>
+      </div></div>`).join(''):`<div class="cm-empty">No branches created yet. Create branches from the Branches page.</div>`;
   }
+}
+// Admin opens a branch -> jump into the Branch Sales report focused on that branch.
+function openBranchView(code){
+  closeModal('companyModal');
+  window.branchFocus=code;
+  repSel='Branch Sales';
+  nav('reports');
 }
 function openCompany(cid){
   if(companyTabSel==='my'){ (store.companies||[]).forEach(c=>c.current=(c.id===cid)); const c=store.companies.find(x=>x.id===cid);
@@ -8193,9 +8241,12 @@ function pmLoadBranches(){
     window.fbDB.collection('branches').where('ownerUid','==',window.fbAuth.currentUser.uid).get().then(function(snap){
       if(snap.empty) return;
       const arr=[];
-      snap.forEach(d=>{ const b=d.data(); arr.push({branchCode:b.branchCode,name:b.name}); });
+      snap.forEach(d=>{ const b=d.data(); arr.push({branchCode:b.branchCode,name:b.name,phone:b.phone||''}); });
       window.pmBranchesCache=arr;
       if(document.getElementById('pmBranchBar') && document.getElementById('pmBranchBar').style.display!=='none') pmRenderBranchBar();
+      // Refresh the Company List "shared" tab if it is open (real-time branch names)
+      var cm=document.getElementById('companyModal');
+      if(cm && cm.classList.contains('show') && companyTabSel==='shared' && typeof renderCompanies==='function') renderCompanies();
     }).catch(function(){});
   }catch(e){}
 }
