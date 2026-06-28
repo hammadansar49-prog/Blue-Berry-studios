@@ -68,6 +68,7 @@
       <div class="pos-inv-tabs" id="posInvTabs">
         <!-- rendered dynamically by posRenderTabs() -->
       </div>
+      <button class="pos-exchange-btn" onclick="closeModal('saleModal');nav('availablestock')" style="background:#1e293b;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;margin-left:8px;white-space:nowrap"><span style="font-size:15px">&#x1F4E6;</span> Available Stock</button>
       <button class="pos-exchange-btn" onclick="closeModal('saleModal');nav('sale')">Exchange / Refund</button>
       <div class="pos-settings-gear" onclick="togglePosSettings()">⚙</div>
     </div>
@@ -175,6 +176,7 @@
         <button class="pos-inv-btn" onclick="posRemarks()">Remarks [F12]</button>
         <button class="pos-inv-btn" onclick="posCreditPay()">Other/Credit Payments [Ctrl+M]</button>
         <button class="pos-inv-btn return-btn" onclick="posReturnExchange()">Return/Exchange</button>
+        <button class="pos-inv-btn" onclick="closeModal('saleModal');nav('availablestock')" style="background:#1e293b;color:#fff;border-radius:6px;font-weight:600;display:flex;align-items:center;gap:5px"><span style="font-size:14px">&#x1F4E6;</span> Available Stock</button>
       </div>
     </div>
   </div>
