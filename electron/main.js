@@ -24,6 +24,7 @@ function createWindow() {
     show: false,
     backgroundColor: '#ffffff',
     title: 'Blue Berry Studios',
+    icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

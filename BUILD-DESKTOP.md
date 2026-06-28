@@ -69,14 +69,19 @@ Is `.exe` ko aap kisi bhi Windows machine par bhej kar install kar sakte ho.
 
 ---
 
-## 5. App ka icon (optional, behtar look ke liye)
+## 5. App ka icon
 
-Default Electron icon aata hai. Apna logo lagane ke liye:
+App ka icon already set hai: **black background + white "KAROBAR"** (`assets/icon.ico`).
+Yeh installer, taskbar, desktop shortcut sab par lag jata hai.
 
-1. Ek `icon.ico` banao (kam se kam 256×256, multi-size best).
-2. `assets/icon.ico` mein rakho.
-3. `package.json` ke `build.win` mein add karo: `"icon": "assets/icon.ico"`.
-4. Phir se `npm run dist`.
+Icon dobara banana / badalna ho to:
+
+```bash
+npm run icon
+```
+
+Yeh `scripts/make-icon.js` chala kar `assets/icon.ico` + `assets/icon.png` naye se bana deta hai
+(text ya color change karna ho to `scripts/make-icon.js` edit kar lo).
 
 ---
 
