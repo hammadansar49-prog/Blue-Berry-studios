@@ -1582,10 +1582,18 @@ function posRemoveRow(i){
 function clearZero(el){if(el.value==='0')el.value='';}
 function posGetSizeOptions(itemName){
   const it=store.items.find(x=>x.name===itemName);
+  const allSizes=['XS','S','M','L','XL','XXL','XXXL'];
   if(it&&it.sizes&&it.sizes.length){
-    return it.sizes.map(sz=>`<option value="${sz.size}" ${sz.stock<=0?'disabled style="color:#ccc"':''}>${sz.size} (${sz.stock})${sz.stock<=0?' - OUT':''}</option>`).join('');
+    const sizeMap={};it.sizes.forEach(sz=>{sizeMap[sz.size]=sz.stock;});
+    return allSizes.map(sz=>{
+      const stock=sizeMap[sz];
+      const isDefined=stock!==undefined;
+      const qty=isDefined?stock:0;
+      if(!isDefined) return '';
+      return `<option value="${sz}" ${qty<=0?'disabled style="color:#ccc"':''}>${sz} (${qty})${qty<=0?' - OUT':''}</option>`;
+    }).join('');
   }
-  return['XS','S','M','L','XL','XXL','XXXL'].map(sz=>`<option>${sz}</option>`).join('');
+  return allSizes.map(sz=>`<option value="${sz}">${sz}</option>`).join('');
 }
 function deductItemStock(r){
   const it=store.items.find(x=>x.name===r.item);
@@ -1750,7 +1758,8 @@ function posPickItem(i,iid){
     if(hasSizes){
       sizeSel.innerHTML='<option value="">-</option>'+it.sizes.map(sz=>`<option value="${sz.size}" ${sz.stock<=0?'disabled style="color:#ccc"':''} ${sz.size===defaultSize?'selected':''}>${sz.size} (${sz.stock})${sz.stock<=0?' - OUT':''}</option>`).join('');
     } else {
-      sizeSel.innerHTML='<option value="">-</option>';
+      const allSizes=['XS','S','M','L','XL','XXL','XXXL'];
+      sizeSel.innerHTML='<option value="">-</option>'+allSizes.map(sz=>`<option value="${sz}" ${sz===defaultSize?'selected':''}>${sz}</option>`).join('');
     }
   }
   const descEl=document.getElementById('posDescRow'+i);
@@ -8104,7 +8113,7 @@ async function checkBranchCodeExists(code) {
     
     return false;
   } catch (e) {
-    console.error('Error checking branch code: - app.js:8107', e.message);
+    console.error('Error checking branch code: - app.js:8116', e.message);
     // On error, assume not exists (safe to try this code)
     return false;
   }
@@ -8182,7 +8191,7 @@ async function saveBranch() {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     } catch (globalErr) {
-      console.warn('Could not save to globalBranchCodes: - app.js:8185', globalErr.message);
+      console.warn('Could not save to globalBranchCodes: - app.js:8194', globalErr.message);
       // Continue - this is optional
     }
 
@@ -8202,7 +8211,7 @@ async function saveBranch() {
 
   } catch (e) {
     errEl.textContent = 'Error: ' + (e.message || e.code);
-    console.error('saveBranch error - app.js:8205', e);
+    console.error('saveBranch error - app.js:8214', e);
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Branch'; }
   }
@@ -8367,7 +8376,7 @@ async function renderAllBranches() {
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:40px">Error loading branches</td></tr>';
     table.style.display = 'table';
-    console.error('renderAllBranches error - app.js:8370', e);
+    console.error('renderAllBranches error - app.js:8379', e);
   }
 }
 
@@ -8405,7 +8414,7 @@ async function doDeleteBranch(branchCode, branchName) {
     await renderAllBranches();
   } catch (e) {
     toast('Delete failed: ' + (e.message || e.code));
-    console.error('deleteBranch error - app.js:8408', e);
+    console.error('deleteBranch error - app.js:8417', e);
   }
 }
 
@@ -8486,7 +8495,7 @@ function fbBranchDoLogin() {
         setStatus('☁️ Saved · ' + new Date().toLocaleTimeString());
       }).catch(function(e){
         setStatus('⚠️ Save failed: ' + e.code);
-        console.error('cloudPush error - app.js:8489', e);
+        console.error('cloudPush error - app.js:8498', e);
       });
     }, 700);
   };
@@ -8503,7 +8512,7 @@ function fbBranchDoLogin() {
       updateBadge();
       if(typeof buildMenu==='function') buildMenu();
       if(typeof refreshAll==='function') refreshAll();
-    }catch(e){ console.error('applyRemote error - app.js:8506', e); }
+    }catch(e){ console.error('applyRemote error - app.js:8515', e); }
     finally{ applyingRemote = false; }
   }
 
@@ -8586,7 +8595,7 @@ function fbBranchDoLogin() {
             data: lastPushedJSON,
             memberUids: [],
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true }).catch(function(e){ console.error('create store doc error - app.js:8589', e); });
+          }, { merge: true }).catch(function(e){ console.error('create store doc error - app.js:8598', e); });
         }
         startSnapshot(dataUid);
         hideAuthModal();                             // data ready -> reveal the app
@@ -8596,7 +8605,7 @@ function fbBranchDoLogin() {
     }).catch(function(e){
       // No data loaded -> never fall back to in-memory data (could be another store's!)
       cloudReady = false; dataUid = null; isStaffSession = false;
-      console.error('loadUserData error - app.js:8599', e);
+      console.error('loadUserData error - app.js:8608', e);
       var errMsg = 'Please check your internet connection and try again.';
       if(e.code === 'user-deleted') errMsg = 'Your account has been removed. Contact admin.';
       else if(e.code === 'owner-store-missing') errMsg = 'Store data not found. Contact admin.';
@@ -8623,7 +8632,7 @@ function fbBranchDoLogin() {
       setStatus('☁️ Synced · ' + new Date().toLocaleTimeString());
     }, function(err){
       setStatus('⚠️ Sync error: ' + err.code);
-      console.error('onSnapshot error - app.js:8626', err);
+      console.error('onSnapshot error - app.js:8635', err);
     });
   }
 
@@ -8862,7 +8871,7 @@ function fbBranchDoLogin() {
 
   // ---- React to auth state ----
   function init(){
-    if(!window.fbAuth){ console.warn('Firebase not loaded - app.js:8865'); return; }
+    if(!window.fbAuth){ console.warn('Firebase not loaded - app.js:8874'); return; }
     showAuthModal();
     // Surface any error that happened during a Google redirect sign-in
     window.fbAuth.getRedirectResult().catch(function(e){ if(e&&e.code) setErr(gErr(e)); });
