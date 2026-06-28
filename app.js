@@ -4217,8 +4217,8 @@ let repFrom='', repTo='', repSel='Sale';
 const REPORTS={
   'Transaction report':['Sale','Purchase','Day book','All Transactions','Profit And Loss','Bill Wise Profit','Cash flow','Trial Balance Report','Balance Sheet'],
   'Party report':['Party Statement','Party wise Profit & Loss','All parties','Party Report By Item','Sale Purchase By Party'],
-  'Item/Stock report':['Hot Selling Products','Item Wise Profit And Loss','Low Stock Summary','Stock Detail','Item Detail','Item Wise Discount'],
-  'Business Status':['Bank Statement','Discount Report'],
+  'Item/Stock report':['Hot Selling Products','Item Wise Profit And Loss','Low Stock Summary','Stock Detail','Item Detail','Item Wise Discount','Size Chart'],
+  'Business Status':['Bank Statement','Discount Report','Branch Sales'],
   'Taxes':['Tax Report','Tax Rate report'],
   'Expense report':['Expense','Expense Category Report']
 };
@@ -4630,6 +4630,121 @@ function drawRep(){
         </div>`;
       }).join(''):''}
       ${!ranked.length?`<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">🏆</div><div style="font-size:14px">No sales data for selected period</div></div>`:''}
+    </div>`;
+  }
+
+  else if(repSel==='Branch Sales'){
+    const allSales=(store.sales||[]).filter(s=>!s.refunded&&inRange(s.date));
+    const branchMap={};
+    allSales.forEach(s=>{
+      const b=s.createdBy||'Admin';
+      if(!branchMap[b])branchMap[b]={name:s.createdByName||b,code:b,sales:[],total:0,received:0,items:{}};
+      branchMap[b].sales.push(s);
+      branchMap[b].total+=(s.total||0);
+      branchMap[b].received+=(s.received||0);
+      (s.rows||[]).forEach(r=>{
+        const iname=r.item||'';
+        if(!iname)return;
+        if(!branchMap[b].items[iname])branchMap[b].items[iname]={name:iname,qty:0,revenue:0,sizes:{}};
+        branchMap[b].items[iname].qty+=(r.qty||0);
+        branchMap[b].items[iname].revenue+=((r.qty||0)*(r.price||0));
+        if(r.size){
+          if(!branchMap[b].items[iname].sizes[r.size])branchMap[b].items[iname].sizes[r.size]=0;
+          branchMap[b].items[iname].sizes[r.size]+=(r.qty||0);
+        }
+      });
+    });
+    const branches=Object.values(branchMap).sort((a,b)=>b.total-a.total);
+    const grandTotal=branches.reduce((a,b)=>a+b.total,0);
+    const grandReceived=branches.reduce((a,b)=>a+b.received,0);
+    html=`
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="flex:1;min-width:160px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:12px;padding:18px;color:#fff">
+        <div style="font-size:12px;opacity:.8;margin-bottom:4px">Total Branches</div>
+        <div style="font-size:24px;font-weight:800">${branches.length}</div>
+      </div>
+      <div style="flex:1;min-width:160px;background:linear-gradient(135deg,#11998e,#38ef7d);border-radius:12px;padding:18px;color:#fff">
+        <div style="font-size:12px;opacity:.8;margin-bottom:4px">Combined Sales</div>
+        <div style="font-size:24px;font-weight:800">${rs(grandTotal)}</div>
+      </div>
+      <div style="flex:1;min-width:160px;background:linear-gradient(135deg,#2196f3,#00bcd4);border-radius:12px;padding:18px;color:#fff">
+        <div style="font-size:12px;opacity:.8;margin-bottom:4px">Combined Received</div>
+        <div style="font-size:24px;font-weight:800">${rs(grandReceived)}</div>
+      </div>
+    </div>
+    ${branches.map((b,bi)=>{
+      const pct=grandTotal?Math.round((b.total/grandTotal)*100):0;
+      const barColors=['#6366f1','#8b5cf6','#a855f7','#d946ef','#ec4899','#f43f5e','#ef4444','#f97316'];
+      const color=barColors[bi%barColors.length];
+      const sortedItems=Object.values(b.items).sort((a,x)=>x.revenue-a.revenue);
+      return `<div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:40px;height:40px;border-radius:10px;background:${color}15;display:flex;align-items:center;justify-content:center;font-size:18px">${b.code==='admin'?'&#x1F451;':'&#x1F3EA;'}</div>
+            <div>
+              <div style="font-weight:700;font-size:15px">${b.name}</div>
+              <div style="font-size:12px;color:#888">${b.sales.length} invoices &middot; ${sortedItems.length} items sold</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:800;font-size:18px;color:${color}">${rs(b.total)}</div>
+            <div style="font-size:12px;color:#888">Received: ${rs(b.received)} &middot; ${pct}% of total</div>
+          </div>
+        </div>
+        <div style="padding:6px 20px 2px;background:#fafafa">
+          <div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width .5s"></div>
+          </div>
+        </div>
+        <div style="display:none">
+          <div style="padding:12px 20px;font-size:13px;font-weight:700;color:#888;border-bottom:1px solid #f0f0f0">Item-wise breakdown</div>
+          ${sortedItems.length?`<table class="hub-table"><thead><tr><th>#</th><th>ITEM</th><th class="right">QTY SOLD</th><th class="right">REVENUE</th><th>SIZE BREAKDOWN</th></tr></thead><tbody>
+          ${sortedItems.map((it,idx)=>{
+            const sizeBreak=Object.entries(it.sizes).map(([sz,q])=>'<span style="display:inline-block;padding:2px 8px;margin:1px;background:#f1f5f9;border-radius:4px;font-size:11px;font-weight:600">'+sz+': '+q+'</span>').join('');
+            return '<tr><td style="color:#888">'+(idx+1)+'</td><td style="font-weight:600">'+it.name+'</td><td class="right" style="font-weight:600">'+it.qty+'</td><td class="right" style="font-weight:600;color:var(--green)">'+rs(it.revenue)+'</td><td>'+(sizeBreak||'-')+'</td></tr>';
+          }).join('')}
+          </tbody></table>`:'<div style="padding:20px;text-align:center;color:#ccc">No items sold yet</div>'}
+        </div>
+      </div>`;
+    }).join('')}
+    ${!branches.length?'<div style="background:#fff;border-radius:12px;padding:40px;text-align:center;color:#ccc;box-shadow:0 1px 4px rgba(0,0,0,.06)"><div style="font-size:48px;margin-bottom:8px">&#x1F4CA;</div><div style="font-size:14px">No sales data for selected period</div></div>':''}`;
+  }
+
+  else if(repSel==='Size Chart'){
+    const sizedItems=(store.items||[]).filter(i=>i.sizes&&i.sizes.length);
+    const allSizes=[...new Set(sizedItems.flatMap(i=>i.sizes.map(s=>s.size)))].sort();
+    const totalStock=sizedItems.reduce((a,i)=>a+(i.stock||0),0);
+    const totalSizeStock=sizedItems.reduce((a,i)=>a+i.sizes.reduce((b,s)=>b+s.stock,0),0);
+    html=`
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="flex:1;min-width:160px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:12px;padding:18px;color:#fff">
+        <div style="font-size:12px;opacity:.8;margin-bottom:4px">Items with Sizes</div>
+        <div style="font-size:24px;font-weight:800">${sizedItems.length}</div>
+      </div>
+      <div style="flex:1;min-width:160px;background:linear-gradient(135deg,#f59e0b,#f97316);border-radius:12px;padding:18px;color:#fff">
+        <div style="font-size:12px;opacity:.8;margin-bottom:4px">Unique Sizes</div>
+        <div style="font-size:24px;font-weight:800">${allSizes.length}</div>
+      </div>
+      <div style="flex:1;min-width:160px;background:linear-gradient(135deg,#10b981,#34d399);border-radius:12px;padding:18px;color:#fff">
+        <div style="font-size:12px;opacity:.8;margin-bottom:4px">Total Stock</div>
+        <div style="font-size:24px;font-weight:800">${totalStock}</div>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;font-size:15px;font-weight:700">Full Size Chart</div>
+      ${sizedItems.length?`<div style="overflow-x:auto"><table class="hub-table"><thead><tr><th>#</th><th>ITEM</th><th>CODE</th><th class="right">TOTAL STOCK</th><th class="right">SALE PRICE</th>${allSizes.map(s=>'<th class="right">'+s+'</th>').join('')}<th class="right">STOCK VALUE</th></tr></thead><tbody>
+      ${sizedItems.map((item,idx)=>{
+        const sizeMap={};item.sizes.forEach(s=>{sizeMap[s.size]=s.stock;});
+        const rowTotal=item.sizes.reduce((a,s)=>a+s.stock,0);
+        const value=rowTotal*(item.price||0);
+        return '<tr><td style="color:#888">'+(idx+1)+'</td><td style="font-weight:600">'+(item.name||'-')+'</td><td>'+(item.code||'-')+'</td><td class="right" style="font-weight:600;color:'+(rowTotal>0?'var(--green)':'var(--red)')+'">'+rowTotal+'</td><td class="right">'+rs(item.price)+'</td>'+allSizes.map(sz=>{
+          const qty=sizeMap[sz]||0;
+          const bg=qty===0?'#fef2f2':qty<=3?'#fffbeb':'#f0fdf4';
+          const fg=qty===0?'#dc2626':qty<=3?'#d97706':'#16a34a';
+          return '<td class="right" style="background:'+bg+';font-weight:600;color:'+fg+'">'+qty+'</td>';
+        }).join('')+'<td class="right" style="font-weight:600">'+rs(value)+'</td></tr>';
+      }).join('')}
+      </tbody></table></div>`:'<div style="padding:40px;text-align:center;color:#ccc"><div style="font-size:48px;margin-bottom:8px">&#x1F4E6;</div><div style="font-size:14px">No items with size breakdown found</div><div style="font-size:12px;margin-top:4px">Enable the Size Field in Settings and add sizes to your items</div></div>'}
     </div>`;
   }
 
@@ -7989,7 +8104,7 @@ async function checkBranchCodeExists(code) {
     
     return false;
   } catch (e) {
-    console.error('Error checking branch code:', e.message);
+    console.error('Error checking branch code: - app.js:8107', e.message);
     // On error, assume not exists (safe to try this code)
     return false;
   }
@@ -8067,7 +8182,7 @@ async function saveBranch() {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     } catch (globalErr) {
-      console.warn('Could not save to globalBranchCodes:', globalErr.message);
+      console.warn('Could not save to globalBranchCodes: - app.js:8185', globalErr.message);
       // Continue - this is optional
     }
 
@@ -8087,7 +8202,7 @@ async function saveBranch() {
 
   } catch (e) {
     errEl.textContent = 'Error: ' + (e.message || e.code);
-    console.error('saveBranch error', e);
+    console.error('saveBranch error - app.js:8205', e);
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Branch'; }
   }
@@ -8252,7 +8367,7 @@ async function renderAllBranches() {
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:40px">Error loading branches</td></tr>';
     table.style.display = 'table';
-    console.error('renderAllBranches error', e);
+    console.error('renderAllBranches error - app.js:8370', e);
   }
 }
 
@@ -8290,7 +8405,7 @@ async function doDeleteBranch(branchCode, branchName) {
     await renderAllBranches();
   } catch (e) {
     toast('Delete failed: ' + (e.message || e.code));
-    console.error('deleteBranch error', e);
+    console.error('deleteBranch error - app.js:8408', e);
   }
 }
 
@@ -8371,7 +8486,7 @@ function fbBranchDoLogin() {
         setStatus('☁️ Saved · ' + new Date().toLocaleTimeString());
       }).catch(function(e){
         setStatus('⚠️ Save failed: ' + e.code);
-        console.error('cloudPush error', e);
+        console.error('cloudPush error - app.js:8489', e);
       });
     }, 700);
   };
@@ -8386,8 +8501,9 @@ function fbBranchDoLogin() {
       if(typeof ensure==='function') ensure();
       localStorage.setItem(KEY, JSON.stringify(store)); // local cache, no cloud echo
       updateBadge();
+      if(typeof buildMenu==='function') buildMenu();
       if(typeof refreshAll==='function') refreshAll();
-    }catch(e){ console.error('applyRemote error', e); }
+    }catch(e){ console.error('applyRemote error - app.js:8506', e); }
     finally{ applyingRemote = false; }
   }
 
@@ -8461,6 +8577,7 @@ function fbBranchDoLogin() {
         try{ closeModal('loginModal'); closeModal('passcodeModal'); }catch(e){}
         var badge=document.getElementById('currentUserBadge');
         if(badge) badge.textContent = store.currentUser.name + ' (' + (store.currentUser.role.charAt(0).toUpperCase()+store.currentUser.role.slice(1)) + ')';
+        if(typeof buildMenu==='function') buildMenu();
         if(typeof refreshAll==='function') refreshAll();
         if(typeof nav==='function'){ try{ nav('home'); }catch(e){} }
         if(!hasData && !isStaffSession){
@@ -8469,7 +8586,7 @@ function fbBranchDoLogin() {
             data: lastPushedJSON,
             memberUids: [],
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true }).catch(function(e){ console.error('create store doc error', e); });
+          }, { merge: true }).catch(function(e){ console.error('create store doc error - app.js:8589', e); });
         }
         startSnapshot(dataUid);
         hideAuthModal();                             // data ready -> reveal the app
@@ -8479,7 +8596,7 @@ function fbBranchDoLogin() {
     }).catch(function(e){
       // No data loaded -> never fall back to in-memory data (could be another store's!)
       cloudReady = false; dataUid = null; isStaffSession = false;
-      console.error('loadUserData error', e);
+      console.error('loadUserData error - app.js:8599', e);
       var errMsg = 'Please check your internet connection and try again.';
       if(e.code === 'user-deleted') errMsg = 'Your account has been removed. Contact admin.';
       else if(e.code === 'owner-store-missing') errMsg = 'Store data not found. Contact admin.';
@@ -8506,7 +8623,7 @@ function fbBranchDoLogin() {
       setStatus('☁️ Synced · ' + new Date().toLocaleTimeString());
     }, function(err){
       setStatus('⚠️ Sync error: ' + err.code);
-      console.error('onSnapshot error', err);
+      console.error('onSnapshot error - app.js:8626', err);
     });
   }
 
@@ -8745,7 +8862,7 @@ function fbBranchDoLogin() {
 
   // ---- React to auth state ----
   function init(){
-    if(!window.fbAuth){ console.warn('Firebase not loaded'); return; }
+    if(!window.fbAuth){ console.warn('Firebase not loaded - app.js:8865'); return; }
     showAuthModal();
     // Surface any error that happened during a Google redirect sign-in
     window.fbAuth.getRedirectResult().catch(function(e){ if(e&&e.code) setErr(gErr(e)); });
