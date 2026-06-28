@@ -8470,7 +8470,7 @@ function fbBranchDoLogin() {
     return d;
   }
   function setStatus(t){ var e=$('fbSyncStatus'); if(e) e.textContent=t; }
-  function setErr(t){ var e=$('fbAuthError'); if(e) e.textContent=t||''; }
+  function setErr(t){ var e=$('fbAuthError'); if(e){ e.textContent=t||''; e.style.color=t?'#e74c3c':''; e.style.background=''; e.style.border=''; e.style.padding=''; e.style.lineHeight=''; e.style.fontSize=''; e.innerHTML=t||''; } }
 
   function showAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='block'; }
   function hideAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='none'; var b=document.getElementById('branchAuthModal'); if(b) b.style.display='none'; }
@@ -8861,7 +8861,18 @@ function fbBranchDoLogin() {
     var email = ($('fbEmail').value||'').trim();
     if(!email){ setErr('Please enter your email first, then click Forgot password.'); return; }
     window.fbAuth.sendPasswordResetEmail(email).then(function(){
-      setErr(''); alert('Password reset link has been sent to your email: '+email);
+      setErr('');
+      var errEl=document.getElementById('fbAuthError');
+      if(errEl){
+        errEl.style.color='#16a34a';
+        errEl.style.background='#f0fdf4';
+        errEl.style.border='1px solid #bbf7d0';
+        errEl.style.borderRadius='8px';
+        errEl.style.padding='10px 12px';
+        errEl.style.fontSize='12px';
+        errEl.style.lineHeight='1.5';
+        errEl.innerHTML='&#x2705; Password reset link has been sent to:<br><b>'+email+'</b><br><span style="color:#888;font-size:11px">Check your inbox and follow the link to reset your password.</span>';
+      }
     }).catch(function(e){ setErr(e.code); });
   };
 
@@ -8871,7 +8882,7 @@ function fbBranchDoLogin() {
 
   // ---- React to auth state ----
   function init(){
-    if(!window.fbAuth){ console.warn('Firebase not loaded - app.js:8874'); return; }
+    if(!window.fbAuth){ console.warn('Firebase not loaded - app.js:8885'); return; }
     showAuthModal();
     // Surface any error that happened during a Google redirect sign-in
     window.fbAuth.getRedirectResult().catch(function(e){ if(e&&e.code) setErr(gErr(e)); });
