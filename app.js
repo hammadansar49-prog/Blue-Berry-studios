@@ -1592,11 +1592,17 @@ function posRenderRows(){
         <div class="pos-item-drop" id="posDrop${i}"></div></td>
       <td><input type="number" id="posQty${i}" value="${r.qty||1}" onfocus="clearZero(this)" oninput="posSetRow(${i},'qty',this.value)"></td>
       <td><select id="posUnit${i}" onchange="posSetRow(${i},'unit',this.value)"><option ${r.unit==='Pcs'?'selected':''}>Pcs</option><option ${r.unit==='Kg'?'selected':''}>Kg</option><option ${r.unit==='Mtr'?'selected':''}>Mtr</option><option ${r.unit==='Ltr'?'selected':''}>Ltr</option><option ${r.unit==='Box'?'selected':''}>Box</option><option ${r.unit==='Bag'?'selected':''}>Bag</option></select></td>
-      <td><input type="number" id="posPrice${i}" value="${r.price||0}" onfocus="clearZero(this)" oninput="posSetRow(${i},'price',this.value)"></td>
+      <td><input type="number" id="posPrice${i}" value="${r.price||0}" onfocus="clearZero(this)" oninput="posSetRow(${i},'price',this.value)" ${store.currentUser&&store.currentUser.role==='cashier'?'readonly onclick="posPricePinGuard('+i+')" style="cursor:pointer;background:#f5f5f5"':''}></td>
       ${s.itemDiscount!==false?`<td><div class="pos-suffix-input"><input type="number" id="posDisc${i}" value="${r.disc||0}" onfocus="clearZero(this)" oninput="posSetRow(${i},'disc',this.value)"><span>%</span></div></td>`:`<input type="hidden" id="posDisc${i}" value="0">`}
       ${s.sizeField!==false?`<td><select id="posSize${i}" onchange="posSetRow(${i},'size',this.value)"><option value="" ${!r.size?'selected':''}>-</option><option ${r.size==='XS'?'selected':''}>XS</option><option ${r.size==='S'?'selected':''}>S</option><option ${r.size==='M'?'selected':''}>M</option><option ${r.size==='L'?'selected':''}>L</option><option ${r.size==='XL'?'selected':''}>XL</option><option ${r.size==='XXL'?'selected':''}>XXL</option><option ${r.size==='XXXL'?'selected':''}>XXXL</option></select></td>`:''}
       <td><span class="pos-del" onclick="posRemoveRow(${i})">✕</span></td>`;
     tbody.appendChild(tr);
+  });
+}
+function posPricePinGuard(idx){
+  posRequireManagerPin(function(){
+    var inp=document.getElementById('posPrice'+idx);
+    if(inp){inp.readOnly=false;inp.style.background='#fff';inp.focus();inp.select();}
   });
 }
 function posSetRow(i,f,v){
@@ -5944,7 +5950,8 @@ function addUser(){
   var isBranch=store.currentUser&&store.currentUser.role==='branch';
   formModal('Add User',`<div class="field"><label>User Name</label><input id="f_username" placeholder="Enter username" oninput="checkUsernameExists()"></div>
     <div id="f_userError" style="color:var(--red);font-size:12px;margin-top:-8px;margin-bottom:10px;display:none">⚠ Username already exists!</div>
-    <div class="field"><label>Role</label><select id="f_userrole"><option>Cashier</option><option>Manager</option><option>Viewer</option>${isBranch?'':'<option>Admin</option>'}</select></div>
+    <div class="field"><label>Role</label><select id="f_userrole" onchange="toggleManagerPinField()"><option>Cashier</option><option>Manager</option><option>Viewer</option>${isBranch?'':'<option>Admin</option>'}</select></div>
+    <div id="f_managerPinWrap" style="display:none"><div class="field"><label>Manager PIN (4 digits)</label><input id="f_managerPin" type="password" maxlength="4" placeholder="e.g. 1234" inputmode="numeric" pattern="[0-9]*" style="letter-spacing:6px;text-align:center;font-size:18px"></div></div>
     <div class="field"><label>Password</label><div style="display:flex;gap:8px"><input id="f_userpass" type="password" placeholder="Set password" style="flex:1"><button type="button" class="btn btn-outline" onclick="generateRandomPass()" style="white-space:nowrap;font-size:12px">Random Pass</button></div>
     <div style="margin-top:4px"><label style="font-size:12px;cursor:pointer"><input type="checkbox" id="f_showpass" onchange="togglePassVisibility()"> Show Password</label></div></div>`,
   ()=>{
@@ -5955,16 +5962,24 @@ function addUser(){
     const pass=document.getElementById('f_userpass').value;
     if(!pass)return toast('Set a password');
     if(pass.length<6)return toast('Password must be at least 6 characters');
+    var pin='';
+    if(role==='Manager'){
+      pin=(document.getElementById('f_managerPin').value||'').trim();
+      if(!pin||pin.length!==4||!/^\d{4}$/.test(pin))return toast('Manager PIN must be exactly 4 digits');
+    }
     if(!store.users)store.users=[];
     var createdBy=isBranch?store.currentUser.branchCode:'admin';
     var branchName=isBranch?store.currentUser.name:'';
+    var userData={id:id(),name:n,role,pass,created:dispDate(),createdBy:createdBy,branchName:branchName};
+    if(pin)userData.pin=pin;
     if(isBranch){
-      store.users.push({id:id(),name:n,role,pass,created:dispDate(),createdBy:createdBy,branchName:branchName});
+      store.users.push(userData);
       persist();refreshView();updateBadge();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n+' ('+role+')');
     }else{
       toast('Creating user…');
       window.createStaffAccount(n,pass).then(function(staffUid){
-        store.users.push({id:id(),name:n,role,pass,created:dispDate(),staffUid:staffUid,createdBy:createdBy,branchName:branchName});
+        userData.staffUid=staffUid;
+        store.users.push(userData);
         persist();refreshView();updateBadge();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n+' ('+role+')');
       }).catch(function(e){
         var box=document.getElementById('f_userError');
@@ -5977,6 +5992,36 @@ function addUser(){
       });
     }
   },'ADD');
+}
+function toggleManagerPinField(){
+  var role=document.getElementById('f_userrole').value;
+  var wrap=document.getElementById('f_managerPinWrap');
+  if(wrap) wrap.style.display=role==='Manager'?'block':'none';
+}
+function posRequireManagerPin(callback){
+  var isCashier=store.currentUser&&store.currentUser.role==='cashier';
+  if(!isCashier){callback();return;}
+  var managers=(store.users||[]).filter(function(u){return u.role==='Manager'&&u.pin;});
+  if(!managers.length){toast('No manager with PIN found. Contact admin.');return;}
+  formModal('Manager Approval Required',`<div style="text-align:center;margin-bottom:16px"><div style="font-size:36px;margin-bottom:8px">🔐</div><p style="color:#666;font-size:13px;margin:0">Ask a manager to enter their 4-digit PIN to allow price edit.</p></div>
+    <div class="field"><label>Manager PIN</label><input id="f_pinVerify" type="password" maxlength="4" placeholder="••••" inputmode="numeric" pattern="[0-9]*" style="letter-spacing:8px;text-align:center;font-size:22px;padding:14px" onkeydown="if(event.key==='Enter')verifyPricePin()"></div>
+    <div id="f_pinError" style="color:var(--red);font-size:12px;text-align:center;min-height:16px;margin-top:4px"></div>`,
+  ()=>{verifyPricePin(callback);},'VERIFY');
+}
+function verifyPricePin(callback){
+  var pin=(document.getElementById('f_pinVerify').value||'').trim();
+  var err=document.getElementById('f_pinError');
+  if(!pin){if(err)err.textContent='Enter PIN';return;}
+  var managers=(store.users||[]).filter(function(u){return u.role==='Manager'&&u.pin;});
+  var match=managers.some(function(u){return u.pin===pin;});
+  if(match){
+    closeModal('formModal');
+    if(callback)callback();
+  }else{
+    if(err)err.textContent='Invalid PIN. Try again.';
+    document.getElementById('f_pinVerify').value='';
+    document.getElementById('f_pinVerify').focus();
+  }
 }
 function checkUsernameExists(){
   const n=(document.getElementById('f_username').value||'').trim().toLowerCase();
@@ -6026,6 +6071,7 @@ function viewUserCredentials(uid){
     <div class="field"><label>Username</label><div style="padding:10px 14px;background:#f5f7fa;border-radius:8px;font-size:14px;font-weight:600">${u.name}</div></div>
     <div class="field"><label>Password</label><div style="display:flex;gap:8px"><div id="viewPass" style="padding:10px 14px;background:#f5f7fa;border-radius:8px;font-size:14px;font-weight:600;flex:1">••••••••</div><button type="button" class="btn btn-outline" onclick="revealUserPass('${u.pass}')" style="font-size:12px">👁 Show</button></div></div>
     <div class="field"><label>Role</label><div style="padding:10px 14px;background:#f5f7fa;border-radius:8px;font-size:14px;font-weight:600">${u.role}</div></div>
+    ${u.role==='Manager'&&u.pin?`<div class="field"><label>Manager PIN</label><div style="padding:10px 14px;background:#f5f7fa;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:4px">${u.pin}</div></div>`:''}
     <div class="field"><label>Created</label><div style="padding:10px 14px;background:#f5f7fa;border-radius:8px;font-size:14px">${u.created||'-'}</div></div>`,null,'CLOSE');
 }
 function revealUserPass(pass){
