@@ -70,7 +70,7 @@ const PERMISSIONS = {
     create:['*'],
     edit:['*'],
     delete:['*'],
-    admin:['import','export','barcode','recycle']
+    admin:['import','export','barcode','recycle','admin-users']
   }
 };
 
@@ -5770,15 +5770,16 @@ function userActivityLog(){
   var isBranch=store.currentUser&&store.currentUser.role==='branch';
   var isStaff=store.currentUser&&store.currentUser.role!=='owner'&&store.currentUser.role!=='admin';
   var currentUserName=store.currentUser?store.currentUser.name:'';
-  // Filter: branch sees only own activities, staff sees only own, admin/owner sees all staff/branch
-  if(isBranch||isStaff){
-    logs=logs.filter(l=>{return l.userName===currentUserName;});
-  }else{
-    logs=logs.filter(l=>{
-      var role=(l.userRole||'owner').toLowerCase();
-      return role!=='owner'&&role!=='admin';
-    });
+  var branchCode=isBranch?store.currentUser.branchCode:'';
+  // Filter: branch sees own + its users' activities, admin/owner sees ALL
+  if(isBranch){
+    var branchUserNames=[currentUserName];
+    (store.users||[]).forEach(function(u){ if(u.createdBy===branchCode) branchUserNames.push(u.name); });
+    logs=logs.filter(function(l){ return branchUserNames.indexOf(l.userName)!==-1; });
+  }else if(isStaff){
+    logs=logs.filter(function(l){ return l.userName===currentUserName; });
   }
+  // admin/owner: no filter — see everything
   // Sort by newest first
   logs=logs.slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
   
@@ -5841,10 +5842,14 @@ function renderActivityTable(logs){
     var detail=l.detail||'-';
     var bgColor=typeColors[actionType]||'#607d8b';
     
+    var roleLabel=(l.userRole||'owner');
+    if(roleLabel==='owner')roleLabel='Admin (Owner)';
+    else if(roleLabel==='branch')roleLabel='Branch';
+    else roleLabel=roleLabel.charAt(0).toUpperCase()+roleLabel.slice(1);
     return `<tr>
       <td style="font-weight:600;color:#222">${l.userName||'Owner'}</td>
       <td style="color:#666">${l.date||''} ${l.time||''}</td>
-      <td><span style="color:#666">${(l.userRole||'owner').charAt(0).toUpperCase()+(l.userRole||'owner').slice(1)}</span></td>
+      <td><span style="color:#666">${roleLabel}</span></td>
       <td><span style="background:${bgColor};color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap">${actionLabel}</span></td>
       <td style="color:#1a73e8;font-weight:500">${detail}</td>
     </tr>`;
@@ -5936,9 +5941,10 @@ function userRoles(){
     </tbody></table></div>`;
 }
 function addUser(){
+  var isBranch=store.currentUser&&store.currentUser.role==='branch';
   formModal('Add User',`<div class="field"><label>User Name</label><input id="f_username" placeholder="Enter username" oninput="checkUsernameExists()"></div>
     <div id="f_userError" style="color:var(--red);font-size:12px;margin-top:-8px;margin-bottom:10px;display:none">⚠ Username already exists!</div>
-    <div class="field"><label>Role</label><select id="f_userrole"><option>Admin</option><option>Manager</option><option>Cashier</option><option>Viewer</option></select></div>
+    <div class="field"><label>Role</label><select id="f_userrole"><option>Cashier</option><option>Manager</option><option>Viewer</option>${isBranch?'':'<option>Admin</option>'}</select></div>
     <div class="field"><label>Password</label><div style="display:flex;gap:8px"><input id="f_userpass" type="password" placeholder="Set password" style="flex:1"><button type="button" class="btn btn-outline" onclick="generateRandomPass()" style="white-space:nowrap;font-size:12px">Random Pass</button></div>
     <div style="margin-top:4px"><label style="font-size:12px;cursor:pointer"><input type="checkbox" id="f_showpass" onchange="togglePassVisibility()"> Show Password</label></div></div>`,
   ()=>{
@@ -5948,24 +5954,29 @@ function addUser(){
     const role=document.getElementById('f_userrole').value;
     const pass=document.getElementById('f_userpass').value;
     if(!pass)return toast('Set a password');
-    if(pass.length<6)return toast('Password kam az kam 6 characters ka ho (cloud login ke liye)');
+    if(pass.length<6)return toast('Password kam az kam 6 characters ka ho');
     if(!store.users)store.users=[];
-    // Create the linked cloud account first, then save locally.
-    toast('Creating user…');
-    var createdBy = (store.currentUser && store.currentUser.role === 'branch') ? store.currentUser.branchCode : 'admin';
-    var branchName = (store.currentUser && store.currentUser.role === 'branch') ? store.currentUser.name : '';
-    window.createStaffAccount(n,pass).then(function(staffUid){
-      store.users.push({id:id(),name:n,role,pass,created:dispDate(),staffUid:staffUid,createdBy:createdBy,branchName:branchName});
-      persist();refreshView();updateBadge();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n);
-    }).catch(function(e){
-      var box=document.getElementById('f_userError');
-      var show=function(m){ if(box){ box.textContent='⚠ '+m; box.style.display='block'; } toast(m); };
-      if(e.code==='auth/email-already-in-use')show('Ye username "'+n+'" already exist karta hai — koi doosra username rakhein');
-      else if(e.code==='auth/weak-password')show('Password kam az kam 6 characters ka ho');
-      else if(e.code==='not-owner')show('Sirf store owner naye users bana sakta hai');
-      else if(e.code==='auth/network-request-failed')show('Internet connection check karein');
-      else show('User banane mein error: '+(e.code||e.message));
-    });},'ADD');
+    var createdBy=isBranch?store.currentUser.branchCode:'admin';
+    var branchName=isBranch?store.currentUser.name:'';
+    if(isBranch){
+      store.users.push({id:id(),name:n,role,pass,created:dispDate(),createdBy:createdBy,branchName:branchName});
+      persist();refreshView();updateBadge();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n+' ('+role+')');
+    }else{
+      toast('Creating user…');
+      window.createStaffAccount(n,pass).then(function(staffUid){
+        store.users.push({id:id(),name:n,role,pass,created:dispDate(),staffUid:staffUid,createdBy:createdBy,branchName:branchName});
+        persist();refreshView();updateBadge();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n+' ('+role+')');
+      }).catch(function(e){
+        var box=document.getElementById('f_userError');
+        var show=function(m){ if(box){ box.textContent='⚠ '+m; box.style.display='block'; } toast(m); };
+        if(e.code==='auth/email-already-in-use')show('Ye username "'+n+'" already exist karta hai — koi doosra username rakhein');
+        else if(e.code==='auth/weak-password')show('Password kam az kam 6 characters ka ho');
+        else if(e.code==='not-owner')show('Sirf store owner naye users bana sakta hai');
+        else if(e.code==='auth/network-request-failed')show('Internet connection check karein');
+        else show('User banane mein error: '+(e.code||e.message));
+      });
+    }
+  },'ADD');
 }
 function checkUsernameExists(){
   const n=(document.getElementById('f_username').value||'').trim().toLowerCase();
