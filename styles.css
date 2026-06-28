@@ -1038,7 +1038,7 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .pos-inv-right::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px}
 .pos-inv-date{padding:14px 18px;font-size:13px;color:#555;border-bottom:1px solid var(--line);background:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pos-inv-date b{color:#222}
-.pos-inv-cust-row{display:flex;gap:0;border-bottom:1px solid var(--line);background:#fff;overflow:hidden}
+.pos-inv-cust-row{display:flex;gap:0;border-bottom:1px solid var(--line);background:#fff}
 .pos-inv-cust-row .pos-inv-cust{flex:1;position:relative;padding:12px 14px}
 .pos-inv-cust-row .pos-inv-cust:first-child{border-right:1px solid var(--line)}
 .pos-inv-cust-row .pos-inv-cust label{display:block;font-size:10px;font-weight:700;color:#999;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
