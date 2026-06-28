@@ -1033,43 +1033,43 @@ table.sm-items input{width:100%;border:1px solid var(--line);border-radius:8px;p
 .pos-inv-addrow:hover{background:#f0f4ff}
 
 /* POS Invoice Right Panel */
-.pos-inv-right{width:340px;border-left:1px solid var(--line);display:flex;flex-direction:column;padding:0;flex-shrink:0;background:#fafbfc;overflow-y:auto;overflow-x:hidden}
+.pos-inv-right{width:340px;border-left:1px solid var(--line);display:flex;flex-direction:column;padding:0;flex-shrink:0;background:#fafbfc;overflow-y:auto;overflow-x:hidden;position:relative;z-index:1}
 .pos-inv-right::-webkit-scrollbar{width:4px}
 .pos-inv-right::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px}
-.pos-inv-date{padding:14px 18px;font-size:13px;color:#555;border-bottom:1px solid var(--line);background:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pos-inv-date{padding:10px 18px;font-size:13px;color:#555;border-bottom:1px solid var(--line);background:#fff;flex-shrink:0}
 .pos-inv-date b{color:#222}
-.pos-inv-cust-row{display:flex;gap:0;border-bottom:1px solid var(--line);background:#fff}
-.pos-inv-cust-row .pos-inv-cust{flex:1;position:relative;padding:12px 14px}
+.pos-inv-cust-row{display:flex;gap:0;border-bottom:1px solid var(--line);background:#fff;flex-shrink:0;position:relative;z-index:2}
+.pos-inv-cust-row .pos-inv-cust{flex:1;position:relative;padding:10px 14px}
 .pos-inv-cust-row .pos-inv-cust:first-child{border-right:1px solid var(--line)}
-.pos-inv-cust-row .pos-inv-cust label{display:block;font-size:10px;font-weight:700;color:#999;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
-.pos-inv-cust-row .pos-inv-cust input{width:100%;border:1px solid var(--line);border-radius:6px;padding:9px 10px;outline:none;font-size:13px;background:#f9fafb}
+.pos-inv-cust-row .pos-inv-cust label{display:block;font-size:10px;font-weight:700;color:#999;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.pos-inv-cust-row .pos-inv-cust input{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 10px;outline:none;font-size:13px;background:#f9fafb;box-sizing:border-box}
 .pos-inv-cust-row .pos-inv-cust input:focus{border-color:var(--blue);background:#fff}
-.pos-inv-summary{padding:14px 18px;background:#fff;border-bottom:1px solid var(--line);overflow:hidden}
-.pos-inv-total-row{display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,#f0f4ff,#e8f0fe);border-radius:10px}
-.pos-inv-total-icon{font-size:28px}
+.pos-inv-summary{padding:12px 18px;background:#fff;border-bottom:1px solid var(--line);flex-shrink:0;position:relative;z-index:1}
+.pos-inv-total-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:linear-gradient(135deg,#f0f4ff,#e8f0fe);border-radius:10px}
+.pos-inv-total-icon{font-size:26px}
 .pos-inv-total-info{flex:1}
 .pos-inv-total-info div:first-child{font-size:13px;color:#666}
-.pos-inv-total-info b{font-size:22px;color:#222}
+.pos-inv-total-info b{font-size:20px;color:#222}
 .pos-inv-total-sub{font-size:11px;color:#999;margin-top:2px}
 .pos-inv-breakup{text-align:right;font-size:11px;color:var(--blue);font-weight:600;cursor:pointer;line-height:1.4}
 .pos-inv-breakup span{font-size:10px;color:#999;font-weight:400}
-.pos-inv-payment{padding:14px 18px;background:#fff;border-bottom:1px solid var(--line);overflow:visible}
+.pos-inv-payment{padding:12px 18px;background:#fff;border-bottom:1px solid var(--line);flex-shrink:0}
 .pos-pay-row{display:flex;gap:12px;margin-bottom:10px}
 .pos-pay-row:last-child{margin-bottom:0}
 .pos-pay-row:first-child{margin-bottom:6px}
 .pos-pay-label{font-size:10px;font-weight:700;color:#999;text-transform:uppercase;flex:1}
-.pos-pay-row select{flex:1;border:1px solid var(--line);border-radius:6px;padding:11px 10px;outline:none;font-size:13px;font-weight:600;color:#444;background:#f9fafb}
+.pos-pay-row select{flex:1;border:1px solid var(--line);border-radius:6px;padding:10px 10px;outline:none;font-size:13px;font-weight:600;color:#444;background:#f9fafb}
 .pos-pay-amt{flex:1;display:flex;align-items:center;border:1px solid var(--line);border-radius:6px;background:#fff;transition:border-color .2s,box-shadow .2s;overflow:hidden;min-width:0}
 .pos-pay-amt:focus-within{border-color:var(--blue);box-shadow:0 0 0 2px rgba(47,109,246,.15)}
 .pos-pay-amt span{padding:10px 0 10px 12px;font-size:13px;color:#999;font-weight:600;border-right:1px solid var(--line);line-height:1}
-.pos-pay-amt input{border:0;outline:none;padding:11px 12px;flex:1;text-align:left;font-size:14px;font-weight:600;background:transparent;caret-color:#333;color:#333;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pos-pay-amt input{border:0;outline:none;padding:10px 12px;flex:1;text-align:left;font-size:14px;font-weight:600;background:transparent;caret-color:#333;color:#333;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .pos-pay-amt.pos-pay-disc{border-color:#ff9800;box-sizing:border-box}
 .pos-pay-amt.pos-pay-disc span{color:#ff9800}
 .pos-pay-amt.pos-pay-disc:focus-within{border-color:#ff9800;box-shadow:0 0 0 2px rgba(255,152,0,.15)}
 .pos-suffix-input{display:flex;align-items:center;border:1px solid var(--line);border-radius:6px;background:#f9fafb;overflow:hidden}
 .pos-suffix-input input{border:0;outline:none;padding:9px 8px;flex:1;font-size:13px;background:transparent;min-width:0}
 .pos-suffix-input span{padding:0 10px;font-size:13px;color:#999;font-weight:600}
-.pos-inv-return{text-align:right;font-size:13px;color:#555;margin-top:auto;padding:14px 18px;background:#fff;border-top:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pos-inv-return{text-align:right;font-size:13px;color:#555;margin-top:auto;padding:12px 18px;background:#fff;border-top:1px solid var(--line);flex-shrink:0}
 .pos-inv-return b{color:var(--blue);display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 
 /* POS Bottom Actions */
