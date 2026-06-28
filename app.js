@@ -7978,9 +7978,16 @@ async function renderAllBranches() {
 }
 
 // Delete a branch
-async function deleteBranch(branchCode, branchName) {
-  if (!confirm('Are you sure you want to delete branch "' + branchName + '" (' + branchCode + ')?\n\nThis action cannot be undone.')) return;
-
+function deleteBranch(branchCode, branchName) {
+  document.getElementById('deleteBranchMsg').textContent = 'Are you sure you want to delete "' + branchName + '"?';
+  document.getElementById('deleteBranchCode').textContent = 'Branch code: ' + branchCode + ' — This action cannot be undone.';
+  document.getElementById('deleteBranchConfirmBtn').onclick = function() {
+    closeModal('deleteBranchModal');
+    doDeleteBranch(branchCode, branchName);
+  };
+  showModal('deleteBranchModal');
+}
+async function doDeleteBranch(branchCode, branchName) {
   const ownerUid = window.fbAuth.currentUser.uid;
   const branchId = 'branch_' + branchCode;
 
