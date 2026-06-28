@@ -60,7 +60,7 @@ function startLocalServer(rootDir) {
             try { mainWindow.show(); mainWindow.focus(); } catch (e) {}
           }
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<!doctype html><meta charset="utf-8"><body style="font-family:Segoe UI,Arial,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f5f6fa"><div style="text-align:center"><div style="font-size:40px">✅</div><h2 style="color:#16a34a">Login ho gaya!</h2><p style="color:#666">KAROBAR app khud khul jayegi. Ye tab band kar dein.</p></div></body>');
+          res.end('<!doctype html><meta charset="utf-8"><body style="font-family:Segoe UI,Arial,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f5f6fa"><div style="text-align:center"><div style="font-size:40px">✅</div><h2 style="color:#16a34a">Signed in successfully!</h2><p style="color:#666">The KAROBAR app will continue automatically. You can close this tab.</p></div></body>');
           return;
         }
         let pathname = decodeURIComponent(parsed.pathname || '/');

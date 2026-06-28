@@ -9105,8 +9105,8 @@ function fbBranchDoLogin() {
     // Desktop app: Google sign-in cannot run inside the Electron window, so
     // open it in the user's real browser and finish via the returned token.
     if (window.karobarDesktop && window.karobarDesktop.isDesktop) {
-      setErr('Google login aapke browser mein khul raha hai — wahan login karein, app khud chalu ho jayegi.');
-      try { window.karobarDesktop.openGoogleLogin(); } catch (e) { setErr('Browser khol nahi saka.'); }
+      setErr('Opening Google login in your browser — sign in there and the app will continue automatically.');
+      try { window.karobarDesktop.openGoogleLogin(); } catch (e) { setErr('Could not open the browser.'); }
       return;
     }
     setErr('Opening Google login...');
@@ -9136,8 +9136,8 @@ function fbBranchDoLogin() {
   if (window.karobarDesktop && typeof window.karobarDesktop.onGoogleCredential === 'function') {
     window.karobarDesktop.onGoogleCredential(function(d){
       try {
-        if (!d || !d.idToken) { setErr('Google login adhura raha — dobara try karein.'); return; }
-        setErr('Google login complete ho raha hai...');
+        if (!d || !d.idToken) { setErr('Google login was incomplete — please try again.'); return; }
+        setErr('Completing Google login...');
         var cred = firebase.auth.GoogleAuthProvider.credential(d.idToken, d.accessToken || null);
         window.fbAuth.signInWithCredential(cred).then(function(){ setErr(''); })
           .catch(function(e){ setErr(gErr(e)); });

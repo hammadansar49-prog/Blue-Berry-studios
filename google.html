@@ -23,7 +23,7 @@
 <div class="box">
   <div class="cloud">☁️</div>
   <h1>KAROBAR</h1>
-  <div id="msg" class="muted">Apne Google account se login karein. Login hote hi KAROBAR app khud khul jayegi.</div>
+  <div id="msg" class="muted">Sign in with your Google account. The KAROBAR app will continue automatically once you're signed in.</div>
   <button id="btn">
     <img class="g" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
     Continue with Google
@@ -54,9 +54,9 @@ function sendBack(cred){
   var q = '/__google_done?idToken=' + encodeURIComponent(cred.idToken || '') +
           '&accessToken=' + encodeURIComponent(cred.accessToken || '');
   fetch(q).then(function(){
-    show('✅ Login ho gaya!<br>KAROBAR app khud khul jayegi.<br>Ye tab band kar dein.');
+    show('✅ Signed in successfully!<br>The KAROBAR app will continue automatically.<br>You can close this tab.');
   }).catch(function(){
-    show('✅ Google login ho gaya. Agar app na khule to dobara try karein.');
+    show('✅ Signed in with Google. If the app does not continue, please try again.');
   });
 }
 
