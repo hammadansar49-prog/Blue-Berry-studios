@@ -5954,7 +5954,7 @@ function addUser(){
     const role=document.getElementById('f_userrole').value;
     const pass=document.getElementById('f_userpass').value;
     if(!pass)return toast('Set a password');
-    if(pass.length<6)return toast('Password kam az kam 6 characters ka ho');
+    if(pass.length<6)return toast('Password must be at least 6 characters');
     if(!store.users)store.users=[];
     var createdBy=isBranch?store.currentUser.branchCode:'admin';
     var branchName=isBranch?store.currentUser.name:'';
@@ -5969,11 +5969,11 @@ function addUser(){
       }).catch(function(e){
         var box=document.getElementById('f_userError');
         var show=function(m){ if(box){ box.textContent='⚠ '+m; box.style.display='block'; } toast(m); };
-        if(e.code==='auth/email-already-in-use')show('Ye username "'+n+'" already exist karta hai — koi doosra username rakhein');
-        else if(e.code==='auth/weak-password')show('Password kam az kam 6 characters ka ho');
-        else if(e.code==='not-owner')show('Sirf store owner naye users bana sakta hai');
-        else if(e.code==='auth/network-request-failed')show('Internet connection check karein');
-        else show('User banane mein error: '+(e.code||e.message));
+      if(e.code==='auth/email-already-in-use')show('Username "'+n+'" already exists. Please choose a different username.');
+      else if(e.code==='auth/weak-password')show('Password must be at least 6 characters long.');
+      else if(e.code==='not-owner')show('Only the store owner can create new users.');
+      else if(e.code==='auth/network-request-failed')show('Please check your internet connection and try again.');
+      else show('Error creating user: '+(e.code||e.message));
       });
     }
   },'ADD');
@@ -7414,14 +7414,14 @@ function restoreCompanyBackup(){
 }
 function staffLoginPrompt(){
   try{ closeModal('companyModal'); }catch(e){}
-  formModal('Login with User ID',`<p style="font-size:12px;color:#888;margin:0 0 12px">Apni User ID aur password daalein. Aapko us store ka same data milega.</p>
+  formModal('Login with User ID',`<p style="font-size:12px;color:#888;margin:0 0 12px">Enter your User ID and password to access the same store data.</p>
     <div class="field"><label>User ID</label><input id="sl_uid" placeholder="Enter user id" autocomplete="off"></div>
     <div class="field" style="margin-top:10px"><label>Password</label><input id="sl_pass" type="password" placeholder="Enter password"></div>
     <div id="sl_err" style="color:var(--red);font-size:12px;margin-top:8px;min-height:14px"></div>`,()=>{
     const uid=(document.getElementById('sl_uid').value||'').trim();
     const pass=document.getElementById('sl_pass').value||'';
     const err=document.getElementById('sl_err');
-    if(!uid||!pass){ if(err)err.textContent='User ID aur password dono daalein'; return; }
+    if(!uid||!pass){ if(err)err.textContent='Please enter both User ID and password.'; return; }
     if(err)err.textContent='Logging in…';
     window.fbStaffLogin(uid,pass,function(m){ if(err)err.textContent=m; });
     // on success, auth state change reloads the store and closes the app gate
@@ -8194,10 +8194,10 @@ function fbBranchDoLogin() {
       // No data loaded -> never fall back to in-memory data (could be another store's!)
       cloudReady = false; dataUid = null; isStaffSession = false;
       console.error('loadUserData error', e);
-      var errMsg = 'Internet check karke dobara login karein.';
+      var errMsg = 'Please check your internet connection and try again.';
       if(e.code === 'user-deleted') errMsg = 'Your account has been removed. Contact admin.';
       else if(e.code === 'owner-store-missing') errMsg = 'Store data not found. Contact admin.';
-      else errMsg = 'Data load nahi hua (' + (e.code||e.message) + '). ' + errMsg;
+      else errMsg = 'Data failed to load (' + (e.code||e.message) + '). ' + errMsg;
       setErr(errMsg);
       window.fbAuth.signOut();
     });
@@ -8226,7 +8226,7 @@ function fbBranchDoLogin() {
 
   // ---- Manual / periodic one-shot refresh from the cloud ----
   window.cloudRefresh = function(manual){
-    if(!cloudReady || !dataUid || !window.fbDB){ if(manual) toast('Pehle login karein'); return; }
+    if(!cloudReady || !dataUid || !window.fbDB){ if(manual) toast('Please login first.'); return; }
     var btn = document.getElementById('tbRefresh');
     if(manual && btn){ btn.style.transition='transform .6s ease'; btn.style.transform='rotate(360deg)'; setTimeout(function(){ btn.style.transition=''; btn.style.transform=''; }, 600); }
     window.fbDB.collection('users').doc(dataUid).get().then(function(snap){
@@ -8258,7 +8258,7 @@ function fbBranchDoLogin() {
     if($('fbEmail')) $('fbEmail').placeholder = staff ? 'User ID' : 'you@example.com';
     if($('fbEmail')) $('fbEmail').type = staff ? 'text' : 'email';
     var emLbl = $('fbEmailLabel'); if(emLbl) emLbl.textContent = staff ? 'User ID' : 'Email';
-    $('fbAuthSub') && ($('fbAuthSub').textContent = staff ? 'Employee login — apni User ID se' : 'Login to sync your data across devices');
+    $('fbAuthSub') && ($('fbAuthSub').textContent = staff ? 'Employee login — enter your User ID' : 'Login to sync your data across devices');
     // hide owner-only options in staff mode
     ['fbToggleBtn','fbGoogleBtn','fbForgotWrap','fbOrWrap'].forEach(function(idd){ var e=$(idd); if(e) e.style.display = staff ? 'none' : ''; });
     var sw=$('fbKindToggle'); if(sw) sw.textContent = staff ? '← Store owner login (Email/Google)' : 'Employee? Login with User ID';
@@ -8276,24 +8276,24 @@ function fbBranchDoLogin() {
     }
     var email = ($('fbEmail').value||'').trim();
     var pass = $('fbPass').value||'';
-    if(!email || !pass){ setErr('Email aur password dono daalein'); return; }
+    if(!email || !pass){ setErr('Please enter both email and password.'); return; }
     setErr(''); $('fbLoginBtn').disabled = true;
     var p = (fbMode==='signup')
       ? window.fbAuth.createUserWithEmailAndPassword(email, pass)
       : window.fbAuth.signInWithEmailAndPassword(email, pass);
     p.catch(function(e){
       var msg = e.code;
-      if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password') msg='Galat email ya password';
-      else if(e.code==='auth/email-already-in-use') msg='Ye email already registered hai — Login karein';
-      else if(e.code==='auth/weak-password') msg='Password kam az kam 6 characters ka ho';
-      else if(e.code==='auth/invalid-email') msg='Email sahi nahi hai';
-      else if(e.code==='auth/network-request-failed') msg='Internet connection check karein';
+      if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password') msg='Invalid email or password.';
+      else if(e.code==='auth/email-already-in-use') msg='This email is already registered. Please login instead.';
+      else if(e.code==='auth/weak-password') msg='Password must be at least 6 characters long.';
+      else if(e.code==='auth/invalid-email') msg='Please enter a valid email address.';
+      else if(e.code==='auth/network-request-failed') msg='Please check your internet connection and try again.';
       setErr(msg);
     }).finally(function(){ $('fbLoginBtn').disabled = false; });
   };
 
   window.fbGoogleLogin = function(){
-    setErr('Google login khul raha hai…');
+    setErr('Opening Google login...');
     var provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     window.fbAuth.signInWithPopup(provider).then(function(){
@@ -8301,7 +8301,7 @@ function fbBranchDoLogin() {
     }).catch(function(e){
       // Popup blocked / failed -> fall back to full-page redirect (always works)
       if(e.code==='auth/popup-blocked' || e.code==='auth/popup-closed-by-user' || e.code==='auth/cancelled-popup-request' || e.code==='auth/operation-not-supported-in-this-environment'){
-        setErr('Google par redirect ho rahe hain…');
+        setErr('Redirecting to Google...');
         window.fbAuth.signInWithRedirect(provider).catch(function(e2){ setErr(gErr(e2)); });
         return;
       }
@@ -8309,9 +8309,9 @@ function fbBranchDoLogin() {
     });
   };
   function gErr(e){
-    if(e.code==='auth/network-request-failed') return 'Internet connection check karein';
-    if(e.code==='auth/unauthorized-domain') return 'Is domain ko Firebase Console > Authentication > Settings > Authorized domains mein add karein';
-    if(e.code==='auth/account-exists-with-different-credential') return 'Ye email pehle se kisi aur tareeqe se registered hai';
+    if(e.code==='auth/network-request-failed') return 'Please check your internet connection and try again.';
+    if(e.code==='auth/unauthorized-domain') return 'Please add this domain in Firebase Console > Authentication > Settings > Authorized domains.';
+    if(e.code==='auth/account-exists-with-different-credential') return 'This email is already registered via a different sign-in method.';
     return e.code || e.message;
   }
 
@@ -8327,7 +8327,7 @@ function fbBranchDoLogin() {
   // Returns Promise<staffUid>. Must be called while an OWNER is logged in.
   window.createStaffAccount = function(username, pass){
     if(!fbUser || isStaffSession || dataUid !== fbUser.uid){
-      return Promise.reject({ code: 'not-owner', message: 'Sirf store owner naye users bana sakta hai' });
+      return Promise.reject({ code: 'not-owner', message: 'Only the store owner can create new users.' });
     }
     var ownerUid = fbUser.uid;
     var uname = (username||'').toLowerCase().trim();
@@ -8350,12 +8350,12 @@ function fbBranchDoLogin() {
   // ---- Staff logs in with their user-id + password (resolves to the owner's store) ----
   window.fbStaffLogin = function(username, pass, onErr){
     var uname = (username||'').toLowerCase().trim();
-    if(!uname || !pass){ if(onErr) onErr('User ID aur password dono daalein'); return; }
+    if(!uname || !pass){ if(onErr) onErr('Please enter both User ID and password.'); return; }
     var email = uname + STAFF_DOMAIN;
     window.fbAuth.signInWithEmailAndPassword(email, pass).catch(function(e){
       var msg = e.code;
-      if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found') msg='Galat User ID ya password';
-      else if(e.code==='auth/network-request-failed') msg='Internet connection check karein';
+      if(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found') msg='Invalid User ID or password.';
+      else if(e.code==='auth/network-request-failed') msg='Please check your internet connection and try again.';
       if(onErr) onErr(msg); else setErr(msg);
     });
   };
@@ -8447,9 +8447,9 @@ function fbBranchDoLogin() {
 
   window.fbResetPass = function(){
     var email = ($('fbEmail').value||'').trim();
-    if(!email){ setErr('Pehle apna email daalein, phir Forgot password dabayein'); return; }
+    if(!email){ setErr('Please enter your email first, then click Forgot password.'); return; }
     window.fbAuth.sendPasswordResetEmail(email).then(function(){
-      setErr(''); alert('Password reset link aapke email par bhej diya gaya hai: '+email);
+      setErr(''); alert('Password reset link has been sent to your email: '+email);
     }).catch(function(e){ setErr(e.code); });
   };
 
