@@ -3,7 +3,15 @@ const KEY='mybiz_v2';
 let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
 function persist(){ localStorage.setItem(KEY, JSON.stringify(store)); if(window.cloudPush) window.cloudPush(); }
-function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
+function updateBadge(){
+  var cu=store.currentUser;
+  if(!cu)return;
+  var el=document.getElementById('currentUserBadge');
+  if(!el)return;
+  var rolePart=(cu.role==='owner'&&(store.users||[]).length===0)?'':' ('+cu.role.charAt(0).toUpperCase()+cu.role.slice(1)+')';
+  el.textContent=cu.name+rolePart;
+}
+function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCardPayments,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
 function refreshAll(){ refreshView(); refreshOpenModals(); }
 // Re-render live data inside any open modal (e.g. the payment-breakdown popup) so
 // real-time cloud updates reflect immediately without closing/reopening.
@@ -23,7 +31,7 @@ function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'
   units:['None','BAGS (Bag)','BOTTLES (Btl)','BOX (Box)','BUNDLES (Bdl)','CANS (Can)','CARTONS (Ctn)','DOZENS (Dzn)','GRAMMES (Gm)','KILOGRAMS (Kg)','LITRE (Ltr)','METERS (Mtr)','MILLILITRE (Ml)','NUMBERS (Nos)','PACKS (Pac)','PAIRS (Prs)','PIECES (Pcs)','QUINTAL (Qtl)','ROLLS (Rol)','SQUARE FEET (Sqf)','SQUARE METERS (Sqm)'],
   settings:{currency:'Rs',decimals:0,theme:'#e0413e',invPrefix:'INV-',showTax:true,showDiscount:true,showLogo:true,showQR:true,showSign:true,showTerms:true,showCoName:true,showAddress:false,showCoPhone:true,showEmail:true,terms:'Thanks for doing business with us!',taxRate:0,enableShipping:false,negativeStock:true,saleOrder:false,zoom:100,txnMsg:'',
     passcode:false,tin:false,blockNewItem:false,blockNewParty:false,estimate:false,proforma:false,multiFirm:true,stockTransfer:false,txnHistory:true,
-    posBillDisc:true,posBillTax:false,posFreeQty:false,posLoyalty:false,posRoundOff:false,posPrimary:'print',posPricing:'without',posCheque:true,posQr:true,posBank:true,
+    posBillDisc:true,posBillTax:false,posFreeQty:false,posLoyalty:false,posRoundOff:false,posPrimary:'print',posPricing:'without',posCardPayment:true,posQr:true,posBank:true,
     invNo:true,addTime:false,cashSale:true,billingName:true,poDetails:false,quickEntry:false,noPreview:false,passcodeTxn:false,discPayment:true,linkPayments:true,dueDates:false,inclTax:true,showPurchase:false,last5Price:false,freeItemQty:false,countField:true,txnTax:false,txnDiscount:true,roundOff:false,billingType:'lite',
     printerTab:'thermal',printTheme:5,thermalDefault:true,pageSize:'3inch',textBold:true,autoCut:true,openDrawer:false,coName:true,coAddress:false,coEmail:true,coPhone:true,
     tSno:true,tUom:true,tMrp:true,tSize:false,tModel:false,tSerial:false,tTotalQty:true,tAmountDec:true,tReceived:true,tBalance:true,tPartyBal:false,tTaxDetails:false,tYouSaved:true,tGrouping:true,tDesc:true,
@@ -31,6 +39,56 @@ function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'
     partyGroup:false,shipAddr:false,partyStatus:true,payReminder:false,loyalty:false,
     enableItem:true,barcodeScan:true,directBarcode:true,stockMaintain:true,manufacturing:false,lowStock:true,itemUnit:true,itemCategory:true,partyWiseRate:false,itemDesc:true,itemTax:false,itemDiscount:true,updatePrice:false,itemQtyDec:2,wholesale:true,sizeField:false}}; }
 function ensure(){ const d=defaults(); for(const k in d){ if(store[k]===undefined) store[k]=d[k]; } if(!store.business) store.business=d.business; if(!store.counters)store.counters=d.counters; if(store.counters.purchaseBase===undefined)store.counters.purchaseBase=store.counters.purchase||1; syncOldSalesToPayments(); }
+
+/* ============ ROLE PERMISSIONS ============ */
+const PERMISSIONS = {
+  owner: { view:['*'], create:['*'], edit:['*'], delete:['*'], admin:['*'] },
+  admin: { view:['*'], create:['*'], edit:['*'], delete:['*'], admin:['*'] },
+  manager: {
+    view:['dashboard','parties','items','invoices','reports','estimates','sale-orders','purchase-orders','bank','cash','cheques','loan','expenses','payment-in','payment-out','purchase','purchase-return'],
+    create:['invoice','item','party','purchase','expense','payment-in','payment-out','sale-order','purchase-order'],
+    edit:['item','party','invoice','estimate'],
+    delete:['item','party','invoice'],
+    admin:[]
+  },
+  cashier: {
+    view:['dashboard','parties','items','invoices'],
+    create:['invoice'],
+    edit:[],
+    delete:[],
+    admin:[]
+  },
+  viewer: {
+    view:['*'],
+    create:[],
+    edit:[],
+    delete:[],
+    admin:[]
+  },
+  branch: {
+    view:['*'],
+    create:['*'],
+    edit:['*'],
+    delete:['*'],
+    admin:['import','export','barcode','recycle']
+  }
+};
+
+function hasPermission(action, feature) {
+  var role = (store.currentUser && store.currentUser.role) || 'owner';
+  if (role === 'owner' || role === 'admin') return true;
+  if (role === 'branch') {
+    if (action === 'admin') return (PERMISSIONS.branch.admin || []).includes(feature);
+    return true;
+  }
+  var perms = PERMISSIONS[role] || PERMISSIONS.viewer;
+  var allowed = perms[action] || [];
+  if (allowed.includes('*')) return true;
+  return allowed.includes(feature);
+}
+
+function showNoAccess() { toast('You do not have permission for this'); }
+
 function syncOldSalesToPayments(){
   if(!store.sales||!store.sales.length)return;
   if(!store.payments)store.payments=[];
@@ -87,26 +145,38 @@ function chartFmt(v){
 
 /* ============ MENU CONFIG ============ */
 const MENU=[
-  {k:'home', t:'Home', ic:'🏠'},
-  {k:'parties', t:'Parties', ic:'👥', plus:true},
-  {k:'items', t:'Items', ic:'🛍️', plus:true},
-  {t:'Sale', ic:'🧾', sub:[
-    {k:'createinvoice', t:'Create Invoice', plus:true},
-    {k:'sale', t:'Sale Invoices', plus:true},{k:'savedinv', t:'Saved Invoices'},
-    {k:'estimate', t:'Estimate/ Quotation', plus:true},
-    {k:'paymentin', t:'Payment-In', plus:true},{k:'saleorder', t:'Sale Order', plus:true},
-    {k:'challan', t:'Delivery Challan', plus:true},{k:'salereturn', t:'Sale Return/ Cr. Note', plus:true}]},
-  {t:'Purchase & Expense', ic:'🛒', sub:[
-    {k:'purchase', t:'Purchase Bills', plus:true},{k:'paymentout', t:'Payment-Out', plus:true},
-    {k:'expenses', t:'Expenses', plus:true},{k:'purchaseorder', t:'Purchase Order', plus:true},
-    {k:'purchasereturn', t:'Purchase Return/ Dr. Note', plus:true}]},
-  {k:'reports', t:'Reports', ic:'📊'},
-  {t:'Sync, Share & Backup', ic:'🔄', sub:[{k:'useractivity', t:'User Activity', dot:true},{k:'restorebackup', t:'Restore Backup'}]},
-  {t:'Utilities', ic:'🛠️', sub:[
-    {k:'importitems', t:'Import Items'},{k:'barcode', t:'Barcode Generator'},{k:'bulkupdate', t:'Update Items In Bulk'},
-    {k:'importparties', t:'Import Parties'},{k:'exportitems', t:'Export Items'},{k:'recyclebin', t:'Recycle Bin'},
-    {k:'verifydata', t:'Verify My Data'},{k:'closefy', t:'Close Financial Year'}]},
-  {k:'settings', t:'Settings', ic:'⚙️'}
+  {k:'home', t:'Home', ic:'🏠', perm:'dashboard'},
+  {k:'parties', t:'Parties', ic:'👥', plus:true, perm:'parties'},
+  {k:'items', t:'Items', ic:'🛍️', plus:true, perm:'items'},
+  {t:'Sale', ic:'🧾', perm:'invoices', sub:[
+    {k:'createinvoice', t:'Create Invoice', plus:true, perm:'create-invoice'},
+    {k:'sale', t:'Sale Invoices', plus:true, perm:'invoices'},
+    {k:'savedinv', t:'Saved Invoices', perm:'invoices'},
+    {k:'estimate', t:'Estimate/ Quotation', plus:true, perm:'estimates'},
+    {k:'paymentin', t:'Payment-In', plus:true, perm:'payment-in'},
+    {k:'saleorder', t:'Sale Order', plus:true, perm:'sale-orders'},
+    {k:'challan', t:'Delivery Challan', plus:true, perm:'invoices'},
+    {k:'salereturn', t:'Sale Return/ Cr. Note', plus:true, perm:'invoices'}]},
+  {t:'Purchase & Expense', ic:'🛒', perm:'purchase', sub:[
+    {k:'purchase', t:'Purchase Bills', plus:true, perm:'purchase'},
+    {k:'paymentout', t:'Payment-Out', plus:true, perm:'payment-out'},
+    {k:'expenses', t:'Expenses', plus:true, perm:'expenses'},
+    {k:'purchaseorder', t:'Purchase Order', plus:true, perm:'purchase-orders'},
+    {k:'purchasereturn', t:'Purchase Return/ Dr. Note', plus:true, perm:'purchase-return'}]},
+  {k:'reports', t:'Reports', ic:'📊', perm:'reports'},
+  {t:'Sync, Share & Backup', ic:'🔄', perm:'admin-users', sub:[
+    {k:'useractivity', t:'User Activity', dot:true, perm:'admin-users'},
+    {k:'restorebackup', t:'Restore Backup', perm:'restore-backup'}]},
+  {t:'Utilities', ic:'🛠️', perm:'import', sub:[
+    {k:'importitems', t:'Import Items', perm:'import'},
+    {k:'barcode', t:'Barcode Generator', perm:'barcode'},
+    {k:'bulkupdate', t:'Update Items In Bulk', perm:'import'},
+    {k:'importparties', t:'Import Parties', perm:'import'},
+    {k:'exportitems', t:'Export Items', perm:'export'},
+    {k:'recyclebin', t:'Recycle Bin', perm:'recycle'},
+    {k:'verifydata', t:'Verify My Data', perm:'import'},
+    {k:'closefy', t:'Close Financial Year', perm:'import'}]},
+  {k:'settings', t:'Settings', ic:'⚙️', perm:'settings'}
 ];
 
 const menuEl=document.getElementById('menu');
@@ -117,9 +187,11 @@ function buildMenu(){
     return {...m, sub: m.sub.filter(item=>{
       if(item.k==='estimate' && !s.estimate) return false;
       if(item.k==='saleorder' && !s.saleOrder) return false;
+      if(item.perm && !hasPermission('view', item.perm)) return false;
       return true;
     })};
   }).filter(m=>{
+    if(m.perm && !hasPermission('view', m.perm)) return false;
     if(!m.sub) return true;
     return m.sub.length>0;
   });
@@ -151,15 +223,27 @@ function nav(view,el){
   const brandF=document.querySelector('.brand-footer');
   if(brandF) brandF.style.display=(view==='home'||view==='purchase'||view==='purchaseform')?'none':'';
   content.className=(view==='purchase'||view==='purchaseform')?'content pf-active':'content';
+  
   render(view);
-  const viewNames={home:'Home',parties:'Parties',items:'Items',sale:'Sale Invoices',createinvoice:'Create Invoice',purchase:'Purchase Form',purchaseform:'Purchase Form',reports:'Reports',settings:'Settings',paymentin:'Payment-In',paymentout:'Payment-Out',expenses:'Expenses',saleorder:'Sale Order',savedinv:'Saved Invoices',bank:'Bank Accounts',cash:'Cash In Hand',cheques:'Cheques',barcode:'Barcode Generator',recyclebin:'Recycle Bin',importitems:'Import Items',estimate:'Estimate',profile:'My Company',gprofile:'Google Profile',useractivity:'User Activity',restorebackup:'Restore Backup',bulkupdate:'Bulk Update Items',importparties:'Import Parties'};
+  const viewNames={home:'Home',parties:'Parties',items:'Items',sale:'Sale Invoices',createinvoice:'Create Invoice',purchase:'Purchase Form',purchaseform:'Purchase Form',reports:'Reports',settings:'Settings',paymentin:'Payment-In',paymentout:'Payment-Out',expenses:'Expenses',saleorder:'Sale Order',savedinv:'Saved Invoices',bank:'Bank Accounts',cash:'Cash In Hand',cheques:'Card Payments',barcode:'Barcode Generator',recyclebin:'Recycle Bin',importitems:'Import Items',estimate:'Estimate',profile:'My Company',gprofile:'Google Profile',useractivity:'User Activity',restorebackup:'Restore Backup',bulkupdate:'Bulk Update Items',importparties:'Import Parties'};
   logActivity('navigation','Opened '+viewNames[view]);
 }
 function render(view){
+  const viewPerms={
+    home:'dashboard',parties:'parties',items:'items',sale:'invoices',createinvoice:'invoices',
+    purchase:'purchase',purchaseform:'purchase',purchaseorder:'purchase-orders',reports:'reports',
+    settings:'settings',paymentin:'payment-in',paymentout:'payment-out',expenses:'expenses',
+    purchasereturn:'purchase-return',saleorder:'sale-orders',savedinv:'invoices',
+    bank:'bank',cash:'cash',cheques:'cheques',loan:'loan',
+    barcode:'barcode',recyclebin:'recycle',importitems:'import',exportitems:'export',
+    estimate:'estimates',profile:'settings',gprofile:'settings',
+    useractivity:'admin-users',restorebackup:'restore-backup',bulkupdate:'import',importparties:'import'
+  };
+  if(viewPerms[view] && !hasPermission('view', viewPerms[view])){showNoAccess();return;}
   const map={home:vWelcome,parties:vParties,items:vItems,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,
     settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,purchasereturn:vPurchaseReturn,
     saleorder:vSaleOrder,savedinv:vSavedInvoices,
-    bank:vBank,cash:vCash,cheques:vCheques,loan:vLoan,
+    bank:vBank,cash:vCash,cheques:vCardPayments,loan:vLoan,
     barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,
     useractivity:vUserActivity,restorebackup:vRestoreBackup,bulkupdate:vBulkUpdate,importparties:vImportParties};
   (map[view]||vGeneric(view))();
@@ -175,17 +259,62 @@ function renderHub(gi){
   content.querySelectorAll('.hub-card').forEach(c=>c.onclick=()=>nav(c.dataset.go));
 }
 
+/* ============ BRANCH DASHBOARD ============ */
+function showBranchDashboard() {
+  const branch = store.currentUser;
+  if (!branch || branch.role !== 'branch') return;
+
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center">
+      <div style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,var(--blue),#5b8def);color:#fff;display:grid;place-items:center;font-size:48px;margin-bottom:24px">🏢</div>
+      <h1 style="font-size:28px;font-weight:800;color:#222;margin-bottom:8px">${branch.name}</h1>
+      <div style="background:var(--blue);color:#fff;padding:8px 20px;border-radius:20px;font-weight:700;font-size:16px;display:inline-block;margin-bottom:16px">Current Branch</div>
+      <div style="font-size:14px;color:#888;margin-bottom:8px">Branch Code: <b>${branch.branchCode}</b></div>
+      ${branch.branchPhone?`<div style="font-size:14px;color:#888;margin-bottom:24px">Phone: <b>${branch.branchPhone}</b></div>`:'<div style="margin-bottom:24px"></div>'}
+      <button onclick="nav('home')" style="padding:14px 40px;background:var(--red);color:#fff;border:none;border-radius:26px;font-weight:700;font-size:16px;cursor:pointer">Open →</button>
+    </div>`;
+}
+
 /* ============ WELCOME / DASHBOARD ============ */
 function vWelcome(){
+  const currentUser=store.currentUser||{name:'Owner',role:'owner'};
+  const userName=currentUser.name||'Owner';
+  const userRole=currentUser.role||'owner';
+  
+  // Cashier simplified dashboard
+  if(userRole==='cashier'){
+    content.innerHTML=`
+      <div style="padding:20px;text-align:center">
+        <h2 style="margin:0 0 4px">Welcome, ${userName}</h2>
+        <p style="color:#888;margin:0 0 20px;font-size:14px">Cashier Dashboard</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:360px;margin:0 auto">
+          <div class="ua-card" onclick="nav('createinvoice')" style="padding:20px;cursor:pointer">
+            <div style="font-size:28px;margin-bottom:6px">📄</div>
+            <div style="font-weight:700;font-size:14px">Create Invoice</div>
+          </div>
+          <div class="ua-card" onclick="nav('sale')" style="padding:20px;cursor:pointer">
+            <div style="font-size:28px;margin-bottom:6px">📋</div>
+            <div style="font-weight:700;font-size:14px">View Invoices</div>
+          </div>
+          <div class="ua-card" onclick="nav('items')" style="padding:20px;cursor:pointer">
+            <div style="font-size:28px;margin-bottom:6px">📦</div>
+            <div style="font-weight:700;font-size:14px">View Items</div>
+          </div>
+          <div class="ua-card" onclick="nav('parties')" style="padding:20px;cursor:pointer">
+            <div style="font-size:28px;margin-bottom:6px">👤</div>
+            <div style="font-weight:700;font-size:14px">View Parties</div>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+  
   const totalSales=(store.sales||[]).reduce((a,s)=>a+(s.refunded?0:s.total),0);
   const totalPurchases=(store.purchases||[]).reduce((a,p)=>a+p.total,0);
   const totalExpenses=(store.expenses||[]).reduce((a,e)=>a+e.amount,0);
   const totalReceivable=(store.parties||[]).reduce((a,p)=>a+((p.balance||0)>0?p.balance:0),0);
   const totalPayable=(store.parties||[]).reduce((a,p)=>a+((p.balance||0)<0?Math.abs(p.balance):0),0);
-  const currentUser=store.currentUser||{name:'Owner',role:'owner'};
-  const userName=currentUser.name||'Owner';
-  const userRole=currentUser.role||'owner';
-  const roleLabel=userRole==='owner'?'Owner':userRole==='admin'?'Admin':'Secondary Admin';
+  const roleLabel=userRole==='owner'?'Owner':userRole==='admin'?'Admin':userRole==='manager'?'Manager':userRole==='cashier'?'Cashier':userRole==='viewer'?'Viewer':userRole==='branch'?'Branch ('+currentUser.branchCode+')':'User';
   const businessName=store.business&&store.business.name?store.business.name:'My Business';
   const now=new Date();
   const currentMonth=now.getMonth();
@@ -980,13 +1109,14 @@ function recalcHome(){
   hPreview();
 }
 function hLogoClick(){
+  if(!hasPermission('edit','settings')){showNoAccess();return;}
   if(store.business.logo){ document.getElementById('h_logomenu').classList.toggle('show'); }
   else document.getElementById('h_logofile').click();
 }
-function hChangeLogo(){ document.getElementById('h_logomenu').classList.remove('show'); document.getElementById('h_logofile').value=''; document.getElementById('h_logofile').click(); }
-function hDeleteLogo(){ store.business.logo=''; persist(); refreshView(); document.getElementById('h_logomenu').classList.remove('show');
+function hChangeLogo(){ if(!hasPermission('edit','settings')){showNoAccess();return;} document.getElementById('h_logomenu').classList.remove('show'); document.getElementById('h_logofile').value=''; document.getElementById('h_logofile').click(); }
+function hDeleteLogo(){ if(!hasPermission('edit','settings')){showNoAccess();return;} store.business.logo=''; persist(); refreshView(); document.getElementById('h_logomenu').classList.remove('show');
   document.getElementById('h_logo').innerHTML='＋<br>Add Logo'; toast('Logo deleted'); }
-function hLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
+function hLogo(inp){ if(!hasPermission('edit','settings')){showNoAccess();return;} const f=inp.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ store.business.logo=e.target.result; persist(); refreshView(); document.getElementById('h_logo').innerHTML=`<img src="${e.target.result}">`; toast('Logo saved'); }; r.readAsDataURL(f); }
 document.addEventListener('click',e=>{ const m=document.getElementById('h_logomenu'); if(m&&m.classList.contains('show')&&!e.target.closest('.hlogo-wrap')) m.classList.remove('show'); });
 document.addEventListener('click',e=>{ const dd=document.getElementById('sharedItemDrop'); if(dd&&dd.style.display==='block'&&!e.target.closest('#sharedItemDrop')&&!e.target.closest('[onfocus*="Filter"]')) dd.style.display='none'; });
@@ -1007,13 +1137,17 @@ function hPreview(){
   document.getElementById('hp_words').textContent=words(total)+' Rupees only';
 }
 function quickSale(){
+  if(!hasPermission('create','invoices')){showNoAccess();return;}
   const cust=document.getElementById('h_cust').value.trim(), phone=document.getElementById('h_phone').value.trim(), recv=pf('h_recv');
   if(!cust) return toast('Enter Customer Name');
   const rows=homeRows.filter(r=>r.item&&r.qty);
   const total=homeTotal();
   if(total<=0) return toast('Add at least one item with price');
   const saleId=id();
-  store.sales.push({id:saleId,no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone,date:dispDate(),rows,total,received:recv,mode:'Cash'});
+  const bPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
+  const bCreator=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
+  const bCreatorName=store.currentUser?store.currentUser.name:'';
+  store.sales.push({id:saleId,no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone,date:dispDate(),rows,total,received:recv,mode:'Cash',branchPhone:bPhone,createdBy:bCreator,createdByName:bCreatorName});
   store.counters.sale++;
   rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item); if(it)it.stock-=r.qty;});
   let p=store.parties.find(x=>x.name===cust);
@@ -1031,13 +1165,14 @@ function buildInvoiceHTML(s){
   const lineAmt=r=>r.qty*r.price*(1-((r.disc||0)/100));
   const sub=rows.reduce((a,r)=>a+r.qty*r.price,0);
   const discTotal=sub-s.total;
-  const data=encodeURIComponent(`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)} | ${b.phone||''}`);
+  const invoicePhone=s.branchPhone||b.phone||'';
+  const data=encodeURIComponent(`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)} | ${invoicePhone}`);
   const totalQty=rows.reduce((a,r)=>a+r.qty,0);
   return `<div class="print-invoice">
     <div class="pi-top">
       <div class="pi-logo">${b.logo?`<img src="${b.logo}">`:'LOGO'}</div>
       <div class="pi-co"><div class="pi-name">${b.name||'My Company'}</div>
-        <div class="pi-sub">${b.address||''}</div><div class="pi-sub">Phone: ${b.phone||'-'}</div></div>
+        <div class="pi-sub">${b.address||''}</div><div class="pi-sub">Phone: ${invoicePhone||'-'}</div></div>
       <div class="pi-title">INVOICE</div>
     </div>
     <div class="pi-meta">
@@ -1063,6 +1198,8 @@ function buildInvoiceHTML(s){
       </div>
     </div>
     ${st.showTerms!==false?`<div class="pi-terms"><b>Terms &amp; Conditions:</b> ${st.terms||'Thanks for doing business with us!'}</div>`:''}
+    <div class="pi-barcode" style="text-align:center;margin-top:12px"><svg class="inv-barcode-svg" data-code="${s.no}"></svg>
+      <div style="font-size:11px;color:#888;margin-top:4px">${invoicePhone?'Scan for branch info: '+invoicePhone:''}</div></div>
     ${st.showSign!==false?`<div class="pi-sign">For ${b.name||'My Company'}<br><br>Authorised Signatory</div>`:''}
   </div>`;
 }
@@ -1110,7 +1247,14 @@ function editInvItemChange(){
 function showInvoiceView(s){ viewInv=s; document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s);
   const rf=document.getElementById('iv_refund'); if(rf){ rf.style.display=s.refunded?'none':''; if(s.refunded){ document.getElementById('iv_body').insertAdjacentHTML('afterbegin','<div class="refunded-stamp">REFUNDED</div>'); } }
   const sv=document.getElementById('iv_save'); if(sv){ sv.style.display=(s.id&&s.id.indexOf('tmp_')!==0)?'none':''; }
-  showModal('invViewModal'); }
+  showModal('invViewModal');
+  renderInvoiceBarcodes(); }
+function renderInvoiceBarcodes(){
+  document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
+    var code=svg.getAttribute('data-code')||'000000';
+    try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12}); }catch(e){ svg.innerHTML=''; }
+  });
+}
 function toggleItemAction(idx,ev){
   ev.stopPropagation();
   const el=document.getElementById('itemAct'+idx);
@@ -1125,6 +1269,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.pi-row-actions'))document.querySelectorAll('.pi-item-actions.show').forEach(x=>x.classList.remove('show'));
 });
 function refundItem(idx){
+  if(!hasPermission('edit','invoices')){showNoAccess();return;}
   const s=viewInv; if(!s||!s.rows||!s.rows[idx])return;
   const r=s.rows[idx];
   if(!confirm(`Refund ${r.item} (x${r.qty}) for ${rs(r.qty*r.price)}?`))return;
@@ -1138,6 +1283,7 @@ function refundItem(idx){
   toast('Item refunded');logActivity('return','Refunded item from invoice');
 }
 function replaceItem(idx){
+  if(!hasPermission('edit','invoices')){showNoAccess();return;}
   const s=viewInv; if(!s||!s.rows||!s.rows[idx])return;
   const oldRow=s.rows[idx];
   const itemList=store.items.filter(x=>x.stock>0);
@@ -1183,6 +1329,7 @@ function updateReplacePreview(idx){
     <b style="color:${diff>0?'var(--red)':diff<0?'#1aa260':'#333'}">${diff>0?'Extra to pay: +'+rs(diff):diff<0?'Refund: '+rs(Math.abs(diff)):'Same price'}</b>`;
 }
 function refundInvoice(){
+  if(!hasPermission('edit','invoice')){showNoAccess();return;}
   const s=viewInv; if(s.refunded) return toast('Already refunded');
   if(!confirm(`Refund invoice ${s.no} for ${rs(s.total)}? Stock will be restored and money recorded as refund.`)) return;
   s.refunded=true;
@@ -1193,6 +1340,7 @@ function refundInvoice(){
   persist(); refreshView(); toast('Refund done — sales recalculated'); closeModal('invViewModal'); nav('sale');
 }
 function replaceInvoice(){
+  if(!hasPermission('edit','invoices')){showNoAccess();return;}
   const s=viewInv;
   if(!confirm(`Start replacement for ${s.no}? Original stays, and a NEW slip opens for new products.`)) return;
   s.replaced=true;
@@ -1203,6 +1351,7 @@ function replaceInvoice(){
 }
 let replaceFor=null;
 function trashCurrentInvoice(){
+  if(!hasPermission('delete','invoices')){showNoAccess();return;}
   const s=viewInv;if(!s)return;
   if(!confirm('Move invoice '+s.no+' to Recycle Bin?'))return;
   const idx=store.sales.findIndex(x=>x.id===s.id);
@@ -1215,6 +1364,7 @@ function trashCurrentInvoice(){
   logActivity('return','Moved '+s.no+' to recycle bin');
 }
 function trashItemById(iid){
+  if(!hasPermission('delete','item')){showNoAccess();return;}
   const it=store.items.find(x=>x.id===iid);if(!it)return;
   if(!confirm('Move "'+it.name+'" to Recycle Bin?'))return;
   const idx=store.items.findIndex(x=>x.id===iid);
@@ -1227,6 +1377,7 @@ function trashItemById(iid){
   logActivity('return','Moved item "'+it.name+'" to recycle bin');
 }
 function trashPartyById(pid){
+  if(!hasPermission('delete','party')){showNoAccess();return;}
   const p=store.parties.find(x=>x.id===pid);if(!p)return;
   if(!confirm('Move "'+p.name+'" to Recycle Bin?'))return;
   const idx=store.parties.findIndex(x=>x.id===pid);
@@ -1240,8 +1391,15 @@ function trashPartyById(pid){
 }
 function printInvoice(){
   const w=window.open('','_blank','width=820,height=900');
-  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
-  w.document.close(); w.focus(); setTimeout(()=>{ w.print(); },300);
+  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
+  w.document.close(); w.focus();
+  setTimeout(()=>{
+    w.document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
+      var code=svg.getAttribute('data-code')||'000000';
+      try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12 }); }catch(e){}
+    });
+    w.print();
+  },600);
 }
 function saveInvoiceFromPreview(){
   if(!viewInv)return;
@@ -1251,11 +1409,15 @@ function saveInvoiceFromPreview(){
   const invNo=viewInv.no||(s.invPrefix||'INV-')+String(store.counters.sale).padStart(2,'0');
   const saleDate=s.addTime?viewInv.date+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):viewInv.date;
   const newId=id();
+  const branchPhone4=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
+  const createdBy4=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
+  const createdByName4=store.currentUser?store.currentUser.name:'';
   const savedInv={
     id:newId,no:invNo,party:viewInv.party,phone:viewInv.phone||'',date:saleDate,
     rows:(viewInv.rows||[]).map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),
     total:viewInv.total,received:viewInv.received||0,mode:mode,
-    status:viewInv.received>=viewInv.total?'paid':'unpaid'
+    status:viewInv.received>=viewInv.total?'paid':'unpaid',
+    branchPhone:branchPhone4,createdBy:createdBy4,createdByName:createdByName4
   };
   store.sales.push(savedInv);
   store.counters.sale++;
@@ -1278,7 +1440,7 @@ function printAndSaveInvoice(){
   printInvoice();
 }
 function downloadInvoice(){
-  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style></head><body>${buildInvoiceHTML(viewInv)}<script>window.onload=()=>window.print()<\/script></body></html>`); w.document.close();
+  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}<script>setTimeout(()=>{document.querySelectorAll('.inv-barcode-svg').forEach(svg=>{try{JsBarcode(svg,svg.getAttribute('data-code')||'000000',{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});}catch(e){}});window.print();},600)<\/script></body></html>`); w.document.close();
 }
 function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
 .print-invoice{max-width:760px;margin:auto}
@@ -1364,6 +1526,7 @@ function posRestoreTabState(){
   posCalcTotal();
 }
 function openSale(){
+  if(!hasPermission('create','invoices')){showNoAccess();return;}
   const s=store.settings||{};
   if(!posTabs.length||posActiveTab>=posTabs.length){
     const newTab=posInitTab();
@@ -1388,6 +1551,7 @@ function openSale(){
   logActivity('invoice','Opened new invoice creator');
 }
 function openSaleEdit(sid){
+  if(!hasPermission('edit','invoices')){showNoAccess();return;}
   const s=store.settings||{};
   const sale=store.sales.find(x=>x.id===sid);if(!sale)return;
   const editTab=posInitTab();
@@ -1441,6 +1605,13 @@ function posSetRow(i,f,v){
   if(!posRows[i])return;
   posRows[i][f]=['qty','price','disc'].includes(f)?(+v||0):v;
   if(f==='item')posShowSearch(i);
+  if(f==='code'&&v&&v.length>=3){
+    const it=store.items.find(x=>(x.code||'').toLowerCase()===v.toLowerCase());
+    if(it){
+      posPickItem(i,it.id);
+      toast('Found: '+it.name);
+    }
+  }
   posCalcTotal();
 }
 function togglePosSettings(){
@@ -1457,7 +1628,7 @@ function posLoadSettings(){
   document.getElementById('posSetRoundOff').checked=!!s.posRoundOff;
   document.querySelector('input[name="posPrimary"][value="'+(s.posPrimary||'print')+'"]').checked=true;
   document.querySelector('input[name="posPricing"][value="'+(s.posPricing||'without')+'"]').checked=true;
-  document.getElementById('posSetCheque').checked=!!s.posCheque;
+  document.getElementById('posSetCardPayment').checked=!!s.posCardPayment;
   document.getElementById('posSetQr').checked=!!s.posQr;
   document.getElementById('posSetBank').checked=!!s.posBank;
 }
@@ -1470,7 +1641,7 @@ function posSaveSettings(){
   store.settings.posRoundOff=document.getElementById('posSetRoundOff').checked;
   store.settings.posPrimary=document.querySelector('input[name="posPrimary"]:checked').value;
   store.settings.posPricing=document.querySelector('input[name="posPricing"]:checked').value;
-  store.settings.posCheque=document.getElementById('posSetCheque').checked;
+  store.settings.posCardPayment=document.getElementById('posSetCardPayment').checked;
   store.settings.posQr=document.getElementById('posSetQr').checked;
   store.settings.posBank=document.getElementById('posSetBank').checked;
   persist();
@@ -1487,7 +1658,7 @@ function applyPosSettings(){
     let opts='<option>Cash</option>';
     if(s.posBank!==false)opts+='<option>Bank Transfer</option>';
     if(s.posQr!==false)opts+='<option>QR Code</option>';
-    if(s.posCheque!==false)opts+='<option>Cheque</option>';
+    if(s.posCardPayment!==false)opts+='<option>Card Payment</option>';
     const cur=pm.value;
     pm.innerHTML=opts;
     if([...pm.options].some(o=>o.value===cur))pm.value=cur;
@@ -1584,6 +1755,71 @@ function posSearchItems(){
     }
   }
 }
+
+// Barcode scanner detection
+var _scannerKeys=[],_scannerTimer=null,_scannerDetected=false;
+function setScannerUI(detected){
+  var pairs=[['scannerDot','scannerLabel'],['nciScannerDot','nciScannerLabel']];
+  pairs.forEach(function(p){
+    var dot=document.getElementById(p[0]);
+    var lbl=document.getElementById(p[1]);
+    if(dot){dot.style.background=detected?'#27ae60':'#e74c3c';dot.style.boxShadow=detected?'0 0 8px rgba(39,174,96,0.6)':'0 0 6px rgba(231,76,60,0.5)';}
+    if(lbl){lbl.textContent=detected?'Scanner: Connected':'Scanner: Not connected';lbl.style.color=detected?'#27ae60':'#888';}
+  });
+}
+function scannerDetect(){
+  var now=Date.now();
+  _scannerKeys.push(now);
+  _scannerKeys=_scannerKeys.filter(function(t){return now-t<1000;});
+  if(_scannerKeys.length>=3){
+    if(!_scannerDetected){_scannerDetected=true;setScannerUI(true);}
+    _scannerKeys=[];
+  }
+  if(_scannerTimer)clearTimeout(_scannerTimer);
+  _scannerTimer=setTimeout(function(){_scannerDetected=false;setScannerUI(false);},3000);
+}
+function posSearchKey(ev){
+  if(ev.key!=='Enter')return;
+  var q=(document.getElementById('posSearchItem').value||'').trim();
+  if(!q)return;
+  ev.preventDefault();
+  document.getElementById('posSearchItem').value='';
+  document.querySelectorAll('.pos-item-drop').forEach(function(d){d.classList.remove('show');});
+  if(_scannerDetected){
+    posBarcodeAutoAdd(q);
+  }else{
+    posBarcodeAutoAdd(q);
+  }
+}
+function posBarcodeAutoAdd(code){
+  if(!code)return;
+  var it=store.items.find(function(x){return (x.code||'').toLowerCase()===code.toLowerCase();});
+  if(!it)return;
+  var targetIdx=-1;
+  for(var i=0;i<posRows.length;i++){
+    if(!posRows[i].item||posRows[i].item===''){targetIdx=i;break;}
+  }
+  if(targetIdx===-1){posAddRow();targetIdx=posRows.length-1;}
+  posPickItem(targetIdx,it.id);
+  posRows[targetIdx].qty=1;
+  posRenderRows();
+  posCalcTotal();
+  toast('⚡ Added: '+it.name+' ('+it.code+')');
+}
+function nciBarcodeAutoAdd(code){
+  if(!code)return;
+  var it=store.items.find(function(x){return (x.code||'').toLowerCase()===code.toLowerCase();});
+  if(!it)return;
+  var targetIdx=-1;
+  for(var i=0;i<nciRows.length;i++){
+    if(!nciRows[i].item||nciRows[i].item===''){targetIdx=i;break;}
+  }
+  if(targetIdx===-1){nciAddRow();targetIdx=nciRows.length-1;}
+  nciPickItem(targetIdx,it.id);
+  nciRenderRows();nciCalc();
+  toast('⚡ Added: '+it.name+' ('+it.code+')');
+}
+
 let posAdditional=0, posBillDisc=0, posLoyalty=0, posRemarksTxt='';
 
 function posChangeQty(){
@@ -1625,7 +1861,7 @@ function posRemarks(){
   ()=>{ posRemarksTxt=document.getElementById('f_remarks').value; closeModal('formModal'); toast('Remarks saved'); },'SAVE');
 }
 function posCreditPay(){
-  formModal('Other / Credit Payment',`<div class="field"><label>Payment Mode</label><select id="f_cmode"><option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Cheque</option><option>Credit</option></select></div>
+  formModal('Other / Credit Payment',`<div class="field"><label>Payment Mode</label><select id="f_cmode"><option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Card Payment</option><option>Credit</option></select></div>
     <div class="field"><label>Amount</label><input id="f_camt" type="number" value="0"></div>
     <div class="field"><label>Reference / Note</label><input id="f cref" placeholder="Transaction ID or note"></div>`,
   ()=>{ const mode=document.getElementById('f_cmode').value; const amt=+document.getElementById('f_camt').value||0;
@@ -1752,9 +1988,12 @@ function posSaveBill(){
     }
   }
   const saveDirect=(s.noPreview||s.posPrimary==='new');
+  const branchPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
+  const createdBy=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
+  const createdByName=store.currentUser?store.currentUser.name:'';
   if(saveDirect){
     const saleId=id();
-    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
+    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid',branchPhone:branchPhone,createdBy:createdBy,createdByName:createdByName});
     store.counters.sale++;
     if(s.stockMaintain!==false)rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it&&typeof it.stock==='number')it.stock-=r.qty;});
     let p=store.parties.find(x=>x.name===cust);
@@ -1836,7 +2075,10 @@ function confirmSaveAndPrint(){
     }
   }
   const saleId=id();
-  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid'});
+  const branchPhone2=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
+  const createdBy2=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
+  const createdByName2=store.currentUser?store.currentUser.name:'';
+  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid',branchPhone:branchPhone2,createdBy:createdBy2,createdByName:createdByName2});
   store.counters.sale++;
   if(s.stockMaintain!==false)rows.forEach(r=>{const it=store.items.find(x=>x.name===r.item);if(it&&typeof it.stock==='number')it.stock-=r.qty;});
   let p=store.parties.find(x=>x.name===cust);
@@ -1848,10 +2090,16 @@ function confirmSaveAndPrint(){
   closeModal('invViewModal');
   const printContent=document.getElementById('iv_body').innerHTML;
   const pw=window.open('','','width=800,height=600');
-  pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"></head><body>'+printContent+'</body></html>');
+  pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>'+printContent+'</body></html>');
   pw.document.close();
   pw.focus();
-  setTimeout(()=>{pw.print();pw.close();},500);
+  setTimeout(()=>{
+    pw.document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
+      var code=svg.getAttribute('data-code')||'000000';
+      try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12}); }catch(e){}
+    });
+    pw.print();pw.close();
+  },800);
   posCloseTab(posActiveTab);
   posEditingId=null;
   toast('Invoice saved & printed!');
@@ -1988,7 +2236,7 @@ function vParties(){
       <div class="pl-head">
         <div class="pl-title">Parties <span class="pl-arrow">▾</span></div>
         <div class="pl-actions">
-          <button class="pl-add-btn" onclick="addParty()">＋ Add Party</button>
+          <button class="pl-add-btn" onclick="addParty()" ${hasPermission('create','party')?'':'style="display:none"'}>＋ Add Party</button>
           <span class="pl-icon">⚙</span>
           <span class="pl-icon">⋮</span>
         </div>
@@ -2041,6 +2289,7 @@ function getPartyTransactions(name){
   return txns;
 }
 function editParty(pid){
+  if(!hasPermission('edit','parties')){showNoAccess();return;}
   const p=store.parties.find(x=>x.id===pid);if(!p)return;
   document.getElementById('pa_name').value=p.name||'';
   document.getElementById('pa_phone').value=p.phone||'';
@@ -2054,6 +2303,7 @@ function editParty(pid){
   document.querySelector('.pm-foot .btn-blue').onclick=function(){saveEditParty(pid);};
 }
 function saveEditParty(pid){
+  if(!hasPermission('edit','parties')){showNoAccess();return;}
   const p=store.parties.find(x=>x.id===pid);if(!p)return;
   p.name=document.getElementById('pa_name').value.trim()||p.name;
   p.phone=document.getElementById('pa_phone').value;
@@ -2066,6 +2316,7 @@ function saveEditParty(pid){
   document.querySelector('.pm-foot .btn-blue').onclick=function(){saveParty(false);};
 }
 function addParty(){
+  if(!hasPermission('create','party')){showNoAccess();return;}
   ['pa_name','pa_phone','pa_email','pa_billing','pa_gst','pa_field1'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
   document.getElementById('pa_bal').value='0'; document.getElementById('pa_type').value='customer';
   document.getElementById('pa_date').value=new Date().toISOString().slice(0,10);
@@ -2078,6 +2329,7 @@ function partyTab(t){
   ['address','credit','more'].forEach(k=>document.getElementById('pt_'+k).style.display=k===t?'block':'none');
 }
 function saveParty(again){
+  if(!hasPermission('create','party')){showNoAccess();return;}
   const n=document.getElementById('pa_name').value.trim(); if(!n)return toast('Enter Party Name');
   store.parties.push({id:id(),name:n,phone:document.getElementById('pa_phone').value,email:document.getElementById('pa_email').value,
     billing:document.getElementById('pa_billing').value,gst:document.getElementById('pa_gst').value,
@@ -2107,7 +2359,7 @@ function vItems(){
       <div class="ip-left">
         <div class="ip-left-head">
           <div class="ip-search-btn" onclick="document.getElementById('ipSearch').focus()">🔍</div>
-          <button class="ip-add-btn" onclick="openItem()">+ Add Item</button>
+          <button class="ip-add-btn" onclick="openItem()" ${hasPermission('create','item')?'':'style="display:none"'}>+ Add Item</button>
         </div>
         <div class="ip-search-wrap"><input id="ipSearch" placeholder="Search items..." oninput="filterItems()"></div>
         <div class="ip-list-head"><span>ITEM</span><span>QTY</span></div>
@@ -2210,6 +2462,7 @@ function renameCategory(old){
     store.items.forEach(i=>{if(i.cat===old)i.cat=c;});persist();refreshView();closeModal('formModal');selCategory=c;vItems();toast('Category renamed');},'RENAME');
 }
 function deleteCategory(cat){
+  if(!hasPermission('delete','item')){showNoAccess();return;}
   if(!confirm(`Delete category "${cat}"? Items in this category will become uncategorized.`))return;
   store.categories=store.categories.filter(c=>c!==cat);persist();refreshView();selCategory='Items not in any Category';vItems();toast('Category deleted');logActivity('item','Deleted category: '+cat);
 }
@@ -2300,6 +2553,7 @@ function filterItemTxns(q){
   });
 }
 function openEditItem(iid){
+  if(!hasPermission('edit','item')){showNoAccess();return;}
   const it=store.items.find(x=>x.id===iid); if(!it)return;
   editingItemId=iid;
   openItem();
@@ -2327,6 +2581,7 @@ function adjustStock(iid){
   ()=>{ it.stock=+document.getElementById('f_adjstock').value||0; persist(); refreshView(); closeModal('formModal'); toast('Stock updated'); logActivity('item','Adjusted stock for: '+it.name); vItems(); },'UPDATE');
 }
 function openItem(){
+  if(!hasPermission('create','item')){showNoAccess();return;}
   const s=store.settings||{};
   if(!editingItemId){
     document.querySelector('#itemModal .im-title').textContent='Add Item';
@@ -2404,6 +2659,7 @@ function openSize(){
 }
 let editingItemId=null;
 function saveItem(again){
+  if(!hasPermission(editingItemId?'edit':'create','item')){showNoAccess();return;}
   const n=document.getElementById('i_name').value.trim(); if(!n)return toast('Enter Item Name');
   let code=document.getElementById('i_code').value.trim()||('ITM'+String(store.items.length+1).padStart(4,'0'));
   const price=+document.getElementById('i_price').value||0;
@@ -2742,7 +2998,7 @@ function vPurchase(){
   content.innerHTML=`
   <div class="hub-header">
     <h2>Purchase Bills</h2>
-    <button class="hub-btn hub-btn-red" onclick="nav('purchaseform')">＋ Add Purchase</button>
+    <button class="hub-btn hub-btn-red" onclick="nav('purchaseform')" ${hasPermission('create','purchase')?'':'style="display:none"'}>＋ Add Purchase</button>
   </div>
   <div class="hub-card">
     <div class="hub-filters">
@@ -2871,6 +3127,7 @@ function sharePurchase(idx){
 }
 
 function deletePurchase(idx){
+  if(!hasPermission('delete','item')){showNoAccess();return;}
   const p=(store.purchases||[])[idx];
   if(!p)return;
   if(!confirm(`Delete purchase ${p.no}? This cannot be undone.`))return;
@@ -2927,7 +3184,7 @@ function vPurchaseOrder(){
 function renderPurchaseOrderList(){
   const orders=(store.purchaseOrders||[]).reverse();
   content.innerHTML=`
-  <div class="hub-header"><h2>Purchase Orders</h2><button class="hub-btn hub-btn-red" onclick="openPurchaseOrderForm()">＋ Add Purchase Order</button></div>
+  <div class="hub-header"><h2>Purchase Orders</h2><button class="hub-btn hub-btn-red" onclick="openPurchaseOrderForm()" ${hasPermission('create','purchase-order')?'':'style="display:none"'}>＋ Add Purchase Order</button></div>
   <div class="hub-card"><div style="overflow-x:auto">
     <table class="hub-table"><thead><tr>
       <th>DATE</th><th>ORDER NO</th><th>PARTY</th><th class="right">TOTAL</th><th>STATUS</th><th style="width:100px"></th>
@@ -2948,6 +3205,7 @@ function renderPurchaseOrderList(){
 }
 
 function openPurchaseOrderForm(){
+  if(!hasPermission('create','purchase-orders')){showNoAccess();return;}
   const nextNo=(store.purchaseOrders||[]).length+1;
   poData={party:'',phone:'',rows:[{item:'',desc:'',count:'',size:'',qty:1,unit:'NONE',price:0,discP:0,discA:0}],payMode:'Cash',discP:0,discA:0,orderNo:nextNo,date:new Date().toISOString().split('T')[0],dueDate:new Date().toISOString().split('T')[0]};
   renderPOForm();
@@ -3028,7 +3286,7 @@ function renderPOForm(){
         <div>
           <div style="margin-bottom:12px"><label style="font-size:13px;color:#666;margin-right:8px">Payment Type</label>
             <select id="po_payMode" onchange="poData.payMode=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
-              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option>
+              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Card Payment</option>
             </select></div>
           <span style="color:#2f6df6;font-size:13px;cursor:pointer;font-weight:600">+ Add Payment type</span>
         </div>
@@ -3206,6 +3464,7 @@ function printPurchaseOrder(idx){
 }
 
 function deletePurchaseOrder(idx){
+  if(!hasPermission('delete','item')){showNoAccess();return;}
   if(!confirm('Delete this Purchase Order?'))return;
   store.purchaseOrders.splice(idx,1);
   persist();toast('Deleted');vPurchaseOrder();
@@ -3340,7 +3599,7 @@ function vPurchaseForm(){
         <div class="pf-bottom-left">
           <div class="pf-label">Payment Type</div>
           <select class="pf-pay-select" id="pfPayMode" onchange="pfTabs[${pfActiveTab}].payMode=this.value">
-            <option ${cur.payMode==='Cash'?'selected':''}>Cash</option><option ${cur.payMode==='Credit'?'selected':''}>Credit</option><option ${cur.payMode==='Cheque'?'selected':''}>Cheque</option><option ${cur.payMode==='UPI'?'selected':''}>UPI</option><option ${cur.payMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
+            <option ${cur.payMode==='Cash'?'selected':''}>Cash</option><option ${cur.payMode==='Credit'?'selected':''}>Credit</option><option ${cur.payMode==='Card Payment'?'selected':''}>Card Payment</option><option ${cur.payMode==='UPI'?'selected':''}>UPI</option><option ${cur.payMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
           </select>
           <div class="pf-add-payment" onclick="toast('Multiple payment types coming soon')">+ Add Payment type</div>
         </div>
@@ -3655,7 +3914,7 @@ function renderDebitNoteForm(){
         <div>
           <div style="margin-bottom:12px"><label style="font-size:13px;color:#666;margin-right:8px">Payment Type</label>
             <select id="dn_payMode" onchange="dnData.payMode=this.value" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px">
-              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option>
+              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Card Payment</option>
             </select></div>
           <span style="color:#2f6df6;font-size:13px;cursor:pointer;font-weight:600">+ Add Payment type</span>
         </div>
@@ -3983,7 +4242,7 @@ function drawRep(){
           <option value="">All Transaction</option><option>Sale</option><option>Purchase</option><option>Expense</option><option>Payment In</option><option>Payment Out</option>
         </select>
         <select id="repAllPay" onchange="filterRepAllTxn()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;min-width:150px">
-          <option value="">All Payment</option><option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option><option>Credit</option>
+          <option value="">All Payment</option><option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Card Payment</option><option>Credit</option>
         </select>
       </div>
     </div>
@@ -4731,7 +4990,7 @@ function vPaymentIn(){
         <div class="pos-empty-ill">💰</div>
         <div class="pos-empty-title">No Transactions to show</div>
         <div class="pos-empty-sub">You haven't added any transactions yet.</div>
-        <button class="btn-big red" onclick="addPayment('in')">+ Add Payment-In</button>
+        <button class="btn-big red" onclick="addPayment('in')" ${hasPermission('create','payment-in')?'':'style="display:none"'}>+ Add Payment-In</button>
       </div>`}
     </div>
     <div class="pos-bottom-actions">
@@ -4764,7 +5023,7 @@ function vPaymentOut(){
       <h2>Payment-Out</h2><span style="font-size:12px;color:var(--muted);cursor:pointer">▾</span>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
-      <button class="hub-btn hub-btn-red" onclick="addPayment('out')">＋ Add Payment-Out</button>
+      <button class="hub-btn hub-btn-red" onclick="addPayment('out')" ${hasPermission('create','payment-out')?'':'style="display:none"'}>＋ Add Payment-Out</button>
         <span class="hub-action-icon" onclick="setTab='transaction';nav('settings')" title="Settings">⚙️</span>
     </div>
   </div>
@@ -4843,7 +5102,7 @@ function vSaleOrder(){
       <div class="pos-empty">
         <div class="pos-empty-ill">📋</div>
         <div class="pos-empty-sub">Make & share sale orders & convert them to sale invoice instantly.</div>
-        <button class="btn-big red" onclick="openSale()">Add Your First Sale Order</button>
+        <button class="btn-big red" onclick="openSale()" ${hasPermission('create','sale-order')?'':'style="display:none"'}>Add Your First Sale Order</button>
         </div>
       </div>
     </div>
@@ -4855,14 +5114,13 @@ function vSavedInvoices(){
     <div class="pos-topbar">
       <div class="pos-search">🔍 <input id="savedInvSearch" placeholder="Search by invoice number, party name..." oninput="filterSavedInv()" style="border:0;outline:none;width:280px;background:transparent"></div>
       <div class="pos-top-actions">
-        <button class="pos-action-btn red-outline" onclick="openSale()">+ New Invoice</button>
+        <button class="pos-action-btn red-outline" onclick="openSale()" ${hasPermission('create','invoice')?'':'style="display:none"'}>+ New Invoice</button>
         <button class="pos-action-btn" onclick="openBarcodeScanner()">📷 Scan Barcode</button>
       </div>
     </div>
     <div class="pos-header"><div class="pos-title">Saved Invoices</div></div>
     <div class="pos-body" style="padding:16px">
       ${rows.length?`<div class="saved-inv-grid" id="savedInvGrid">${rows.map(s=>{
-        const barcode=`https://barcodeapi.org/api/128/${encodeURIComponent(s.no)}`;
         return `<div class="saved-inv-card" onclick="openSlip('${s.id}')">
           <div class="siv-top">
             <span class="siv-no">${s.no}</span>
@@ -4871,7 +5129,7 @@ function vSavedInvoices(){
           <div class="siv-cust">${s.party}</div>
           <div class="siv-amount">${rs(s.total)}</div>
           <div class="siv-date">📅 ${s.date}</div>
-          <div class="siv-barcode"><img src="${barcode}" alt="${s.no}"></div>
+          <div class="siv-barcode"><svg class="siv-barcode-svg" data-code="${s.no}"></svg></div>
           <div class="siv-actions" onclick="event.stopPropagation()">
             <button class="siv-btn" onclick="openSlip('${s.id}')">👁 View</button>
             <button class="siv-btn" onclick="printSavedInv('${s.id}')">🖨️ Print</button>
@@ -4887,6 +5145,12 @@ function vSavedInvoices(){
     </div>
   </div>`;
   window._barcodeScannerActive=false;
+  setTimeout(function(){
+    document.querySelectorAll('.siv-barcode-svg').forEach(function(svg){
+      var code=svg.getAttribute('data-code')||'000000';
+      try{ JsBarcode(svg,code,{format:'CODE128',width:1.2,height:30,displayValue:true,margin:0,fontSize:10}); }catch(e){}
+    });
+  },100);
 }
 function filterSavedInv(){
   const q=(document.getElementById('savedInvSearch').value||'').toLowerCase();
@@ -4895,17 +5159,89 @@ function filterSavedInv(){
   });
 }
 function openBarcodeScanner(){
-  formModal('Scan Barcode',`
-    <div class="field"><label>Point camera at invoice barcode or enter number manually</label></div>
-    <div style="text-align:center;padding:20px">
-      <div style="font-size:60px;margin-bottom:16px">📷</div>
-      <p style="color:#888;margin-bottom:16px">Camera access not available in this browser</p>
-      <div class="field"><label>Enter Invoice Number Manually</label><input id="bc_scan_input" placeholder="e.g. INV-01"></div>
-    </div>`,
-  ()=>{ const no=document.getElementById('bc_scan_input').value.trim(); if(!no)return toast('Enter invoice number');
-    const s=store.sales.find(x=>x.no.toLowerCase()===no.toLowerCase());
-    closeModal('formModal');
-    if(s){showInvoiceView(s);}else toast('No invoice found for '+no);},'FIND INVOICE');
+  var scanHtml=`
+    <div style="text-align:center;margin-bottom:16px">
+      <div id="scannerStatus" style="font-size:13px;color:#888;margin-bottom:12px">Point camera at invoice barcode</div>
+      <div style="position:relative;width:100%;max-width:400px;margin:0 auto;border-radius:12px;overflow:hidden;background:#000">
+        <video id="scannerVideo" autoplay playsinline style="width:100%;display:block;min-height:250px;object-fit:cover"></video>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;height:60%;border:2px solid rgba(255,255,255,0.6);border-radius:12px;pointer-events:none"></div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#aaa">Or enter invoice number manually:</div>
+      <input id="bc_scan_input" placeholder="e.g. INV-01" style="width:100%;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:14px;margin-top:8px;box-sizing:border-box">
+    </div>`;
+  
+  formModal('Scan Invoice Barcode', scanHtml,
+    function(){
+      var no=document.getElementById('bc_scan_input').value.trim();
+      if(!no) return toast('Enter or scan invoice number');
+      var s=store.sales.find(function(x){return x.no.toLowerCase()===no.toLowerCase();});
+      closeModal('formModal');
+      stopScanner();
+      if(s){ showInvoiceView(s); } else toast('No invoice found for '+no);
+    }, 'FIND INVOICE');
+  
+  document.getElementById('bc_scan_input').addEventListener('keydown', function(e){
+    if(e.key==='Enter'){
+      var no=this.value.trim();
+      if(!no) return;
+      var s=store.sales.find(function(x){return x.no.toLowerCase()===no.toLowerCase();});
+      closeModal('formModal');
+      stopScanner();
+      if(s){ showInvoiceView(s); } else toast('No invoice found for '+no);
+    }
+  });
+  
+  startScanner();
+}
+
+var _scannerStream=null, _scannerRAF=null, _scannerInterval=null;
+function startScanner(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    var st=document.getElementById('scannerStatus');
+    if(st) st.textContent='Camera not supported - use manual input below';
+    return;
+  }
+  var video=document.getElementById('scannerVideo');
+  if(!video) return;
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}})
+  .then(function(stream){
+    _scannerStream=stream;
+    video.srcObject=stream;
+    video.play();
+    var st=document.getElementById('scannerStatus');
+    if(st) st.textContent='Scanning... point camera at barcode';
+    
+    if('BarcodeDetector' in window){
+      var detector=new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','qr_code','upc_a','upc_e']});
+      _scannerInterval=setInterval(function(){
+        if(video.readyState>=2){
+          detector.detect(video).then(function(barcodes){
+            if(barcodes&&barcodes.length>0){
+              var code=barcodes[0].rawValue;
+              var input=document.getElementById('bc_scan_input');
+              if(input) input.value=code;
+              var s=store.sales.find(function(x){return x.no.toLowerCase()===code.toLowerCase();});
+              closeModal('formModal');
+              stopScanner();
+              if(s){ showInvoiceView(s); } else toast('Scanned: '+code+' - no invoice found');
+            }
+          }).catch(function(){});
+        }
+      },500);
+    }else{
+      var st2=document.getElementById('scannerStatus');
+      if(st2) st2.textContent='Camera active - enter number manually (auto-detect not supported in this browser)';
+    }
+  }).catch(function(err){
+    var st=document.getElementById('scannerStatus');
+    if(st) st.textContent='Camera unavailable - enter invoice number manually';
+  });
+}
+
+function stopScanner(){
+  if(_scannerStream){_scannerStream.getTracks().forEach(function(t){t.stop();});_scannerStream=null;}
+  if(_scannerInterval){clearInterval(_scannerInterval);_scannerInterval=null;}
+  if(_scannerRAF){cancelAnimationFrame(_scannerRAF);_scannerRAF=null;}
 }
 function printSavedInv(sid){
   const s=store.sales.find(x=>x.id===sid);
@@ -4946,6 +5282,10 @@ function vCreateInvoice(){
           <div class="nci-fld"><label>Customer Name<b>*</b></label><input id="nciCust" value="${nciCustName}" placeholder="Enter Name" oninput="nciCustName=this.value;nciSearchCust();nciPreview()" onfocus="nciSearchCust()" autocomplete="off"><div class="nci-drop" id="nciCustDrop"></div></div>
           <div class="nci-fld"><label>Customer Phone Number</label><div class="nci-phone"><span class="cc">+92</span><input id="nciPhone" value="${nciCustPhone}" placeholder="Enter Number" oninput="nciCustPhone=this.value;nciPreview()"></div></div>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:#f8f9fa;border-radius:10px;margin-bottom:12px;border:1px solid #e0e0e0">
+          <div id="nciScannerDot" title="Scanner status" style="width:10px;height:10px;border-radius:50%;background:#e74c3c;box-shadow:0 0 6px rgba(231,76,60,0.5);transition:all 0.3s"></div>
+          <span style="font-size:11px;color:#888" id="nciScannerLabel">Scanner: Not connected</span>
+        </div>
         <table class="nci-tbl"><thead><tr><th>#</th><th>ITEM</th><th>QTY</th><th>PRICE</th><th class="right">TOTAL <span class="nci-add-ic" onclick="nciAddRow()">⊕</span></th><th></th></tr></thead>
           <tbody id="nciRows"></tbody></table>
         <div class="nci-addrow" onclick="nciAddRow()">＋ Add Row</div>
@@ -4974,7 +5314,7 @@ function vCreateInvoice(){
               <option ${nciPayMode==='Cash'?'selected':''}>Cash</option>
               <option ${nciPayMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
               <option ${nciPayMode==='QR Code'?'selected':''}>QR Code</option>
-              <option ${nciPayMode==='Cheque'?'selected':''}>Cheque</option>
+              <option ${nciPayMode==='Card Payment'?'selected':''}>Card Payment</option>
             </select>
           </div>
         </div>
@@ -5068,9 +5408,10 @@ function nciPreview(){
   const cust=(document.getElementById('nciCust')?.value||'').trim();
   const phone=(document.getElementById('nciPhone')?.value||'').trim();
   const rows=nciRows.filter(r=>(r.name||r.item)||r.price);
+  const previewPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:b.phone;
   pv.innerHTML=`<div class="nci-inv">
     <div class="nci-inv-logo">${b.logo?`<img src="${b.logo}">`:`<div class="nci-inv-logotext">${b.name||'My Business'}</div>`}</div>
-    <div class="nci-inv-contact">${b.phone?`Ph.No.: ${b.phone}`:''}${b.email?`<br>Email: ${b.email}`:''}</div>
+    <div class="nci-inv-contact">${previewPhone?`Ph.No.: ${previewPhone}`:''}${b.email?`<br>Email: ${b.email}`:''}</div>
     <div class="nci-dash"></div>
     <div class="nci-inv-title">Invoice</div>
     <div class="nci-inv-meta"><span>Invoice No.: ${invNo}</span><span>Date: ${dispDate()}</span></div>
@@ -5097,6 +5438,7 @@ function nciWhatsApp(s){
   window.open('https://wa.me/'+to+'?text='+msg,'_blank');
 }
 function nciSave(action){
+  if(!hasPermission('create','invoices') && action!=='preview'){showNoAccess();return;}
   const s=store.settings||{};
   const cust=(document.getElementById('nciCust')?.value||'').trim();
   if(!cust)return toast('Enter Customer Name');
@@ -5118,9 +5460,12 @@ function nciSave(action){
   const saleDate=s.addTime?dispDate()+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):dispDate();
   const saleRows=rows.map(r=>({item:r.name||r.item,qty:+r.qty||0,price:+r.price||0,disc:0}));
   const saleId=id();
-  // A paid mode (Cash/Bank/QR/Cheque) with no "Received" entered = bill fully paid via that mode.
+  // A paid mode (Cash/Bank/QR/Card Payment) with no "Received" entered = bill fully paid via that mode.
   const effRecv=(nciPayMode!=='Credit' && (+t.received||0)===0) ? t.total : t.received;
-  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid'};
+  const branchPhone3=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
+  const createdBy3=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
+  const createdByName3=store.currentUser?store.currentUser.name:'';
+  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid',branchPhone:branchPhone3,createdBy:createdBy3,createdByName:createdByName3};
   store.sales.push(sale);
   store.counters.sale++;
   if(s.stockMaintain!==false)saleRows.forEach(r=>{ const it=store.items.find(x=>x.name===r.item); if(it&&typeof it.stock==='number')it.stock-=r.qty; });
@@ -5157,7 +5502,7 @@ function vSaleList(){
         </div>
       </div>
       <div class="sale-head-right">
-        <button class="sale-add-btn" onclick="openSale()">+ New Sale</button>
+        <button class="sale-add-btn" onclick="openSale()" ${hasPermission('create','invoice')?'':'style="display:none"'}>+ New Sale</button>
       </div>
     </div>
     <div class="sale-summary">
@@ -5194,7 +5539,7 @@ function vExpenses(){
     <div class="pos-topbar">
       <div class="pos-search">🔍 Search Expenses</div>
       <div class="pos-top-actions">
-        <button class="pos-action-btn red-outline" onclick="addExpense()">+ Add Expense</button>
+        <button class="pos-action-btn red-outline" onclick="addExpense()" ${hasPermission('create','expense')?'':'style="display:none"'}>+ Add Expense</button>
       </div>
     </div>
     <div class="pos-header"><div class="pos-title">Expenses</div></div>
@@ -5206,12 +5551,13 @@ function vExpenses(){
         <div class="pos-empty-ill">💸</div>
         <div class="pos-empty-title">No Expenses</div>
         <div class="pos-empty-sub">Add rent, salary, bills and other expenses.</div>
-        <button class="btn-big red" onclick="addExpense()">+ Add Expense</button>
+        <button class="btn-big red" onclick="addExpense()" ${hasPermission('create','expense')?'':'style="display:none"'}>+ Add Expense</button>
       </div>`}
     </div>
   </div>`;
 }
 function addPayment(dir){
+  if(!hasPermission('create',dir==='in'?'payment-in':'payment-out')){showNoAccess();return;}
   const isOut=dir==='out';
   const title=isOut?'Payment-Out':'Payment-In';
   const nextNo=(store.payments||[]).filter(p=>p.dir===dir).length+1;
@@ -5238,7 +5584,7 @@ function addPayment(dir){
           <div style="margin-bottom:20px">
             <label style="display:block;font-size:13px;color:#666;font-weight:500;margin-bottom:6px">Payment Type</label>
             <select id="po_mode" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px">
-              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option>
+              <option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Card Payment</option>
             </select>
           </div>
           <div style="margin-bottom:16px">
@@ -5327,7 +5673,9 @@ function sharePaymentOut(){
 }
 
 
-function addExpense(){ formModal('Add Expense',`
+function addExpense(){ 
+  if(!hasPermission('create','expense')){showNoAccess();return;}
+  formModal('Add Expense',`
   <div class="field"><label>Category</label><input id="f_cat" placeholder="Rent / Salary / Bills"></div>
   <div class="field"><label>Note</label><input id="f_note"></div>
   <div class="field"><label>Amount</label><input id="f_amt" type="number" value="0"></div>`,
@@ -5336,18 +5684,24 @@ function addExpense(){ formModal('Add Expense',`
 
 /* CASH & BANK */
 function vUserActivity(){
-  content.innerHTML=`<div class="page-head"><h2>User Activity</h2></div>
+  var isBranch = store.currentUser && store.currentUser.role === 'branch';
+  var branchCode = isBranch ? store.currentUser.branchCode : '';
+  var allUsers = store.users || [];
+  var filteredUsers = isBranch ? allUsers.filter(u => u.createdBy === branchCode) : allUsers;
+  
+  content.innerHTML=`<div class="page-head"><h2>${isBranch ? 'Branch Users' : 'User Activity'}</h2></div>
     <div class="ua-hub">
+      ${hasPermission('admin','admin-users') ? `
       <div class="ua-card" onclick="addUser()">
         <div class="ua-card-ic">👤</div>
         <div class="ua-card-title">Add User</div>
         <div class="ua-card-desc">Add new team members to manage your business.</div>
         <div class="ua-card-link">Open →</div>
-      </div>
+      </div>` : ''}
       <div class="ua-card" onclick="viewUsers()">
         <div class="ua-card-ic">👥</div>
-        <div class="ua-card-title">All Users</div>
-        <div class="ua-card-desc">View and manage all registered users.</div>
+        <div class="ua-card-title">${isBranch ? 'My Users' : 'All Users'}</div>
+        <div class="ua-card-desc">${isBranch ? 'View your branch users.' : 'View and manage all registered users.'}</div>
         <div class="ua-card-link">Open →</div>
       </div>
       <div class="ua-card" onclick="userActivityLog()">
@@ -5356,61 +5710,191 @@ function vUserActivity(){
         <div class="ua-card-desc">Track user actions and changes in the system.</div>
         <div class="ua-card-link">Open →</div>
       </div>
-      <div class="ua-card" onclick="userRoles()">
-        <div class="ua-card-ic">🔐</div>
-        <div class="ua-card-title">Roles & Permissions</div>
-        <div class="ua-card-desc">Set roles and control access for each user.</div>
+      ${!isBranch ? `
+      <div class="ua-card" onclick="showAddBranchModal()">
+        <div class="ua-card-ic">🏢</div>
+        <div class="ua-card-title">Add Branch</div>
+        <div class="ua-card-desc">Create a new branch location.</div>
         <div class="ua-card-link">Open →</div>
       </div>
+      <div class="ua-card" onclick="showAllBranchesModal()">
+        <div class="ua-card-ic">🏬</div>
+        <div class="ua-card-title">All Branches</div>
+        <div class="ua-card-desc">View and manage all branches with codes.</div>
+        <div class="ua-card-link">Open →</div>
+      </div>` : ''}
     </div>
     <div class="ua-table-section">
-      <h3>All Users</h3>
-      <table class="data"><thead><tr><th>Name</th><th>Role</th><th>Last Active</th><th>Status</th></tr></thead><tbody>
-      <tr><td class="bold">Admin</td><td>Owner</td><td>Just now</td><td><span class="pill paid">Active</span></td></tr>
-      ${(store.users||[]).map(u=>`<tr><td class="bold">${u.name}</td><td>${u.role}</td><td>-</td><td><span class="pill paid">Active</span></td></tr>`).join('')}
+      <h3>${isBranch ? 'My Users' : 'All Users'}</h3>
+      <table class="data"><thead><tr><th>Name</th><th>Role</th><th>Created</th>${!isBranch ? '<th>Branch</th>' : ''}<th>Status</th></tr></thead><tbody>
+      ${!isBranch ? '<tr><td class="bold">Admin</td><td>Owner</td><td>-</td><td>Admin</td><td><span class="pill paid">Active</span></td></tr>' : ''}
+      ${filteredUsers.map(u=>`<tr><td class="bold">${u.name}</td><td>${u.role}</td><td>${u.created||'-'}</td>${!isBranch ? '<td>'+(u.createdBy==='admin'?'<span style="color:#888">Admin</span>':'<span style="color:var(--blue);font-weight:600">'+(u.branchName||u.createdBy)+'</span>')+'</td>' : ''}<td><span class="pill paid">Active</span></td></tr>`).join('')}
+      ${filteredUsers.length===0 ? '<tr><td colspan="'+(isBranch?5:6)+'" style="text-align:center;color:#888;padding:20px">No users yet</td></tr>' : ''}
       </tbody></table>
     </div>`;
 }
 function viewUsers(){
-  content.innerHTML=`<div class="page-head"><h2>All Users</h2><button class="btn btn-red" onclick="addUser()">+ Add User</button></div>
-    <div class="panel"><table class="data"><thead><tr><th>Name</th><th>Role</th><th>Password</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-    <tr style="cursor:pointer" onclick="viewUserCredentials('admin')"><td class="bold">Admin</td><td>Owner</td><td>••••••</td><td>-</td><td><span class="pill paid">Active</span></td><td><span class="pill" style="background:#e8f4ff;color:var(--blue);cursor:pointer">👁 View</span></td></tr>
-    ${(store.users||[]).map(u=>`<tr style="cursor:pointer" onclick="viewUserCredentials('${u.id}')"><td class="bold">${u.name}</td><td>${u.role}</td><td>••••••</td><td>${u.created||'-'}</td><td><span class="pill paid">Active</span></td>
+  var isBranch = store.currentUser && store.currentUser.role === 'branch';
+  var branchCode = isBranch ? store.currentUser.branchCode : '';
+  var allUsers = store.users || [];
+  
+  // Filter: branch sees only its users, admin sees all
+  var filteredUsers = isBranch ? allUsers.filter(u => u.createdBy === branchCode) : allUsers;
+  
+  var adminRow = isBranch ? '' : `<tr style="cursor:pointer" onclick="viewUserCredentials('admin')"><td class="bold">Admin</td><td>Owner</td><td>••••••</td><td>-</td><td><span class="pill paid">Active</span></td><td><span class="pill" style="background:#e8f4ff;color:var(--blue);cursor:pointer">👁 View</span></td></tr>`;
+  
+  content.innerHTML=`<div class="page-head"><h2>${isBranch ? 'Branch Users' : 'All Users'}</h2><button class="btn btn-red" onclick="addUser()" ${hasPermission('admin','admin-users')?'':'style="display:none"'}>+ Add User</button></div>
+    <div class="panel"><table class="data"><thead><tr><th>Name</th><th>Role</th><th>Password</th><th>Created</th>${!isBranch ? '<th>Branch</th>' : ''}<th>Status</th><th>Actions</th></tr></thead><tbody>
+    ${adminRow}
+    ${filteredUsers.map(u=>`<tr style="cursor:pointer" onclick="viewUserCredentials('${u.id}')"><td class="bold">${u.name}</td><td>${u.role}</td><td>••••••</td><td>${u.created||'-'}</td>${!isBranch ? '<td>'+(u.createdBy==='admin'?'<span style="color:#888">Admin</span>':'<span style="color:var(--blue);font-weight:600">'+(u.branchName||u.createdBy)+'</span>')+'</td>' : ''}
+      <td><span class="pill paid">Active</span></td>
       <td style="display:flex;gap:6px"><span class="pill" style="background:#e8f4ff;color:var(--blue);cursor:pointer" onclick="event.stopPropagation();viewUserCredentials('${u.id}')">👁 View</span><span class="pill due" style="cursor:pointer" onclick="event.stopPropagation();deleteUser('${u.id}')">Delete</span></td></tr>`).join('')}
+    ${filteredUsers.length===0 && !adminRow ? '<tr><td colspan="'+(isBranch?6:7)+'" style="text-align:center;color:#888;padding:30px">No users yet. Click "+ Add User" to create one.</td></tr>' : ''}
     </tbody></table></div>`;
 }
 function deleteUser(uid){
+  if(!hasPermission('admin','admin-users')){showNoAccess();return;}
   const u=(store.users||[]).find(x=>x.id===uid);if(!u)return;
+  var isBranch = store.currentUser && store.currentUser.role === 'branch';
+  if(isBranch && u.createdBy !== store.currentUser.branchCode){toast('Cannot delete this user');return;}
   if(!confirm('Delete user "'+u.name+'"? This action cannot be undone.'))return;
   store.users=(store.users||[]).filter(x=>x.id!==uid);
   persist();
+  updateBadge();
   toast('User "'+u.name+'" deleted');
   logActivity('user','Deleted user: '+u.name+' ('+u.role+')');
   viewUsers();
 }
 function userActivityLog(){
-  const logs=store.activityLog||[];
-  const typeColors={item:'#1a73e8',party:'#27ae60',invoice:'#ff6b35',user:'#9b59b6',settings:'#e67e22',return:'#e74c3c',exchange:'#3498db',navigation:'#607d8b'};
-  const typeIcons={item:'📦',party:'👤',invoice:'📄',user:'👥',settings:'⚙️',return:'↩️',exchange:'🔄',navigation:'🧭'};
-  const roleColors={owner:'#e74c3c',admin:'#9b59b6',manager:'#1a73e8',cashier:'#27ae60',viewer:'#607d8b'};
-  content.innerHTML=`<div class="page-head"><h2>Activity Log</h2><div class="page-head-right"><button class="btn btn-red" onclick="printActivityLog()">🖨 Print</button><select id="actFilter" onchange="filterActivity()" style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option value="">All Activities</option><option value="item">Items</option><option value="party">Parties</option><option value="invoice">Invoices</option><option value="user">Users</option><option value="settings">Settings</option><option value="return">Returns</option><option value="exchange">Exchanges</option><option value="navigation">Navigation</option></select></div></div>
-    <div class="ua-act-list" id="actList">
-      ${logs.length?logs.map(l=>`<div class="ua-act-item" data-type="${l.type}">
-        <div class="ua-act-dot" style="background:${typeColors[l.type]||'#888'}"></div>
-        <div class="ua-act-ic">${typeIcons[l.type]||'📋'}</div>
-        <div class="ua-act-body">
-          <div class="ua-act-detail">${l.detail}</div>
-          <div class="ua-act-meta">
-            <span class="ua-act-user" style="background:${roleColors[l.userRole]||'#607d8b'};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${l.userName||'Owner'} (${(l.userRole||'owner').charAt(0).toUpperCase()+(l.userRole||'owner').slice(1)})</span>
-            <span class="ua-act-type" style="color:${typeColors[l.type]||'#888'}">${(l.type||'').toUpperCase()}</span> · ${l.date} ${l.time}
-          </div>
-        </div>
-      </div>`).join(''):'<div class="ua-act-empty"><div style="font-size:48px;margin-bottom:12px">📋</div><h3>No Activity Yet</h3><p class="muted">Start using the app to see activity logs here.</p></div>'}
+  var logs=store.activityLog||[];
+  var isBranch=store.currentUser&&store.currentUser.role==='branch';
+  var isStaff=store.currentUser&&store.currentUser.role!=='owner'&&store.currentUser.role!=='admin';
+  var currentUserName=store.currentUser?store.currentUser.name:'';
+  // Filter: branch sees only own activities, staff sees only own, admin/owner sees all staff/branch
+  if(isBranch||isStaff){
+    logs=logs.filter(l=>{return l.userName===currentUserName;});
+  }else{
+    logs=logs.filter(l=>{
+      var role=(l.userRole||'owner').toLowerCase();
+      return role!=='owner'&&role!=='admin';
+    });
+  }
+  // Sort by newest first
+  logs=logs.slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  
+  // Get unique users for filter
+  var userSet={};
+  logs.forEach(l=>{if(l.userName)userSet[l.userName]=1;});
+  var users=['All Users'].concat(Object.keys(userSet));
+  
+  window._activityLogs=logs;
+  
+  content.innerHTML=`<div class="page-head"><h2>Users Activity Table</h2></div>
+    <div id="actFilterBar"></div>
+    <div class="panel" style="overflow-x:auto">
+      <table class="data"><thead><tr>
+        <th>FULL NAME</th><th>DATE & TIME</th><th>ROLE</th><th>ACTIONS</th><th>DETAILS</th>
+      </tr></thead><tbody id="actTableBody"></tbody></table>
     </div>`;
+  
+  // Render filter bar
+  document.getElementById('actFilterBar').innerHTML=`
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:#f8f9fa;border-radius:10px">
+      <span style="font-size:13px;color:#666;font-weight:600">Filter by:</span>
+      <select id="actUserFilter" onchange="filterActivityTable()" style="padding:8px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fff">
+        ${users.map(u=>`<option value="${u}">${u}</option>`).join('')}
+      </select>
+      <select id="actPeriodFilter" onchange="filterActivityTable()" style="padding:8px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fff">
+        <option value="all">All Time</option>
+        <option value="today">Today</option>
+        <option value="week">This Week</option>
+        <option value="month">This Month</option>
+        <option value="year">This Year</option>
+      </select>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="date" id="actDateFrom" onchange="filterActivityTable()" style="padding:7px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px">
+        <span style="color:#888">To</span>
+        <input type="date" id="actDateTo" onchange="filterActivityTable()" style="padding:7px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px">
+      </div>
+    </div>`;
+  
+  renderActivityTable(logs);
+}
+
+function renderActivityTable(logs){
+  var container=document.getElementById('actTableBody');
+  var countEl=document.getElementById('actCount');
+  if(!container)return;
+  
+  if(countEl)countEl.textContent=logs.length+' activities';
+  
+  if(!logs.length){
+    container.innerHTML='<tr><td colspan="5" style="text-align:center;color:#888;padding:40px">No activities found</td></tr>';
+    return;
+  }
+  
+  const typeColors={item:'#1a73e8',party:'#27ae60',invoice:'#ff6b35',user:'#9b59b6',settings:'#e67e22',return:'#e74c3c',exchange:'#3498db',navigation:'#607d8b',purchase:'#00897b',expense:'#e67e22',payment:'#4caf50'};
+  
+  container.innerHTML=logs.map(l=>{
+    var actionType=l.type||'activity';
+    var actionLabel=actionType.toUpperCase();
+    var detail=l.detail||'-';
+    var bgColor=typeColors[actionType]||'#607d8b';
+    
+    return `<tr>
+      <td style="font-weight:600;color:#222">${l.userName||'Owner'}</td>
+      <td style="color:#666">${l.date||''} ${l.time||''}</td>
+      <td><span style="color:#666">${(l.userRole||'owner').charAt(0).toUpperCase()+(l.userRole||'owner').slice(1)}</span></td>
+      <td><span style="background:${bgColor};color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap">${actionLabel}</span></td>
+      <td style="color:#1a73e8;font-weight:500">${detail}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterActivityTable(){
+  var logs=window._activityLogs||[];
+  var userFilter=document.getElementById('actUserFilter')?document.getElementById('actUserFilter').value:'All Users';
+  var periodFilter=document.getElementById('actPeriodFilter')?document.getElementById('actPeriodFilter').value:'all';
+  var dateFrom=document.getElementById('actDateFrom')?document.getElementById('actDateFrom').value:'';
+  var dateTo=document.getElementById('actDateTo')?document.getElementById('actDateTo').value:'';
+  
+  var filtered=logs.filter(l=>{
+    // User filter
+    if(userFilter!=='All Users'&&l.userName!==userFilter)return false;
+    
+    // Period filter
+    if(periodFilter!=='all'&&l.date){
+      var parts=l.date.split(/[\s/-]/);
+      var logDate=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+      var now=new Date();
+      var start;
+      if(periodFilter==='today'){
+        start=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+      }else if(periodFilter==='week'){
+        start=new Date(now);start.setDate(now.getDate()-7);
+      }else if(periodFilter==='month'){
+        start=new Date(now.getFullYear(),now.getMonth(),1);
+      }else if(periodFilter==='year'){
+        start=new Date(now.getFullYear(),0,1);
+      }
+      if(start&&logDate<start)return false;
+    }
+    
+    // Custom date range
+    if(dateFrom||dateTo){
+      var parts=l.date.split(/[\s/-]/);
+      var logDate=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+      if(dateFrom&&logDate<new Date(dateFrom))return false;
+      if(dateTo&&logDate>new Date(dateTo))return false;
+    }
+    
+    return true;
+  });
+  
+  renderActivityTable(filtered);
 }
 function filterActivity(){
-  const filter=document.getElementById('actFilter').value;
-  document.querySelectorAll('.ua-act-item').forEach(el=>{el.style.display=(!filter||el.dataset.type===filter)?'flex':'none';});
+  filterActivityTable();
 }
 function printActivityLog(){
   const logs=store.activityLog||[];
@@ -5468,9 +5952,11 @@ function addUser(){
     if(!store.users)store.users=[];
     // Create the linked cloud account first, then save locally.
     toast('Creating user…');
+    var createdBy = (store.currentUser && store.currentUser.role === 'branch') ? store.currentUser.branchCode : 'admin';
+    var branchName = (store.currentUser && store.currentUser.role === 'branch') ? store.currentUser.name : '';
     window.createStaffAccount(n,pass).then(function(staffUid){
-      store.users.push({id:id(),name:n,role,pass,created:dispDate(),staffUid:staffUid});
-      persist();refreshView();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n);
+      store.users.push({id:id(),name:n,role,pass,created:dispDate(),staffUid:staffUid,createdBy:createdBy,branchName:branchName});
+      persist();refreshView();updateBadge();closeModal('formModal');toast('User "'+n+'" added');logActivity('user','Added user: '+n);
     }).catch(function(e){
       var box=document.getElementById('f_userError');
       var show=function(m){ if(box){ box.textContent='⚠ '+m; box.style.display='block'; } toast(m); };
@@ -5575,7 +6061,9 @@ function vBank(){
     ${store.banks.map(b=>`<tr><td class="bold">${b.name}</td><td class="muted">${b.acc||'-'}</td><td class="right">${rs(b.bal)}</td></tr>`).join('')}
     </tbody></table></div>`;
 }
-function addBank(){ formModal('Add Bank Account',`
+function addBank(){ 
+  if(!hasPermission('create','bank')){showNoAccess();return;}
+  formModal('Add Bank Account',`
   <div class="field"><label>Bank Name *</label><input id="f_bn"></div>
   <div class="field"><label>Account No.</label><input id="f_acc"></div>
   <div class="field"><label>Opening Balance</label><input id="f_bal" type="number" value="0"></div>`,
@@ -5590,7 +6078,7 @@ function vCash(){
     <div class="card"><div class="lbl">Cash Out</div><div class="val" style="color:var(--red)">${rs(cashOut)}</div></div>
     <div class="card"><div class="lbl">In Hand</div><div class="val">${rs(cashIn-cashOut)}</div></div></div>`;
 }
-function vCheques(){ content.innerHTML=`<div class="page-head"><h2>Cheques</h2></div><div class="panel">${emptyMini('🧾','No open cheques')}</div>`; }
+function vCardPayments(){ content.innerHTML=`<div class="page-head"><h2>Card Payments</h2></div><div class="panel">${emptyMini('🧾','No open cheques')}</div>`; }
 function vLoan(){ content.innerHTML=`<div class="page-head"><h2>Loan Accounts</h2></div><div class="panel">${emptyMini('💳','No loan accounts')}</div>`; }
 
 /* UTILITIES */
@@ -5675,8 +6163,14 @@ function bcUpdatePageCount(){
   if(el)el.textContent='You will need '+pages+' page(s) for printing. ('+perPage+' labels/page)';
 }
 function bcAssignCode(){
-  const code='BC'+String(Date.now()).slice(-6);
-  document.getElementById('bc_itemCode').value=code;
+  const itemName=(document.getElementById('bc_itemName').value||'').trim();
+  const it=(store.items||[]).find(x=>x.name.toLowerCase()===itemName.toLowerCase());
+  if(it&&it.code){
+    document.getElementById('bc_itemCode').value=it.code;
+  }else{
+    const code='BC'+String(Date.now()).slice(-6);
+    document.getElementById('bc_itemCode').value=code;
+  }
 }
 function bcAutoFill(){
   const v=document.getElementById('bc_itemName').value.toLowerCase();
@@ -6273,40 +6767,48 @@ const BTYPES=['Retail','Wholesale','Distributor','Service','Manufacturing','Othe
 const BCATS=['Accounting & CA','Interior Designer','Automobiles/ Auto parts','Salon & Spa','Liquor Store','Book / Stationary store','Construction Materials & Equipment','Repairing/ Plumbing/ Electrician','Chemicals & Fertilizers','Computer Equipments & Softwares','Electrical & Electronics Equipments','Fashion Accessory/ Cosmetics','Hardware Store','Industrial Machinery & Equipment','Mobile & Accessories','Nursery/ Plants','Petroleum Bulk Stations & Terminals/ Pumps','Restaurant/ Hotel','Footwear','Paper & Paper Products','Sweet Shop/ Bakery','Gifts & Toys','Laundry/ Washing/ Dry clean','Coaching & Training','Others'];
 function vProfile(){
   const b=store.business;
-  content.innerHTML=`<div class="page-head"><h2>Edit Profile</h2></div>
+  const isBranch=store.currentUser&&store.currentUser.role==='branch';
+  const isViewer=store.currentUser&&store.currentUser.role==='viewer';
+  const readOnly=isBranch||isViewer;
+  const title=isBranch?'Business Profile':'Edit Profile';
+  content.innerHTML=`<div class="page-head"><h2>${title}</h2></div>
   <div class="profile-card">
     <div class="logo-up">
       <div class="logo-circle" id="pf_logo">${b.logo?`<img src="${b.logo}">`:'Add<br>Logo'}</div>
-      <span class="logo-edit" onclick="togglePfLogoMenu(event)">✏️</span>
+      ${readOnly?'':`<span class="logo-edit" onclick="togglePfLogoMenu(event)">✏️</span>
       <div class="pf-logo-menu" id="pfLogoMenu">
         ${b.logo?`<div onclick="pfReplaceLogo()">✏️ Replace Logo</div><div class="del" onclick="pfDeleteLogo()">🗑 Delete Logo</div>`
         :`<div onclick="pfAddLogo()">＋ Add Logo</div>`}
       </div>
-      <input type="file" accept="image/*" id="pf_logofile" onchange="pfLogo(this)" hidden>
+      <input type="file" accept="image/*" id="pf_logofile" onchange="pfLogo(this)" hidden>`}
     </div>
+    ${isBranch?`<div style="text-align:center;margin-bottom:12px;padding:8px 16px;background:#f0f7ff;border-radius:8px;font-size:12px;color:#1a73e8">Only admin can edit these details. Contact admin to make changes.</div>`:''}
     <div class="profile-grid">
       <div class="pf-col">
         <h3 class="pf-h">Business Details</h3>
-        <div class="pf-fld"><label>Business Name<b>*</b></label><input id="pf_name" value="${b.name||''}"></div>
-        <div class="pf-fld"><label>Phone Number</label><input id="pf_phone" value="${b.phone||''}"></div>
-        <div class="pf-fld"><label>Email ID</label><input id="pf_email" value="${b.email||''}" placeholder="Enter Email ID"></div>
+        <div class="pf-fld"><label>Business Name<b>*</b></label><input id="pf_name" value="${b.name||''}" ${readOnly?'readonly disabled':''} ${readOnly?'style="background:#f5f5f5;cursor:not-allowed"':''}></div>
+        <div class="pf-fld"><label>Phone Number</label><input id="pf_phone" value="${b.phone||''}" ${readOnly?'readonly disabled':''} ${readOnly?'style="background:#f5f5f5;cursor:not-allowed"':''}></div>
+        <div class="pf-fld"><label>Email ID</label><input id="pf_email" value="${b.email||''}" placeholder="Enter Email ID" ${readOnly?'readonly disabled':''} ${readOnly?'style="background:#f5f5f5;cursor:not-allowed"':''}></div>
       </div>
       <div class="pf-col">
         <h3 class="pf-h">More Details</h3>
         <div class="pf-fld"><label>Business Type</label>
-          <select id="pf_btype"><option value="">Select Business Type</option>${BTYPES.map(t=>`<option ${b.btype===t?'selected':''}>${t}</option>`).join('')}</select></div>
+          <select id="pf_btype" ${readOnly?'disabled':''} ${readOnly?'style="background:#f5f5f5;cursor:not-allowed"':''}><option value="">Select Business Type</option>${BTYPES.map(t=>`<option ${b.btype===t?'selected':''}>${t}</option>`).join('')}</select></div>
         <div class="pf-fld"><label>Business Category</label>
-          <select id="pf_cat"><option value="">Select Business Category</option>${BCATS.map(c=>`<option ${b.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
-        <div class="pf-fld"><label>Pincode</label><input id="pf_pin" value="${b.pincode||''}" placeholder="Enter Pincode"></div>
+          <select id="pf_cat" ${readOnly?'disabled':''} ${readOnly?'style="background:#f5f5f5;cursor:not-allowed"':''}><option value="">Select Business Category</option>${BCATS.map(c=>`<option ${b.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="pf-fld"><label>Pincode</label><input id="pf_pin" value="${b.pincode||''}" placeholder="Enter Pincode" ${readOnly?'readonly disabled':''} ${readOnly?'style="background:#f5f5f5;cursor:not-allowed"':''}></div>
       </div>
       <div class="pf-col">
-        <div class="pf-fld"><label>Business Address</label><textarea id="pf_addr" placeholder="Enter Business Address">${b.address||''}</textarea></div>
+        <div class="pf-fld"><label>Business Address</label><textarea id="pf_addr" placeholder="Enter Business Address" ${readOnly?'readonly disabled':''} ${readOnly?'style="background:#f5f5f5;cursor:not-allowed"':''}>${b.address||''}</textarea></div>
         <div class="pf-fld"><label>Add Signature</label>
-          <label class="sign-up">☁️<br>Upload Signature${b.signature?' ✓':''}<input type="file" accept="image/*" id="pf_signfile" onchange="pfSign(this)" hidden></label></div>
+          ${readOnly?`<div style="padding:20px;background:#f5f5f5;border-radius:8px;text-align:center;color:#999;font-size:13px">${b.signature?'Signature set ✓':'No signature'}</div>`
+          :`<label class="sign-up">☁️<br>Upload Signature${b.signature?' ✓':''}<input type="file" accept="image/*" id="pf_signfile" onchange="pfSign(this)" hidden></label>`}</div>
       </div>
     </div>
-    <div class="profile-foot"><button class="btn btn-outline" onclick="nav('home')">Cancel</button>
-      <button class="btn btn-red" onclick="saveProfile()">Save Changes</button></div>
+    <div class="profile-foot">
+      ${readOnly?`<button class="btn btn-outline" onclick="nav('home')">← Back</button>`
+      :`<button class="btn btn-outline" onclick="nav('home')">Cancel</button>
+      <button class="btn btn-red" onclick="saveProfile()">Save Changes</button>`}</div>
   </div>`;
 }
 function togglePfLogoMenu(e){
@@ -6317,18 +6819,21 @@ document.addEventListener('click',e=>{
   const m=document.getElementById('pfLogoMenu');
   if(m&&m.classList.contains('show')&&!e.target.closest('.logo-up'))m.classList.remove('show');
 });
-function pfAddLogo(){ document.getElementById('pf_logofile').click(); }
-function pfReplaceLogo(){ document.getElementById('pfLogoMenu').classList.remove('show'); document.getElementById('pf_logofile').click(); }
+function pfAddLogo(){ if(!hasPermission('edit','settings')){showNoAccess();return;} document.getElementById('pf_logofile').click(); }
+function pfReplaceLogo(){ if(!hasPermission('edit','settings')){showNoAccess();return;} document.getElementById('pfLogoMenu').classList.remove('show'); document.getElementById('pf_logofile').click(); }
 function pfDeleteLogo(){
+  if(!hasPermission('edit','settings')){showNoAccess();return;}
   store.business.logo=''; persist(); refreshView();
   document.getElementById('pfLogoMenu').classList.remove('show');
   document.getElementById('pf_logo').innerHTML='Add<br>Logo';
   toast('Logo deleted');
 }
-function pfLogo(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
+function pfLogo(inp){ if(!hasPermission('edit','settings')){showNoAccess();return;} const f=inp.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ store.business.logo=e.target.result; persist(); refreshView(); document.getElementById('pf_logo').innerHTML=`<img src="${e.target.result}">`; document.getElementById('pfLogoMenu').innerHTML=`<div onclick="pfReplaceLogo()">✏️ Replace Logo</div><div class="del" onclick="pfDeleteLogo()">🗑 Delete Logo</div>`; toast('Logo saved'); }; r.readAsDataURL(f); }
 function pfSign(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{ store.business.signature=e.target.result; persist(); refreshView(); toast('Signature added'); }; r.readAsDataURL(f); }
-function saveProfile(){ const b=store.business;
+function saveProfile(){ 
+  if(!hasPermission('edit','settings')){showNoAccess();return;}
+  const b=store.business;
   b.name=document.getElementById('pf_name').value.trim(); b.phone=document.getElementById('pf_phone').value.trim();
   b.email=document.getElementById('pf_email').value.trim(); b.btype=document.getElementById('pf_btype').value;
   b.category=document.getElementById('pf_cat').value; b.pincode=document.getElementById('pf_pin').value.trim();
@@ -6831,7 +7336,7 @@ function applyLiveSettings(){
   persist();
 }
 function applyZoom(){const s=store.settings,z=s.zoom||100;document.documentElement.style.fontSize=(z/100*14)+'px';}
-function uploadLogo(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();
+function uploadLogo(inp){if(!hasPermission('edit','settings')){showNoAccess();return;}const f=inp.files[0];if(!f)return;const r=new FileReader();
   r.onload=e=>{store.business.logo=e.target.result;persist();refreshView();toast('Logo saved');};r.readAsDataURL(f);}
 function saveSettings(){
   applyLiveSettings();
@@ -6912,7 +7417,11 @@ function staffLoginPrompt(){
     setTimeout(()=>{ try{ closeModal('companyModal'); closeModal('formModal'); }catch(e){} }, 1600);
   },'Login');
 }
-function companyLogout(){ if(confirm('Logout? Logging out will stop syncing data.')){ closeModal('companyModal'); if(window.fbLogout)window.fbLogout(); } }
+function companyLogout(){
+  document.getElementById('logoutMsg').textContent='Logging out will stop syncing data.';
+  document.getElementById('logoutConfirmBtn').onclick=function(){closeModal('logoutModal');closeModal('companyModal');if(window.fbLogout)window.fbLogout();};
+  showModal('logoutModal');
+}
 
 /* ============ HELPERS ============ */
 const content=document.getElementById('content');
@@ -6958,7 +7467,7 @@ if(!store.currentUser){
   // Local "select your account" screen removed — the cloud login gate handles identity.
 }else{
   const cu=store.currentUser;
-  document.getElementById('currentUserBadge').textContent=cu.name+' ('+cu.role.charAt(0).toUpperCase()+cu.role.slice(1)+')';
+  updateBadge();
   if(store.settings&&store.settings.passcode){
     showModal('passcodeModal');
   }else{
@@ -7007,17 +7516,30 @@ function doLogin(){
   store.currentUser={name:u.name,role:u.role,id:u.id||'admin'};
   persist();
   closeModal('loginModal');
-  document.getElementById('currentUserBadge').textContent=u.name+' ('+u.role.charAt(0).toUpperCase()+u.role.slice(1)+')';
+  updateBadge();
   logActivity('user',u.name+' ('+u.role.charAt(0).toUpperCase()+u.role.slice(1)+') logged in');
   toast('Welcome, '+u.name+'!');
   nav('home');
 }
 function logoutUser(){
-  if(!confirm('Logout '+(store.currentUser?store.currentUser.name:'')+'?'))return;
-  // Full cloud logout -> wipes local data and returns to the empty cloud login gate.
-  if(window.fbLogout){ window.fbLogout(); }
-  else { store.currentUser=null; persist(); }
+  var userName=store.currentUser?store.currentUser.name:'User';
+  document.getElementById('logoutMsg').textContent='Are you sure you want to logout '+userName+'?';
+  document.getElementById('logoutConfirmBtn').onclick=function(){
+    closeModal('logoutModal');
+    var isBranch=store.currentUser&&store.currentUser.role==='branch';
+    if(isBranch){
+      store.currentUser=null;store=defaults();localStorage.removeItem(KEY);
+      document.getElementById('fbAuthModal').style.display='block';
+      var b=document.getElementById('branchAuthModal');if(b)b.style.display='none';
+    }else if(window.fbLogout){
+      window.fbLogout();
+    }else{
+      store.currentUser=null;persist();
+    }
+  };
+  showModal('logoutModal');
 }
+function confirmLogout(){}
 
 /* ============ PAYMENT MODE BREAKDOWN ============ */
 function showPaymentBreakdown(){
@@ -7055,7 +7577,7 @@ function renderPaymentBreakdown(){
     {key:'Cash',label:'Cash',icon:'\uD83D\uDCB5',cls:'paym-card-cash'},
     {key:'Bank Transfer',label:'Bank Transfer',icon:'\uD83C\uDFE6',cls:'paym-card-bank'},
     {key:'QR Code',label:'QR Code',icon:'\uD83D\uDCF1',cls:'paym-card-qr'},
-    {key:'Cheque',label:'Cheque',icon:'\uD83D\uDCC4',cls:'paym-card-cheque'}
+    {key:'Card Payment',label:'Card Payment',icon:'\uD83D\uDCC4',cls:'paym-card-cheque'}
   ];
   const container=document.getElementById('pmCards');
   container.innerHTML=cards.map(c=>{
@@ -7155,6 +7677,317 @@ function showProfitView(){
   btn.classList.add('active');
 }
 
+/* ============ BRANCH MANAGEMENT ============ */
+
+// Generate random 6-digit branch code
+function generateBranchCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// Check if branch code exists - check branchLookup and owner's branches
+async function checkBranchCodeExists(code) {
+  try {
+    // Check branchLookup first (fast document read)
+    const lookupDoc = await window.fbDB.collection('branchLookup').doc(code).get();
+    if (lookupDoc.exists) return true;
+    
+    // Also check owner's own branches
+    const ownerUid = window.fbAuth.currentUser.uid;
+    const branchId = 'branch_' + code;
+    const branchDoc = await window.fbDB.collection('branches').doc(branchId).get();
+    if (branchDoc.exists && branchDoc.data().ownerUid === ownerUid) return true;
+    
+    return false;
+  } catch (e) {
+    console.error('Error checking branch code:', e.message);
+    // On error, assume not exists (safe to try this code)
+    return false;
+  }
+}
+
+// Generate unique branch code (global uniqueness across ALL accounts)
+async function generateUniqueBranchCode() {
+  let attempts = 0;
+  const maxAttempts = 50;
+  
+  while (attempts < maxAttempts) {
+    const code = generateBranchCode();
+    const exists = await checkBranchCodeExists(code);
+    
+    if (!exists) {
+      return code;
+    }
+    
+    attempts++;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  
+  throw new Error('Could not generate unique code after ' + maxAttempts + ' attempts. Try again.');
+}
+
+// Save new branch (no password - code only login)
+async function saveBranch() {
+  const name = (document.getElementById('brName').value || '').trim();
+  const phone = (document.getElementById('brPhone').value || '').trim();
+  const address = (document.getElementById('brAddress').value || '').trim();
+  const errEl = document.getElementById('brError');
+
+  // Validation
+  if (!name) { errEl.textContent = 'Branch name is required'; return; }
+  if (!phone) { errEl.textContent = 'Phone number is required'; return; }
+
+  // Disable save button
+  const saveBtn = document.querySelector('#addBranchModal .btn-red');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Creating...'; }
+
+  errEl.textContent = 'Generating unique branch code...';
+
+  try {
+    // Generate unique 6-digit code
+    const branchCode = await generateUniqueBranchCode();
+    const ownerUid = window.fbAuth.currentUser.uid;
+    const branchId = 'branch_' + branchCode;
+
+    // Save branch data to Firestore
+    await window.fbDB.collection('branches').doc(branchId).set({
+      branchCode: branchCode,
+      name: name,
+      phone: phone,
+      address: address,
+      ownerUid: ownerUid,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      status: 'active'
+    });
+
+    // Save to branchLookup for login (public read)
+    await window.fbDB.collection('branchLookup').doc(branchCode).set({
+      branchId: branchId,
+      ownerUid: ownerUid,
+      branchName: name,
+      phone: phone,
+      address: address,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Try to save to globalBranchCodes (optional - for global uniqueness)
+    try {
+      await window.fbDB.collection('globalBranchCodes').doc(branchCode).set({
+        branchId: branchId,
+        ownerUid: ownerUid,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (globalErr) {
+      console.warn('Could not save to globalBranchCodes:', globalErr.message);
+      // Continue - this is optional
+    }
+
+    // Add to owner's memberUids so branch can read owner's data
+    await window.fbDB.collection('users').doc(ownerUid).update({
+      memberUids: firebase.firestore.FieldValue.arrayUnion(branchId)
+    });
+
+    errEl.textContent = '';
+    closeModal('addBranchModal');
+    
+    // Show proper success screen
+    showBranchSuccess(name, branchCode, phone, address);
+    updateBadge();
+    
+    logActivity('branch', 'Created branch: ' + name + ' (' + branchCode + ')');
+
+  } catch (e) {
+    errEl.textContent = 'Error: ' + (e.message || e.code);
+    console.error('saveBranch error', e);
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Branch'; }
+  }
+}
+
+// Show Add Branch modal
+function showAddBranchModal() {
+  document.getElementById('brName').value = '';
+  document.getElementById('brPhone').value = '';
+  document.getElementById('brAddress').value = '';
+  document.getElementById('brError').textContent = '';
+  showModal('addBranchModal');
+}
+
+// Show All Branches full screen
+async function showAllBranchesModal() {
+  showModal('allBranchesModal');
+  await renderAllBranches();
+}
+
+// Show Branch Created success screen
+function showBranchSuccess(name, code, phone, address) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  
+  const container = document.getElementById('branchSuccessContent');
+  container.innerHTML = `
+    <div style="text-align:center;padding:16px 0 12px">
+      <h2 style="margin:0 0 4px;font-size:18px;font-weight:700;color:#222">✅ Branch Created!</h2>
+      <p style="margin:0;color:#888;font-size:13px">Share the code with your branch</p>
+    </div>
+    
+    <div style="background:#f8f9fa;border-radius:12px;padding:14px;margin:0 0 12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:700;font-size:15px;color:#222">${name}</div>
+        <span style="background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600">Active</span>
+      </div>
+      ${phone ? `<div style="font-size:13px;color:#555;margin-bottom:4px">📞 ${phone}</div>` : ''}
+      ${address ? `<div style="font-size:13px;color:#555;margin-bottom:4px">📍 ${address}</div>` : ''}
+      <div style="font-size:12px;color:#888">${dateStr} · ${timeStr}</div>
+    </div>
+    
+    <div style="background:linear-gradient(135deg,#1a73e8,#4285f4);border-radius:12px;padding:16px;text-align:center;margin:0 0 12px">
+      <div style="font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Login Code</div>
+      <div style="font-size:34px;font-weight:800;color:#fff;letter-spacing:5px;font-family:monospace">${code}</div>
+    </div>
+    
+    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:center;margin:0 0 14px">
+      <span style="font-size:16px">⚠️</span>
+      <div style="font-size:12px;color:#856404"><b>Save this code!</b> You won't see it again.</div>
+    </div>
+    
+    <button onclick="copyBranchCode('${code}')" style="width:100%;padding:12px;background:#f8f9fa;border:1px solid var(--line);border-radius:10px;font-size:14px;font-weight:600;color:#333;cursor:pointer;margin-bottom:8px">
+      📋 Copy Code
+    </button>
+    
+    <button onclick="closeModal('branchSuccessModal')" style="width:100%;padding:12px;background:#1a73e8;border:none;border-radius:10px;font-size:14px;font-weight:600;color:#fff;cursor:pointer">
+      Done
+    </button>
+  `;
+  showModal('branchSuccessModal');
+}
+
+// Copy branch code to clipboard
+function copyBranchCode(code) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(() => {
+      toast('Code copied: ' + code);
+    });
+  } else {
+    const textarea = document.createElement('textarea');
+    textarea.value = code;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    toast('Code copied: ' + code);
+  }
+}
+
+// Render all branches list (desktop table view)
+async function renderAllBranches() {
+  const tbody = document.getElementById('allBranchesList');
+  const emptyState = document.getElementById('branchesEmpty');
+  const table = document.getElementById('allBranchesTable');
+  const countEl = document.getElementById('branchCount');
+  
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;padding:40px">Loading branches...</td></tr>';
+  table.style.display = 'none';
+  emptyState.style.display = 'none';
+
+  try {
+    const ownerUid = window.fbAuth.currentUser.uid;
+    const snapshot = await window.fbDB.collection('branches')
+      .where('ownerUid', '==', ownerUid)
+      .get();
+
+    if (snapshot.empty) {
+      table.style.display = 'none';
+      emptyState.style.display = 'block';
+      if (countEl) countEl.textContent = '0 branches';
+      return;
+    }
+
+    if (countEl) countEl.textContent = snapshot.size + ' branch' + (snapshot.size > 1 ? 'es' : '');
+    
+    let html = '';
+    let index = 1;
+    
+    snapshot.forEach(doc => {
+      const branch = doc.data();
+      
+      // Format date/time
+      let createdStr = '-';
+      let timeStr = '';
+      if (branch.createdAt) {
+        const date = branch.createdAt.toDate ? branch.createdAt.toDate() : new Date(branch.createdAt);
+        const options = { day: '2-digit', month: 'short', year: 'numeric' };
+        createdStr = date.toLocaleDateString('en-US', options);
+        timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      }
+      
+      html += `
+        <tr>
+          <td style="color:#999;font-weight:500">${index}</td>
+          <td>
+            <div style="font-weight:600;color:#222;font-size:14px">${branch.name}</div>
+          </td>
+          <td>
+            <span class="branch-code-badge">${branch.branchCode}</span>
+          </td>
+          <td style="color:#555">${branch.phone || '-'}</td>
+          <td style="color:#555;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${branch.address || '-'}</td>
+          <td>
+            <div class="branch-date">
+              ${createdStr}
+              <small>${timeStr}</small>
+            </div>
+          </td>
+          <td>
+            <span class="branch-status ${branch.status === 'active' ? 'active' : 'inactive'}">
+              ${branch.status === 'active' ? '● Active' : '● Inactive'}
+            </span>
+          </td>
+          <td>
+            <button onclick="copyBranchCode('${branch.branchCode}')" class="branch-action-btn">
+              📋 Copy
+            </button>
+          </td>
+        </tr>`;
+      index++;
+    });
+
+    tbody.innerHTML = html;
+    table.style.display = 'table';
+    emptyState.style.display = 'none';
+
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:40px">Error loading branches</td></tr>';
+    table.style.display = 'table';
+    console.error('renderAllBranches error', e);
+  }
+}
+
+// Branch Login - Show dedicated screen
+function branchLoginPrompt() {
+  document.getElementById('fbAuthModal').style.display='none';
+  document.getElementById('branchAuthModal').style.display='block';
+  document.getElementById('branchCodeInput').value='';
+  document.getElementById('branchAuthError').textContent='';
+  setTimeout(()=>{document.getElementById('branchCodeInput').focus();},100);
+}
+function showMainLogin() {
+  document.getElementById('branchAuthModal').style.display='none';
+  document.getElementById('fbAuthModal').style.display='block';
+}
+function fbBranchDoLogin() {
+  var code=(document.getElementById('branchCodeInput').value||'').trim();
+  var errEl=document.getElementById('branchAuthError');
+  if(!code){errEl.textContent='Enter branch code';return;}
+  if(code.length!==6){errEl.textContent='Code must be 6 digits';return;}
+  errEl.textContent='Logging in...';
+  errEl.style.color='#888';
+  window.fbBranchLogin(code,function(m){
+    errEl.textContent=m;
+    errEl.style.color='#e74c3c';
+  });
+}
+
 /* ============ FIREBASE CLOUD SYNC ============ */
 (function(){
   var fbUser = null;          // current firebase user
@@ -7185,7 +8018,7 @@ function showProfitView(){
   function setErr(t){ var e=$('fbAuthError'); if(e) e.textContent=t||''; }
 
   function showAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='block'; }
-  function hideAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='none'; }
+  function hideAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='none'; var b=document.getElementById('branchAuthModal'); if(b) b.style.display='none'; }
 
   // ---- Real-time push to Firestore (debounced) ----
   window.cloudPush = function(){
@@ -7221,6 +8054,7 @@ function showProfitView(){
       store.currentUser = keepUser;
       if(typeof ensure==='function') ensure();
       localStorage.setItem(KEY, JSON.stringify(store)); // local cache, no cloud echo
+      updateBadge();
       if(typeof refreshAll==='function') refreshAll();
     }catch(e){ console.error('applyRemote error', e); }
     finally{ applyingRemote = false; }
@@ -7234,32 +8068,61 @@ function showProfitView(){
     if(pushTimer){ clearTimeout(pushTimer); pushTimer = null; }  // drop any previous pending write
     if(unsub){ unsub(); unsub = null; }
     setStatus('Loading your data…');
-    // 1) Am I a staff member of someone else's store? Check the mapping.
-    window.fbDB.collection('staffMap').doc(authUid).get().then(function(mapSnap){
-      var ownerUid = (mapSnap.exists && mapSnap.data() && mapSnap.data().ownerUid) ? mapSnap.data().ownerUid : authUid;
-      isStaffSession = (ownerUid !== authUid);
-      dataUid = ownerUid;                           // <-- read/write the OWNER's store doc
-      // 2) Load that store's data.
-      return window.fbDB.collection('users').doc(dataUid).get().then(function(snap){
-        var hasData = snap.exists && snap.data() && snap.data().data;
-        applyingRemote = true;
-        if(hasData){
-          store = JSON.parse(snap.data().data);     // owner's store (shared by all members)
-        }else if(isStaffSession){
-          throw { code: 'owner-store-missing' };     // staff but owner has no data -> abort safely
-        }else{
-          store = freshOwnerStore();                 // brand-new owner -> truly empty
+    
+    // 0) Am I a branch? Check branchMap first.
+    window.fbDB.collection('branchMap').doc(authUid).get().then(function(branchSnap){
+      var isBranchSession = false;
+      var branchData = null;
+      var ownerUid = authUid;
+      
+      if (branchSnap.exists && branchSnap.data() && branchSnap.data().ownerUid) {
+        isBranchSession = true;
+        branchData = branchSnap.data();
+        ownerUid = branchSnap.data().ownerUid;
+      }
+      
+      // 1) Am I a staff member of someone else's store? Check the mapping.
+      return window.fbDB.collection('staffMap').doc(authUid).get().then(function(mapSnap){
+        if (!isBranchSession) {
+          ownerUid = (mapSnap.exists && mapSnap.data() && mapSnap.data().ownerUid) ? mapSnap.data().ownerUid : authUid;
+          isStaffSession = (ownerUid !== authUid);
+        } else {
+          isStaffSession = false;
         }
-        if(typeof ensure==='function') ensure();
-        // Cloud login IS the identity now -> set currentUser locally and skip the old
-        // "select your account" password screen entirely.
-        if(isStaffSession){
-          var me = (store.users||[]).filter(function(u){return u.staffUid===authUid;})[0];
-          store.currentUser = me ? {name:me.name, role:me.role, id:me.id} : {name:'Staff', role:'cashier', id:'staff'};
-        }else{
-          var oname = (fbUser && (fbUser.displayName || fbUser.email)) || 'Owner';
-          store.currentUser = {name: oname, role:'owner', id:'admin'};
-        }
+        dataUid = ownerUid;                           // <-- read/write the OWNER's store doc
+        // 2) Load that store's data.
+        return window.fbDB.collection('users').doc(dataUid).get().then(function(snap){
+          var hasData = snap.exists && snap.data() && snap.data().data;
+          applyingRemote = true;
+          if(hasData){
+            store = JSON.parse(snap.data().data);     // owner's store (shared by all members)
+          }else if(isStaffSession || isBranchSession){
+            throw { code: 'owner-store-missing' };     // staff/branch but owner has no data -> abort safely
+          }else{
+            store = freshOwnerStore();                 // brand-new owner -> truly empty
+          }
+          if(typeof ensure==='function') ensure();
+          // Cloud login IS the identity now -> set currentUser locally and skip the old
+          // "select your account" password screen entirely.
+          if(isBranchSession){
+            store.currentUser = {
+              name: branchData.branchName || 'Branch',
+              role: 'branch',
+              id: 'branch',
+              branchCode: branchData.branchCode
+            };
+          }else if(isStaffSession){
+            var me = (store.users||[]).filter(function(u){return u.staffUid===authUid;})[0];
+            if(!me){
+              // Staff user was deleted from store.users - sign them out
+              window.fbAuth.signOut();
+              throw { code: 'user-deleted', message: 'Your account has been removed. Contact admin.' };
+            }
+            store.currentUser = {name:me.name, role:me.role, id:me.id};
+          }else{
+            var oname = (fbUser && (fbUser.displayName || fbUser.email)) || 'Owner';
+            store.currentUser = {name: oname, role:'owner', id:'admin'};
+          }
         localStorage.setItem(KEY, JSON.stringify(store));
         lastPushedJSON = cloudJSON();
         applyingRemote = false;
@@ -7279,13 +8142,18 @@ function showProfitView(){
         }
         startSnapshot(dataUid);
         hideAuthModal();                             // data ready -> reveal the app
-        setStatus((isStaffSession ? '☁️ Joined store · ' : '☁️ Ready · ') + new Date().toLocaleTimeString());
+        setStatus((isBranchSession ? '☁️ Branch connected · ' : isStaffSession ? '☁️ Joined store · ' : '☁️ Ready · ') + new Date().toLocaleTimeString());
       });
+    });
     }).catch(function(e){
       // No data loaded -> never fall back to in-memory data (could be another store's!)
       cloudReady = false; dataUid = null; isStaffSession = false;
       console.error('loadUserData error', e);
-      setErr('Data load nahi hua (' + (e.code||e.message) + '). Internet check karke dobara login karein.');
+      var errMsg = 'Internet check karke dobara login karein.';
+      if(e.code === 'user-deleted') errMsg = 'Your account has been removed. Contact admin.';
+      else if(e.code === 'owner-store-missing') errMsg = 'Store data not found. Contact admin.';
+      else errMsg = 'Data load nahi hua (' + (e.code||e.message) + '). ' + errMsg;
+      setErr(errMsg);
       window.fbAuth.signOut();
     });
   }
@@ -7445,6 +8313,91 @@ function showProfitView(){
       else if(e.code==='auth/network-request-failed') msg='Internet connection check karein';
       if(onErr) onErr(msg); else setErr(msg);
     });
+  };
+
+  // ---- Branch logs in with code only (no password) ----
+  window.fbBranchLogin = function(branchCode, onErr) {
+    var code = (branchCode || '').trim();
+    
+    if (!code) {
+      if (onErr) onErr('Branch code required');
+      return;
+    }
+
+    // Find branch using branchLookup collection (public read, no auth needed)
+    window.fbDB.collection('branchLookup').doc(code).get()
+      .then(function(doc) {
+        if (!doc.exists) {
+          if (onErr) onErr('Invalid branch code');
+          return;
+        }
+
+        var lookupData = doc.data();
+        var ownerUid = lookupData.ownerUid;
+        var branchName = lookupData.branchName;
+        var branchPhone = lookupData.phone || '';
+        var branchAddress = lookupData.address || '';
+
+        if (!ownerUid) {
+          if (onErr) onErr('Branch configuration error');
+          return;
+        }
+
+        // Load owner's data
+        window.fbDB.collection('users').doc(ownerUid).get().then(function(ownerSnap) {
+          if (!ownerSnap.exists || !ownerSnap.data().data) {
+            if (onErr) onErr('Owner data not found');
+            return;
+          }
+
+          // Apply owner's data to local store
+          var jsonData = ownerSnap.data().data;
+          applyingRemote = true;
+          store = JSON.parse(jsonData);
+          store.currentUser = {
+            name: branchName,
+            role: 'branch',
+            id: 'branch',
+            branchCode: code,
+            branchPhone: branchPhone,
+            branchAddress: branchAddress,
+            ownerUid: ownerUid
+          };
+          if (typeof ensure === 'function') ensure();
+          localStorage.setItem(KEY, JSON.stringify(store));
+          lastPushedJSON = cloudJSON();
+          applyingRemote = false;
+          cloudReady = true;
+          dataUid = ownerUid;
+          
+          // Update memberUids if not already there
+          var memberUids = ownerSnap.data().memberUids || [];
+          var branchId = 'branch_' + code;
+          if (!memberUids.includes(branchId)) {
+            window.fbDB.collection('users').doc(ownerUid).update({
+              memberUids: firebase.firestore.FieldValue.arrayUnion(branchId)
+            });
+          }
+
+          // Close modals and navigate
+          try { closeModal('formModal'); closeModal('companyModal'); document.getElementById('branchAuthModal').style.display='none'; document.getElementById('fbAuthModal').style.display='none'; } catch(e) {}
+          var badge = document.getElementById('currentUserBadge');
+          if (badge) badge.textContent = branchName + ' (Branch)';
+          if (typeof refreshAll === 'function') refreshAll();
+          if (typeof nav === 'function') { try { nav('home'); } catch(e) {} }
+          hideAuthModal();
+          setStatus('☁️ Branch connected · ' + new Date().toLocaleTimeString());
+          
+          // Start live sync for owner's data
+          startSnapshot(ownerUid);
+          
+        }).catch(function(e) {
+          if (onErr) onErr('Error loading data: ' + e.message);
+        });
+      })
+      .catch(function(e) {
+        if (onErr) onErr('Error: ' + e.message);
+      });
   };
 
   window.fbResetPass = function(){

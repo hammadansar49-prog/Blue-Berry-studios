@@ -3,34 +3,62 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---- A store's data lives at users/{ownerUid} ----
-    // The owner has full control. Staff listed in memberUids can read/write
-    // the store data, but CANNOT change the membership list itself.
+    // Owner has full control. Staff/branches listed in memberUids can read.
+    // Public read allowed for branch code-based login (branchLookup validates the code first).
     match /users/{ownerUid} {
-      allow read: if request.auth != null && (
-        request.auth.uid == ownerUid ||
-        ('memberUids' in resource.data && request.auth.uid in resource.data.memberUids)
-      );
+      allow read: if true;
       allow write: if request.auth != null && (
-        // owner: full control (also covers first-time create when resource is null)
-        request.auth.uid == ownerUid ||
-        // member: may edit store data, but not the memberUids list
-        (
-          'memberUids' in resource.data &&
-          request.auth.uid in resource.data.memberUids &&
-          request.resource.data.memberUids == resource.data.memberUids
-        )
+        request.auth.uid == ownerUid
       );
     }
 
     // ---- staffMap/{staffUid} = { ownerUid, username } ----
-    // Lets a staff device discover which store it belongs to after login.
-    // Only an owner can create a mapping that points to themselves.
     match /staffMap/{staffUid} {
       allow read: if request.auth != null && (
-        request.auth.uid == staffUid ||
-        (resource != null && resource.data.ownerUid == request.auth.uid)
+        request.auth.uid == staffUid
       );
       allow create, update: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    // ---- branches/{branchId} = branch data ----
+    match /branches/{branchId} {
+      allow read: if request.auth != null && (
+        request.auth.uid == branchId ||
+        (resource != null && resource.data.ownerUid == request.auth.uid)
+      );
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if request.auth != null && (
+        request.auth.uid == branchId ||
+        (resource != null && resource.data.ownerUid == request.auth.uid)
+      );
+      allow delete: if request.auth != null && (
+        resource != null && resource.data.ownerUid == request.auth.uid
+      );
+    }
+
+    // ---- branchMap/{branchUid} = branch to owner mapping ----
+    match /branchMap/{branchUid} {
+      allow read: if request.auth != null && (
+        request.auth.uid == branchUid
+      );
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null && (
+        request.auth.uid == branchUid ||
+        (resource != null && resource.data.ownerUid == request.auth.uid)
+      );
+    }
+
+    // ---- branchLookup/{code} = public branch code lookup for login ----
+    match /branchLookup/{code} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // ---- globalBranchCodes/{code} = global branch code uniqueness ----
+    match /globalBranchCodes/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
       allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
     }
 

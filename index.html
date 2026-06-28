@@ -97,15 +97,19 @@
           <label class="pos-set-check"><input type="checkbox" checked disabled> Cash</label>
           <label class="pos-set-check"><input type="checkbox" id="posSetBank" onchange="posSaveSettings()"> Bank Transfer</label>
           <label class="pos-set-check"><input type="checkbox" id="posSetQr" onchange="posSaveSettings()"> QR Code</label>
-          <label class="pos-set-check"><input type="checkbox" id="posSetCheque" onchange="posSaveSettings()"> Cheque</label>
+          <label class="pos-set-check"><input type="checkbox" id="posSetCardPayment" onchange="posSaveSettings()"> Card Payment</label>
         </div>
       </div>
       <div class="pos-set-foot"><a class="pos-set-more" href="#" onclick="nav('settings');closeModal('saleModal');return false">⚙ More Settings</a></div>
     </div>
     <div class="pos-inv-search">
-      <input id="posSearchItem" name="pos_search_x9k2m" placeholder="Search by item name, item code, hsn code, mrp, sale price, purchase price... [F1]" oninput="posSearchItems()" autocomplete="one-time-code" data-1p-ignore="true">
+      <input id="posSearchItem" name="pos_search_x9k2m" placeholder="Search by item name, item code, hsn code, mrp, sale price, purchase price... [F1]" oninput="scannerDetect();posSearchItems()" onkeydown="posSearchKey(event)" autocomplete="one-time-code" data-1p-ignore="true">
       <span class="pos-search-icon">🔍</span>
       <div class="pos-search-dropdown" id="posSearchDrop"></div>
+    </div>
+    <div style="padding:6px 16px;background:#f8f9fa;border-bottom:1px solid #e0e0e0;display:flex;align-items:center;gap:8px">
+      <div id="scannerDot" title="Scanner status" style="width:10px;height:10px;border-radius:50%;background:#e74c3c;box-shadow:0 0 6px rgba(231,76,60,0.5);transition:all 0.3s"></div>
+      <span style="font-size:11px;color:#888" id="scannerLabel">Scanner: Not connected</span>
     </div>
     <div class="pos-inv-body">
       <div class="pos-inv-left">
@@ -145,7 +149,7 @@
             <span class="pos-pay-label">Amount Received</span>
           </div>
           <div class="pos-pay-row">
-            <select id="pos_paymode"><option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Cheque</option></select>
+            <select id="pos_paymode"><option>Cash</option><option>Bank Transfer</option><option>QR Code</option><option>Card Payment</option></select>
             <div class="pos-pay-amt"><span>Rs</span><input id="pos_recv" type="text" inputmode="decimal" value="0" onfocus="clearZero(this)" oninput="posCalcTotal()"></div>
           </div>
           <div style="padding:10px 14px 0">
@@ -409,11 +413,111 @@
       <div class="cm-phone">Currently logged in with Phone:<br><b id="cmPhone">3341100761</b></div>
       <div class="cm-foot-btns">
         <button class="btn btn-blue" onclick="staffLoginPrompt()" style="width:100%">🔑 Login with User ID</button>
+        <button class="btn btn-red" onclick="branchLoginPrompt()" style="width:100%;margin-top:8px">🏢 Login with Branch Code</button>
       </div>
     </div>
     <div class="cm-note">
       <span class="cm-note-txt" id="cmNote"></span>
       <div class="cm-logout"><span class="lo" onclick="companyLogout()">Logout</span><span class="lo-sub">Logging out will stop syncing data</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADD BRANCH MODAL ============ -->
+<div class="modal-overlay" id="addBranchModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head"><h3>Add Branch</h3><button class="x" onclick="closeModal('addBranchModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field" style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px">Branch Name *</label>
+        <input id="brName" placeholder="e.g., Multan Branch" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;outline:none">
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px">Phone Number *</label>
+        <input id="brPhone" placeholder="e.g., 0321-1234567" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;outline:none">
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px">Address</label>
+        <textarea id="brAddress" placeholder="Branch address" rows="3" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;outline:none;resize:vertical"></textarea>
+      </div>
+      <div style="background:#f0f7ff;border:1px solid #d0e2ff;border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font-size:13px;color:#333;font-weight:600;margin-bottom:4px">🔐 Auto-Generated Login Code</div>
+        <div style="font-size:12px;color:#666">A unique branch code will be generated automatically. Branch will use this code to login (no password needed).</div>
+      </div>
+      <div id="brError" style="color:var(--red);font-size:12px;min-height:16px;margin-bottom:8px"></div>
+    </div>
+    <div class="modal-foot" style="padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-outline" onclick="closeModal('addBranchModal')">Cancel</button>
+      <button class="btn btn-red" onclick="saveBranch()">Save Branch</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ALL BRANCHES FULL SCREEN ============ -->
+<div class="modal-overlay" id="allBranchesModal">
+  <div class="branches-fullscreen">
+    <!-- Header -->
+    <div class="branches-header">
+      <button onclick="closeModal('allBranchesModal')" class="branches-back">←</button>
+      <h3>All Branches</h3>
+      <div class="branches-header-right">
+        <span id="branchCount" style="font-size:13px;color:#888"></span>
+      </div>
+    </div>
+    <!-- Table -->
+    <div class="branches-body">
+      <table class="branches-table" id="allBranchesTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Branch Name</th>
+            <th>Code</th>
+            <th>Phone</th>
+            <th>Address</th>
+            <th>Created</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="allBranchesList">
+          <!-- rendered by renderAllBranches() -->
+        </tbody>
+      </table>
+      <div id="branchesEmpty" style="display:none;text-align:center;padding:60px 20px">
+        <div style="width:70px;height:70px;background:#f0f0f0;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+          <span style="font-size:32px">🏢</span>
+        </div>
+        <div style="font-size:18px;font-weight:600;color:#333;margin-bottom:6px">No Branches Yet</div>
+        <div style="font-size:14px;color:#888">Create your first branch to get started</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BRANCH CREATED SUCCESS SCREEN ============ -->
+<div class="modal-overlay" id="branchSuccessModal" style="background:#f5f5f7">
+  <div style="max-width:600px;margin:0 auto;padding:0;height:100vh;display:flex;flex-direction:column;background:#fff">
+    <!-- Header -->
+    <div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;background:#fff">
+      <button onclick="closeModal('branchSuccessModal')" style="background:none;border:none;font-size:20px;cursor:pointer;padding:4px 8px;color:#333">←</button>
+      <h3 style="margin:0;font-size:18px;font-weight:700;color:#222">Branch Created</h3>
+    </div>
+    <!-- Content -->
+    <div id="branchSuccessContent" style="flex:1;overflow-y:auto;padding:20px">
+      <!-- rendered by showBranchSuccess() -->
+    </div>
+  </div>
+</div>
+
+<!-- ============ LOGOUT CONFIRMATION MODAL ============ -->
+<div class="modal-overlay" id="logoutModal" style="z-index:99999">
+  <div style="background:#fff;border-radius:16px;padding:32px;max-width:380px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.15)">
+    <div style="width:64px;height:64px;border-radius:50%;background:#fff3f3;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px">🚪</div>
+    <h3 style="margin:0 0 8px;font-size:18px;color:#1a1a2e">Confirm Logout</h3>
+    <p id="logoutMsg" style="color:#666;font-size:14px;margin:0 0 24px">Are you sure you want to logout?</p>
+    <div style="display:flex;gap:12px;justify-content:center">
+      <button onclick="closeModal('logoutModal')" style="padding:10px 28px;border:1px solid #e0e0e0;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#555;cursor:pointer">Cancel</button>
+      <button id="logoutConfirmBtn" style="padding:10px 28px;border:none;border-radius:10px;background:var(--accent,#1a73e8);color:#fff;font-size:14px;font-weight:600;cursor:pointer">Logout</button>
     </div>
   </div>
 </div>
@@ -503,8 +607,30 @@
       <div id="fbForgotWrap" style="text-align:center;margin-top:9px"><a href="#" onclick="fbResetPass();return false" style="font-size:12px;color:#999;text-decoration:none">Forgot password?</a></div>
       <div style="text-align:center;margin-top:10px;border-top:1px solid #f0f0f0;padding-top:10px">
         <a href="#" id="fbKindToggle" onclick="fbSwitchKind(loginKindIsStaff()?'owner':'staff');return false" style="font-size:12.5px;color:#e0413e;font-weight:600;text-decoration:none">Employee? Login with User ID</a>
+        <div style="margin-top:8px"><a href="#" onclick="branchLoginPrompt();return false" style="font-size:12.5px;color:#1a73e8;font-weight:600;text-decoration:none">Branch? Add your branch code</a></div>
       </div>
       <div id="fbSyncStatus" style="text-align:center;font-size:10.5px;color:#bbb;margin-top:9px"></div>
+    </div>
+  </div>
+</div>
+<!-- Branch Login Screen -->
+<div id="branchAuthModal" style="display:none;position:fixed;inset:0;z-index:10002;background:linear-gradient(135deg,#e0413e 0%,#b32d2b 100%);overflow:auto">
+  <div style="min-height:100%;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
+    <div style="width:100%;max-width:340px;background:#fff;border-radius:16px;padding:22px 20px;box-shadow:0 14px 44px rgba(0,0,0,.28)">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:42px;line-height:1;margin-bottom:6px">🏢</div>
+        <h1 style="margin:0;font-size:21px;font-weight:800;color:#e0413e;letter-spacing:-.5px">Branch Login</h1>
+        <p style="font-size:12px;margin:4px 0 0;color:#888">Enter your 6-digit branch code to login</p>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11.5px;font-weight:600;color:#666;margin-bottom:4px">Branch Code</label>
+        <input id="branchCodeInput" type="text" maxlength="6" placeholder="000000" autocomplete="off" style="width:100%;padding:14px 12px;border:2px solid #e0413e;border-radius:12px;font-size:24px;text-align:center;letter-spacing:10px;font-weight:700;box-sizing:border-box" onkeydown="if(event.key==='Enter')fbBranchDoLogin()">
+      </div>
+      <div id="branchAuthError" style="color:#e74c3c;font-size:12px;text-align:center;margin:4px 0;min-height:15px"></div>
+      <button class="btn btn-red" onclick="fbBranchDoLogin()" style="width:100%;padding:12px;font-size:15px;font-weight:700;border-radius:10px;margin-bottom:10px">Login</button>
+      <div style="text-align:center">
+        <a href="#" onclick="showMainLogin();return false" style="font-size:12.5px;color:#999;text-decoration:none">← Back to Email Login</a>
+      </div>
     </div>
   </div>
 </div>
