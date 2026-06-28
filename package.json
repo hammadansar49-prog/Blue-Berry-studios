@@ -1,0 +1,50 @@
+{
+  "name": "blue-berry-studios",
+  "version": "1.0.0",
+  "description": "Blue Berry Studios - Billing & POS desktop app",
+  "main": "electron/main.js",
+  "author": "Hammad Ansar",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dev": "set ELECTRON_START_URL=http://localhost:5500&& electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "22.3.27",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.blueberry.studios",
+    "productName": "Blue Berry Studios",
+    "copyright": "Copyright © Hammad Ansar",
+    "files": [
+      "electron/**/*",
+      "index.html",
+      "app.js",
+      "styles.css",
+      "firebase-config.js"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        }
+      ],
+      "artifactName": "BlueBerryStudios-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Blue Berry Studios"
+    }
+  }
+}
