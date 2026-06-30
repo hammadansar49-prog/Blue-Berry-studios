@@ -48,7 +48,7 @@ Real-time Sync · electron-builder (NSIS installer)
 
 Software designed and developed by **Hammad Ansar**.
 
-- 📞 Phone / WhatsApp: **+92 334 1100761** (+923341100761)
+- 📞 Phone / WhatsApp: [**+92 334 1100761**](https://wa.me/923341100761)
 - 📧 Email: **hammadansar49@gmail.com**
 
 © Hammad Ansar. All rights reserved.
