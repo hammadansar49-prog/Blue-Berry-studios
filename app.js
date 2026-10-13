@@ -1288,6 +1288,24 @@ function localQrDataUrl(value,size=90){
 function receiptPaperWidthMm(){
   return ({'2inch':58,'3inch':80,'4inch':104})[store.settings?.pageSize]||80;
 }
+function printPreferenceKey(){
+  const user=store.currentUser;
+  if(!user)return 'local';
+  if(user.role==='branch')return 'branch:'+String(user.branchCode||user.id||'');
+  return user.role==='owner'?'owner':'user:'+String(user.id||user.name||'');
+}
+function applySavedPrintPreference(){
+  const choice=store.userPrintPreferences?.[printPreferenceKey()];
+  if(!choice)return;
+  if(choice.printerTab==='regular'||choice.printerTab==='thermal')store.settings.printerTab=choice.printerTab;
+  if(['2inch','3inch','4inch'].includes(choice.pageSize))store.settings.pageSize=choice.pageSize;
+  if(['a4','a5','letter'].includes(choice.standardPageSize))store.settings.standardPageSize=choice.standardPageSize;
+}
+function rememberPrintPreference(){
+  if(!store.userPrintPreferences)store.userPrintPreferences={};
+  store.userPrintPreferences[printPreferenceKey()]={printerTab:store.settings.printerTab,pageSize:store.settings.pageSize,standardPageSize:store.settings.standardPageSize||'a4'};
+  persist();
+}
 function receiptPaperClass(){return store.settings?.printerTab==='regular'?'standard-paper-'+(store.settings.standardPageSize||'a4'):'receipt-paper-'+receiptPaperWidthMm();}
 function receiptBranchAddress(s){
   if(s?.branchAddress)return s.branchAddress;
@@ -1306,7 +1324,7 @@ function setReceiptPaperSize(size){
   store.settings.pageSize=size;
   const selected=document.getElementById('set_printerName')?.value;
   if(selected)store.settings.thermalPrinterName=selected;
-  persist();
+  rememberPrintPreference();
   if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();
   else if(document.getElementById('invViewModal')?.classList.contains('show')&&viewInv)refreshInvoicePreview();
   else if(document.getElementById('nciPreview'))nciPreview();
@@ -1328,22 +1346,22 @@ function refreshInvoicePreview(){
 }
 function setInvoicePreviewPrintType(type){
   if(type!=='regular'&&type!=='thermal')return;
-  store.settings.printerTab=type;persist();refreshInvoicePreview();
+  store.settings.printerTab=type;rememberPrintPreference();refreshInvoicePreview();
 }
 function setInvoicePreviewPaperSize(size){
   if(store.settings.printerTab==='regular'){
     if(!['a4','a5','letter'].includes(size))return;
-    store.settings.standardPageSize=size;persist();refreshInvoicePreview();
+    store.settings.standardPageSize=size;rememberPrintPreference();refreshInvoicePreview();
   }else setReceiptPaperSize(size);
 }
 function setReceiptPreviewPrintType(type){
   if(type!=='regular'&&type!=='thermal')return;
-  store.settings.printerTab=type;persist();nciShowSlip();
+  store.settings.printerTab=type;rememberPrintPreference();nciShowSlip();
 }
 function setReceiptPreviewPaperSize(size){
   if(store.settings.printerTab==='regular'){
     if(!['a4','a5','letter'].includes(size))return;
-    store.settings.standardPageSize=size;persist();nciShowSlip();
+    store.settings.standardPageSize=size;rememberPrintPreference();nciShowSlip();
   }else setReceiptPaperSize(size);
 }
 function uploadInvoiceLogo(input){
@@ -8134,7 +8152,7 @@ function vSettings(){
       <button style="padding:12px 30px;background:#e8453c;color:#fff;border:none;border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">🔄 Enable Service Reminders</button>
     </div>`;
   }
-  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.3</div></div>`;
+  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.4</div></div>`;
   content.innerHTML=`<div class="set-wrap">
       <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
       <div class="set-body"><button class="set-close" onclick="nav('home')" title="Close">✕</button>${body}</div>
@@ -8196,6 +8214,7 @@ function uploadLogo(inp){if(!hasPermission('edit','settings')){showNoAccess();re
 function saveSettings(){
   if(!hasPermission('edit','settings')){showNoAccess();return;}
   applyLiveSettings();
+  if(setTab==='print')rememberPrintPreference();
   buildMenu();
   persist();toast('Settings saved');logActivity('settings','Updated settings');
 }
@@ -8516,7 +8535,7 @@ function switchImTab(idx){
 document.querySelectorAll('#itemModal .im-tab').forEach((t,i)=>t.onclick=()=>switchImTab(i));
 
 /* ============ INIT ============ */
-ensure(); persist();
+ensure(); applySavedPrintPreference(); persist();
 let currentView='home';
 if(store.settings&&store.settings.theme){ document.documentElement.style.setProperty('--red',store.settings.theme); document.documentElement.style.setProperty('--red-dark',store.settings.theme); }
 buildMenu();
@@ -9359,6 +9378,7 @@ function fbBranchDoLogin() {
       store = JSON.parse(json);
       store.currentUser = keepUser;
       if(typeof ensure==='function') ensure();
+      applySavedPrintPreference();
       localStorage.setItem(KEY, JSON.stringify(store)); // local cache, no cloud echo
       updateBadge();
       if(typeof buildMenu==='function') buildMenu();
@@ -9441,6 +9461,7 @@ function fbBranchDoLogin() {
             var oname = (fbUser && (fbUser.displayName || fbUser.email)) || 'Owner';
             store.currentUser = {name: oname, role:'owner', id:'admin'};
           }
+        applySavedPrintPreference();
         localStorage.setItem(KEY, JSON.stringify(store));
         lastPushedJSON = cloudJSON();
         applyingRemote = false;
