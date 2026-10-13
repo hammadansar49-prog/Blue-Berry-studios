@@ -33,7 +33,7 @@ body{background:var(--bg);color:var(--ink);font-size:14px}
 .sidebar{width:240px;background:var(--navy);display:flex;flex-direction:column;color:#cfd2e3}
 .side-search{margin:10px 10px 6px;background:var(--navy2);border-radius:8px;padding:9px 12px;color:#9398b8;font-size:12px;display:flex;align-items:center;gap:8px;cursor:text}
 .side-search .collapse{margin-left:auto;background:#3a4068;width:18px;height:18px;border-radius:5px;display:grid;place-items:center;color:#cfd2e3}
-.menu{flex:1;overflow-y:auto;padding:4px 0}
+.menu{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;contain:paint;padding:4px 0}
 .menu::-webkit-scrollbar{width:5px}.menu::-webkit-scrollbar-thumb{background:#3a4068;border-radius:3px}
 .mi{display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:500;color:#d3d6e6;border-left:3px solid transparent;position:relative}
 .mi .ic{font-size:15px;width:18px;text-align:center;opacity:.92}
@@ -2260,6 +2260,7 @@ input[data-1p-ignore]:autofill{animation:onAutoFillStart 0s forwards}
 /* Consistent KAROBAR navigation and restrained motion */
 .tb-logo{width:28px;height:28px;object-fit:contain;background:#080808;border-radius:5px;padding:1px}
 .user-avatar{width:26px;height:26px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(135deg,#e0413e,#f0b429);color:#fff;font-weight:800;font-size:12px;flex-shrink:0}
+.user-avatar img{display:block;width:100%;height:100%;object-fit:contain;border-radius:8px;background:#fff}
 .mi .ic{width:24px;height:24px;display:grid;place-items:center;color:#c4cbdd;opacity:1}
 .nav-icon{width:19px;height:19px;display:block;flex-shrink:0}
 .mi:hover .ic,.mi.active .ic{color:#fff}
@@ -2313,6 +2314,7 @@ input[data-1p-ignore]:autofill{animation:onAutoFillStart 0s forwards}
 .keyboard-help-trigger{border:1px solid #d8e2f2;border-radius:8px;background:#fff;color:#2b3850;padding:6px 10px;margin-left:8px;font-size:12px;font-weight:700;cursor:pointer}
 .keyboard-help-trigger:hover{background:#eaf2ff}
 .nci-slip-modal{width:min(560px,96vw)}
+.nci-slip-modal.standard-preview{width:min(900px,96vw)}
 .nci-slip-head{padding:14px 20px}
 .nci-slip-x{border:0;background:#f1f4f9;border-radius:8px;width:32px;height:32px;display:grid;place-items:center}
 .nci-paper-toolbar{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--line);background:#fff;flex-wrap:wrap;font-size:12px}
@@ -2321,6 +2323,7 @@ input[data-1p-ignore]:autofill{animation:onAutoFillStart 0s forwards}
 .nci-paper-toolbar span{color:#78859a;font-size:11px}
 .nci-slip-body{padding:14px 10px;scrollbar-gutter:stable}
 .nci-slip-body .nci-inv{margin:0 auto;border-color:#dce3ef;box-shadow:0 8px 24px rgba(25,45,85,.08)}
+.nci-slip-body .print-invoice{box-sizing:border-box;background:#fff;border:1px solid #dce3ef;border-radius:10px;padding:26px;max-width:100%;margin:0 auto;box-shadow:0 8px 24px rgba(25,45,85,.08)}.nci-slip-body .print-invoice.standard-paper-a4{width:min(210mm,100%)}.nci-slip-body .print-invoice.standard-paper-a5{width:min(148mm,100%)}.nci-slip-body .print-invoice.standard-paper-letter{width:min(216mm,100%)}.nci-slip-body .print-invoice .pi-qr{display:block;width:28mm;height:28mm;object-fit:contain;margin:8px auto 0}.nci-slip-body .print-invoice .pi-barcode{text-align:center}.nci-slip-body .print-invoice .pi-barcode svg{display:block;max-width:100%;margin:auto}
 .nci-slip-actions{padding:12px 16px;gap:10px}
 .nci-slip-btn{min-height:48px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:14px;box-shadow:0 2px 6px rgba(17,34,68,.08)}
 .nci-slip-btn.save{border:1px solid #d9e6fa;background:#eef4ff}

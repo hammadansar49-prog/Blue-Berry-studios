@@ -600,7 +600,7 @@
 <div class="modal-overlay" id="nciSlipModal" style="z-index:9998">
   <div class="nci-slip-modal">
     <div class="nci-slip-head"><b>Receipt Preview</b><button type="button" class="nci-slip-x" onclick="closeModal('nciSlipModal')" aria-label="Close preview">✕</button></div>
-    <div class="nci-paper-toolbar"><button type="button" class="btn btn-outline" onclick="document.getElementById('ivLogoFile').click()">Add / change business logo</button><label for="nciPaperSize">Paper width</label><select id="nciPaperSize" onchange="setReceiptPaperSize(this.value)"><option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option></select><span>Preview and printer use this width</span></div>
+    <div class="nci-paper-toolbar"><button type="button" class="btn btn-outline" onclick="document.getElementById('ivLogoFile').click()">Add / change business logo</button><label for="nciPrintType">Print type</label><select id="nciPrintType" onchange="setReceiptPreviewPrintType(this.value)"><option value="regular">Standard</option><option value="thermal">Thermal</option></select><label for="nciPaperSize">Paper size</label><select id="nciPaperSize" onchange="setReceiptPreviewPaperSize(this.value)"></select><span>Saved for your next receipts</span></div>
     <div class="nci-slip-body" id="nciSlipBody"></div>
     <div class="nci-slip-actions">
       <button class="nci-slip-btn save" onclick="nciSlipSave()">Save invoice</button>

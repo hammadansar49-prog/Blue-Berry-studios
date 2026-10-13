@@ -2,7 +2,7 @@
 const KEY='mybiz_v2';
 let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
-function persist(){ localStorage.setItem(KEY, JSON.stringify(store)); if(window.cloudPush) window.cloudPush(); }
+function persist(){ localStorage.setItem(KEY, JSON.stringify(store)); updateBadge(); if(window.cloudPush) window.cloudPush(); }
 function updateBadge(){
   var cu=store.currentUser;
   if(!cu)return;
@@ -10,6 +10,15 @@ function updateBadge(){
   if(!el)return;
   var rolePart=(cu.role==='owner'&&(store.users||[]).length===0)?'':' ('+cu.role.charAt(0).toUpperCase()+cu.role.slice(1)+')';
   el.textContent=cu.name+rolePart;
+  const avatar=document.querySelector('#userBadge .user-avatar');
+  if(avatar){
+    const logo=store.business?.logo||'';
+    if(logo){
+      let img=avatar.querySelector('img');
+      if(!img){avatar.textContent='';img=document.createElement('img');img.alt='Business logo';avatar.appendChild(img);}
+      if(img.getAttribute('src')!==logo)img.src=logo;
+    }else{avatar.textContent=(cu.name||'Owner').trim().charAt(0).toUpperCase()||'O';}
+  }
 }
 function refreshView(){ if(currentView){   const map={home:vWelcome,parties:vParties,items:vItems,availablestock:vAvailableStock,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,saleorder:vSaleOrder,savedinv:vSavedInvoices,bank:vBank,cash:vCash,cheques:vCardPayments,loan:vLoan,barcode:vBarcode,recyclebin:vRecycle,importitems:vImport,exportitems:vExportItems,estimate:vEstimate,profile:vProfile,gprofile:vGProfile,bulkupdate:vBulkUpdate,importparties:vImportParties}; if(map[currentView])map[currentView](); } }
 function refreshAll(){ refreshView(); refreshOpenModals(); }
@@ -39,7 +48,7 @@ function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'
     passcode:false,tin:false,blockNewItem:false,blockNewParty:false,estimate:false,proforma:false,multiFirm:true,stockTransfer:false,txnHistory:true,
     posBillDisc:true,posBillTax:false,posFreeQty:false,posLoyalty:false,posRoundOff:false,posPrimary:'print',posPricing:'without',posCardPayment:true,posQr:true,posBank:true,
     invNo:true,addTime:false,cashSale:true,billingName:true,poDetails:false,quickEntry:false,noPreview:false,passcodeTxn:false,discPayment:true,linkPayments:true,dueDates:false,inclTax:true,showPurchase:false,last5Price:false,freeItemQty:false,countField:true,txnTax:false,txnDiscount:true,roundOff:false,billingType:'lite',
-    printerTab:'thermal',printTheme:5,thermalDefault:true,pageSize:'3inch',textBold:true,autoCut:true,openDrawer:false,coName:true,coAddress:false,coEmail:true,coPhone:true,
+    printerTab:'thermal',printTheme:5,thermalDefault:true,pageSize:'3inch',standardPageSize:'a4',textBold:true,autoCut:true,openDrawer:false,coName:true,coAddress:false,coEmail:true,coPhone:true,
     tSno:true,tUom:true,tMrp:true,tSize:false,tModel:false,tSerial:false,tTotalQty:true,tAmountDec:true,tReceived:true,tBalance:true,tPartyBal:false,tTaxDetails:false,tYouSaved:true,tGrouping:true,tDesc:true,
     smsParty:true,smsUpdate:false,smsSelf:false,smsBalance:false,smsLink:true,smsSales:true,smsPurchase:true,smsSalesRet:true,smsPurchRet:true,smsPayIn:true,smsPayOut:true,smsSaleOrd:true,smsPurchOrd:false,smsEstimate:false,smsProforma:false,smsChallan:false,smsCancelled:true,
     partyGroup:false,shipAddr:false,partyStatus:true,payReminder:false,loyalty:false,
@@ -1325,6 +1334,16 @@ function setInvoicePreviewPaperSize(size){
   if(store.settings.printerTab==='regular'){
     if(!['a4','a5','letter'].includes(size))return;
     store.settings.standardPageSize=size;persist();refreshInvoicePreview();
+  }else setReceiptPaperSize(size);
+}
+function setReceiptPreviewPrintType(type){
+  if(type!=='regular'&&type!=='thermal')return;
+  store.settings.printerTab=type;persist();nciShowSlip();
+}
+function setReceiptPreviewPaperSize(size){
+  if(store.settings.printerTab==='regular'){
+    if(!['a4','a5','letter'].includes(size))return;
+    store.settings.standardPageSize=size;persist();nciShowSlip();
   }else setReceiptPaperSize(size);
 }
 function uploadInvoiceLogo(input){
@@ -6158,6 +6177,11 @@ function nciPreview(){
   const branchAddress=receiptBranchAddress();
   const previewAddress=branchAddress||b.address||'';
   const previewSale={no:invNo,date:dispDate(),party:cust,phone,rows:rows.map(r=>({item:r.name||r.item||'',qty:+r.qty||0,price:+r.price||0,disc:0,size:r.size||''})),total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,branchAddress,branchPhone:previewPhone};
+  if(st.printerTab==='regular'){
+    pv.innerHTML=buildInvoiceHTML(previewSale);
+    renderInvoiceBarcodes();
+    return;
+  }
   const qrPayload=receiptQrPayload(previewSale);
   const qrSrc=localQrDataUrl(qrPayload.text,256);
   const bizName=b.name||'My Business';
@@ -6213,7 +6237,14 @@ function nciShowSlip(){
   if(body&&pv) body.innerHTML=(issues.length?`<div class="nci-preview-warning" role="alert">Before printing: ${issues.join('; ')}.</div>`:'')+pv.innerHTML;
   const printButton=document.getElementById('nciFinalPrint');
   if(printButton){printButton.disabled=issues.length>0;printButton.title=issues.join('; ');}
-  const sizeSelect=document.getElementById('nciPaperSize');if(sizeSelect)sizeSelect.value=store.settings.pageSize||'3inch';
+  const typeSelect=document.getElementById('nciPrintType');if(typeSelect)typeSelect.value=store.settings.printerTab==='regular'?'regular':'thermal';
+  document.querySelector('#nciSlipModal .nci-slip-modal')?.classList.toggle('standard-preview',store.settings.printerTab==='regular');
+  const previewTitle=document.querySelector('#nciSlipModal .nci-slip-head b');if(previewTitle)previewTitle.textContent=store.settings.printerTab==='regular'?'Invoice Preview':'Receipt Preview';
+  const sizeSelect=document.getElementById('nciPaperSize');if(sizeSelect){
+    const thermal=store.settings.printerTab!=='regular';
+    sizeSelect.innerHTML=thermal?'<option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option>':'<option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option>';
+    sizeSelect.value=thermal?store.settings.pageSize||'3inch':store.settings.standardPageSize||'a4';
+  }
   showModal('nciSlipModal');
   if(body)body.scrollTop=0;
 }
@@ -8103,7 +8134,7 @@ function vSettings(){
       <button style="padding:12px 30px;background:#e8453c;color:#fff;border:none;border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">🔄 Enable Service Reminders</button>
     </div>`;
   }
-  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.2</div></div>`;
+  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.3</div></div>`;
   content.innerHTML=`<div class="set-wrap">
       <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
       <div class="set-body"><button class="set-close" onclick="nav('home')" title="Close">✕</button>${body}</div>
@@ -9415,8 +9446,7 @@ function fbBranchDoLogin() {
         applyingRemote = false;
         cloudReady = true;                           // pushes allowed now
         try{ closeModal('loginModal'); closeModal('passcodeModal'); }catch(e){}
-        var badge=document.getElementById('currentUserBadge');
-        if(badge) badge.textContent = store.currentUser.name + ' (' + (store.currentUser.role.charAt(0).toUpperCase()+store.currentUser.role.slice(1)) + ')';
+        updateBadge();
         if(typeof buildMenu==='function') buildMenu();
         if(typeof refreshAll==='function') refreshAll();
         if(typeof nav==='function'){ try{ nav('home'); }catch(e){} }

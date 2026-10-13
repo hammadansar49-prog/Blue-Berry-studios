@@ -13,15 +13,18 @@
 // ============================================================
 const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
+const os = require('os');
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
 const { execFile } = require('child_process');
 const { availablePrinters, checkPrinter, receiptPageSize } = require('./printer');
 
-// Older Windows (7/8) + some GPUs render Chromium poorly; disabling
-// GPU acceleration makes the app boot reliably everywhere.
-app.disableHardwareAcceleration();
+// Windows 7/8 need software rendering; on Windows 10/11 the GPU compositor
+// keeps scrolling surfaces from leaving stale text during rapid navigation.
+if (process.platform === 'win32' && Number(os.release().split('.')[0]) < 10) {
+  app.disableHardwareAcceleration();
+}
 if (process.platform === 'win32') app.setAppUserModelId('com.karobar.app');
 
 let mainWindow = null;
