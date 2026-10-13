@@ -2,7 +2,36 @@
 const KEY='mybiz_v2';
 let store = load() || seed();
 function load(){ try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null} }
-function persist(){ localStorage.setItem(KEY, JSON.stringify(store)); updateBadge(); if(window.cloudPush) window.cloudPush(); }
+function persist(){
+  try{
+    if(window.cloudPush) window.cloudPush();
+    localStorage.setItem(KEY, JSON.stringify(store));
+  }catch(e){toast('Could not save on this device. Please export a backup and free storage.');throw e;}
+  updateBadge();
+}
+async function prepareBusinessImage(file){
+  if(!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>10*1024*1024)throw new Error('Choose a PNG, JPG, WebP or GIF under 10 MB.');
+  const url=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Could not read image.'));reader.readAsDataURL(file);});
+  const img=new Image();img.src=url;await img.decode();
+  const scale=Math.min(1,320/Math.max(img.naturalWidth,img.naturalHeight));
+  const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  let data=canvas.toDataURL('image/png');
+  if(data.length>180000){ctx.globalCompositeOperation='destination-over';ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);data=canvas.toDataURL('image/jpeg',0.8);}
+  if(data.length>200000)throw new Error('Image is too detailed. Please choose a smaller image.');
+  return data;
+}
+async function saveBusinessImage(file,field='logo'){
+  if(!hasPermission('edit','settings')){showNoAccess();return false;}
+  if(!file)return false;
+  const target=store, user=store.currentUser;
+  try{
+    const data=await prepareBusinessImage(file);
+    if(store!==target||store.currentUser!==user){toast('Account or data changed. Please select the image again.');return false;}
+    store.business[field]=data;persist();
+    toast('Image saved on this device. Cloud sync pending.');return true;
+  }catch(e){toast(e.message||'Could not save image.');return false;}
+}
 function updateBadge(){
   var cu=store.currentUser;
   if(!cu)return;
@@ -236,6 +265,17 @@ const MENU=[
 ];
 
 const menuEl=document.getElementById('menu');
+function toggleSidebar(open){
+  const button=document.getElementById('sidebarToggle');
+  const show=window.matchMedia('(max-width:680px)').matches&&(open===undefined?!document.body.classList.contains('sidebar-open'):open);
+  document.body.classList.toggle('sidebar-open',show);
+  button.setAttribute('aria-expanded',String(show));
+  button.setAttribute('aria-label',show?'Close navigation':'Open navigation');
+  button.title=show?'Close navigation':'Open navigation';
+  document.querySelector('.sidebar-backdrop').hidden=!show;
+}
+window.matchMedia('(max-width:680px)').addEventListener('change',()=>toggleSidebar(false));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('sidebar-open')){toggleSidebar(false);document.getElementById('sidebarToggle').focus();}});
 let renderedMenuMarkup='';
 function buildMenu(){
   const s=store.settings||{};
@@ -283,6 +323,7 @@ function buildMenu(){
   });
 }
 function nav(view,el){
+  toggleSidebar(false);
   currentView=view;
   menuEl.querySelectorAll('.mi,.smi').forEach(x=>x.classList.remove('active'));
   if(el) el.classList.add('active'); else menuEl.querySelector(`[data-view="${view}"]`)?.classList.add('active');
@@ -1233,8 +1274,7 @@ function hLogoClick(){
 function hChangeLogo(){ if(!hasPermission('edit','settings')){showNoAccess();return;} document.getElementById('h_logomenu').classList.remove('show'); document.getElementById('h_logofile').value=''; document.getElementById('h_logofile').click(); }
 function hDeleteLogo(){ if(!hasPermission('edit','settings')){showNoAccess();return;} store.business.logo=''; persist(); refreshView(); document.getElementById('h_logomenu').classList.remove('show');
   document.getElementById('h_logo').innerHTML='＋<br>Add Logo'; toast('Logo deleted'); }
-function hLogo(inp){ if(!hasPermission('edit','settings')){showNoAccess();return;} const f=inp.files[0]; if(!f)return; const r=new FileReader();
-  r.onload=e=>{ store.business.logo=e.target.result; persist(); refreshView(); document.getElementById('h_logo').innerHTML=`<img src="${e.target.result}">`; toast('Logo saved'); }; r.readAsDataURL(f); }
+async function hLogo(inp){if(await saveBusinessImage(inp.files[0]))refreshView();}
 document.addEventListener('click',e=>{ const m=document.getElementById('h_logomenu'); if(m&&m.classList.contains('show')&&!e.target.closest('.hlogo-wrap')) m.classList.remove('show'); });
 document.addEventListener('click',e=>{ const dd=document.getElementById('sharedItemDrop'); if(dd&&dd.style.display==='block'&&!e.target.closest('#sharedItemDrop')&&!e.target.closest('[onfocus*="Filter"]')) dd.style.display='none'; });
 function hPreview(){
@@ -1364,11 +1404,11 @@ function setReceiptPreviewPaperSize(size){
     store.settings.standardPageSize=size;rememberPrintPreference();nciShowSlip();
   }else setReceiptPaperSize(size);
 }
-function uploadInvoiceLogo(input){
+async function uploadInvoiceLogo(input){
   if(!hasPermission('edit','settings')){showNoAccess();return;}
   const file=input.files?.[0];if(!file)return;
   if(!/^image\/(png|jpeg|webp)$/.test(file.type)||file.size>2*1024*1024){toast('Choose a PNG, JPG or WebP image under 2 MB');input.value='';return;}
-  const reader=new FileReader();reader.onload=()=>{store.business.logo=reader.result;persist();refreshInvoicePreview();if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();toast('Business logo added to invoice');input.value='';};reader.readAsDataURL(file);
+  if(await saveBusinessImage(file)){refreshInvoicePreview();if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();input.value='';}
 }
 function buildInvoiceHTML(s){
   const b=store.business, st=store.settings||{};
@@ -7779,14 +7819,23 @@ function pfAddLogo(){ if(!hasPermission('edit','settings')){showNoAccess();retur
 function pfReplaceLogo(){ if(!hasPermission('edit','settings')){showNoAccess();return;} document.getElementById('pfLogoMenu').classList.remove('show'); document.getElementById('pf_logofile').click(); }
 function pfDeleteLogo(){
   if(!hasPermission('edit','settings')){showNoAccess();return;}
-  store.business.logo=''; persist(); refreshView();
+  store.business.logo=''; persist();
   document.getElementById('pfLogoMenu').classList.remove('show');
+  document.getElementById('pfLogoMenu').innerHTML='<div onclick="pfAddLogo()">Add Logo</div>';
   document.getElementById('pf_logo').innerHTML='Add<br>Logo';
   toast('Logo deleted');
 }
-function pfLogo(inp){ if(!hasPermission('edit','settings')){showNoAccess();return;} const f=inp.files[0]; if(!f)return; const r=new FileReader();
-  r.onload=e=>{ store.business.logo=e.target.result; persist(); refreshView(); document.getElementById('pf_logo').innerHTML=`<img src="${e.target.result}">`; document.getElementById('pfLogoMenu').innerHTML=`<div onclick="pfReplaceLogo()">✏️ Replace Logo</div><div class="del" onclick="pfDeleteLogo()">🗑 Delete Logo</div>`; toast('Logo saved'); }; r.readAsDataURL(f); }
-function pfSign(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{ store.business.signature=e.target.result; persist(); refreshView(); toast('Signature added'); }; r.readAsDataURL(f); }
+async function pfLogo(inp){
+  if(!await saveBusinessImage(inp.files[0]))return;
+  const preview=document.getElementById('pf_logo');if(preview)preview.innerHTML=`<img src="${store.business.logo}" alt="Business logo">`;
+  const menu=document.getElementById('pfLogoMenu');if(menu){menu.classList.remove('show');menu.innerHTML='<div onclick="pfReplaceLogo()">Replace Logo</div><div class="del" onclick="pfDeleteLogo()">Delete Logo</div>';}
+}
+async function pfSign(inp){
+  if(await saveBusinessImage(inp.files[0],'signature')){
+    const label=inp.closest('label');
+    if(label&&!label.querySelector('.signature-saved')){const mark=document.createElement('span');mark.className='signature-saved';mark.textContent=' (saved)';label.appendChild(mark);}
+  }
+}
 function saveProfile(){
   if(!hasPermission('edit','settings')){showNoAccess();return;}
   const b=store.business;
@@ -7794,7 +7843,7 @@ function saveProfile(){
   b.email=document.getElementById('pf_email').value.trim(); b.btype=document.getElementById('pf_btype').value;
   b.category=document.getElementById('pf_cat').value; b.pincode=document.getElementById('pf_pin').value.trim();
   b.address=document.getElementById('pf_addr').value.trim(); persist(); refreshView();
-  if(b.name) document.getElementById('bizName').textContent=b.name; toast('Profile saved'); }
+  if(b.name) document.getElementById('bizName').textContent=b.name; toast('Profile saved on this device. Cloud sync pending.'); }
 
 /* SETTINGS + LOGO */
 let setTab='general';
@@ -8152,7 +8201,7 @@ function vSettings(){
       <button style="padding:12px 30px;background:#e8453c;color:#fff;border:none;border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">🔄 Enable Service Reminders</button>
     </div>`;
   }
-  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.4</div></div>`;
+  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 3.0.0</div></div>`;
   content.innerHTML=`<div class="set-wrap">
       <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
       <div class="set-body"><button class="set-close" onclick="nav('home')" title="Close">✕</button>${body}</div>
@@ -8209,8 +8258,7 @@ function applyLiveSettings(){
   persist();
 }
 function applyZoom(){const s=store.settings;const input=document.getElementById('set_zoom');if(input){s.zoom=+input.value||100;persist();}const z=s.zoom||100;document.documentElement.style.fontSize=(z/100*14)+'px';}
-function uploadLogo(inp){if(!hasPermission('edit','settings')){showNoAccess();return;}const f=inp.files[0];if(!f)return;const r=new FileReader();
-  r.onload=e=>{store.business.logo=e.target.result;persist();refreshView();toast('Logo saved');};r.readAsDataURL(f);}
+async function uploadLogo(inp){if(await saveBusinessImage(inp.files[0]))refreshView();}
 function saveSettings(){
   if(!hasPermission('edit','settings')){showNoAccess();return;}
   applyLiveSettings();
@@ -9323,12 +9371,97 @@ function fbBranchDoLogin() {
   var loginKind = 'owner';    // 'owner' (email/Google) | 'staff' (user-id)
   var cloudReady = false;     // true only AFTER this user's own cloud data is loaded
   var dataUid = null;         // the store doc we read/write (owner uid; = authUid for owners, ownerUid for staff)
+  var sessionVersion = 0;
+  var localRevision = 0;
+  var pending = null;
+  var writing = false;
   var isStaffSession = false; // true when the logged-in user is a staff member of someone else's store
   var STAFF_DOMAIN = '@staff.karobar.app'; // synthetic email domain for staff user-id logins
 
   function $(id){ return document.getElementById(id); }
   // Cloud payload = the whole store EXCEPT per-device fields (currentUser is local only).
   function cloudJSON(){ var c = {}; for(var k in store){ if(k!=='currentUser') c[k]=store[k]; } return JSON.stringify(c); }
+  function pendingKey(){return KEY+':pending:'+fbUser.uid+':'+dataUid;}
+  // Reapply only locally changed fields when recovering against a newer cloud copy.
+  function recoverChanges(base, local, remote){
+    if(JSON.stringify(base)===JSON.stringify(local))return remote;
+    if(JSON.stringify(base)===JSON.stringify(remote)||JSON.stringify(local)===JSON.stringify(remote))return local;
+    if(Array.isArray(base)&&Array.isArray(local)&&Array.isArray(remote)){
+      var identity=function(value){return value&&typeof value==='object'?(value.id!=null?'id:'+value.id:null):JSON.stringify(value);};
+      var lists=[base,local,remote].map(function(values){
+        var map=new Map();values.forEach(function(value){var id=identity(value);if(id==null||map.has(id))throw new Error('Conflicting list edits. Local changes are retained; export a backup before resolving.');map.set(id,value);});return map;
+      });
+      var merged=[];
+      new Set(Array.from(lists[2].keys()).concat(Array.from(lists[1].keys()))).forEach(function(id){
+        var before=lists[0].get(id),ours=lists[1].get(id),theirs=lists[2].get(id);
+        if(!lists[1].has(id)){if(!lists[0].has(id)||JSON.stringify(before)!==JSON.stringify(theirs))merged.push(theirs);return;}
+        if(!lists[2].has(id)){if(!lists[0].has(id)||JSON.stringify(before)!==JSON.stringify(ours))merged.push(ours);return;}
+        merged.push(recoverChanges(before,ours,theirs));
+      });
+      return merged;
+    }
+    if(local && base && remote && typeof local==='object' && typeof base==='object' && typeof remote==='object' && !Array.isArray(local) && !Array.isArray(base) && !Array.isArray(remote)){
+      var result=Object.assign({},remote);
+      new Set(Object.keys(base).concat(Object.keys(local))).forEach(function(k){
+        if(!Object.prototype.hasOwnProperty.call(local,k)){delete result[k];return;}
+        result[k]=recoverChanges(base[k],local[k],remote[k]);
+      });
+      return result;
+    }
+    return local;
+  }
+  function queueChanges(){
+    var json=cloudJSON();
+    if(!pending && json===lastPushedJSON)return;
+    var next={base:pending?pending.base:lastPushedJSON,json:json};
+    var shared=JSON.parse(localStorage.getItem(pendingKey())||'null');
+    if(shared){
+      next={base:shared.base,json:JSON.stringify(recoverChanges(JSON.parse(pending?pending.json:lastPushedJSON||'{}'),JSON.parse(json),JSON.parse(shared.json)))};
+    }
+    localStorage.setItem(pendingKey(),JSON.stringify(next));
+    if(next.json!==json){var user=store.currentUser;store=JSON.parse(next.json);store.currentUser=user;}
+    pending=next;
+    localRevision++;
+    setStatus('Saved on device - waiting for cloud');
+  }
+  function pushPending(){
+    if(!pending || writing || !cloudReady || !fbUser)return Promise.resolve();
+    if(pushTimer){clearTimeout(pushTimer);pushTimer=null;}
+    var version=sessionVersion, key=pendingKey(), sent=pending.json, base=pending.base, target=dataUid;
+    writing=true;
+    setStatus('Saving to cloud...');
+    var ref=window.fbDB.collection('users').doc(target);
+    return window.fbDB.runTransaction(function(transaction){
+      return transaction.get(ref).then(function(snap){
+        if(version!==sessionVersion)throw new Error('Account changed; local changes retained.');
+        var remote=snap.exists&&snap.data().data;
+        var written=JSON.stringify(recoverChanges(JSON.parse(base||'{}'),JSON.parse(sent),remote?JSON.parse(remote):{}));
+        transaction.set(ref,{data:written,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+        return written;
+      });
+    }).then(function(written){
+      // Acknowledgements belong to their captured account, even after logout.
+      var cached=JSON.parse(localStorage.getItem(key)||'null');
+      if(cached){
+        if(cached.json===sent)localStorage.removeItem(key);
+        else{cached={base:written,json:JSON.stringify(recoverChanges(JSON.parse(cached.base||'{}'),JSON.parse(cached.json),JSON.parse(written)))};localStorage.setItem(key,JSON.stringify(cached));}
+      }
+      if(version!==sessionVersion)return;
+      pending=JSON.parse(localStorage.getItem(key)||'null');
+      var current=pending?pending.json:written;
+      if(current!==cloudJSON())applyRemote(current);
+      lastPushedJSON=written;
+      setStatus(pending?'Saved on device - waiting for cloud':'Cloud saved');
+    }).catch(function(e){
+      if(version!==sessionVersion)return;
+      setStatus('Saved on device - cloud save failed: '+(e.code||e.message));
+      logDiagnostic('sync error','Save failed: '+(e.code||e.message));
+    }).finally(function(){
+      if(version!==sessionVersion)return;
+      writing=false;
+      if(pending && pending.json!==sent)window.cloudPush();
+    });
+  }
   // A genuinely empty store for a brand-new owner: no demo company/shared/phone/users/items.
   function freshOwnerStore(){
     var d = defaults();
@@ -9338,7 +9471,7 @@ function fbBranchDoLogin() {
     d.users = [];
     return d;
   }
-  function setStatus(t){ var e=$('fbSyncStatus'); if(e) e.textContent=t; }
+  function setStatus(t){['fbSyncStatus','sideSyncStatus'].forEach(function(id){var e=$(id);if(e)e.textContent=t;});}
   function setErr(t){ var e=$('fbAuthError'); if(e){ e.textContent=t||''; e.style.color=t?'#e74c3c':''; e.style.background=''; e.style.border=''; e.style.padding=''; e.style.lineHeight=''; e.style.fontSize=''; e.innerHTML=t||''; } }
 
   function showAuthModal(){ var m=$('fbAuthModal'); if(m) m.style.display='block'; }
@@ -9347,27 +9480,10 @@ function fbBranchDoLogin() {
   // ---- Real-time push to Firestore (debounced) ----
   window.cloudPush = function(){
     if(!fbUser || applyingRemote || !cloudReady) return; // never push before this user's data is loaded
-    var uidAtSchedule = fbUser.uid;                      // lock the auth account NOW
-    var docAtSchedule = dataUid;                         // lock the store doc NOW
+    queueChanges();
     if(pushTimer) clearTimeout(pushTimer);
-    pushTimer = setTimeout(function(){
-      // Abort if the account/store changed (logout / switch) between schedule and fire
-      if(!fbUser || fbUser.uid !== uidAtSchedule || dataUid !== docAtSchedule || !cloudReady) return;
-      var json = cloudJSON();
-      lastPushedJSON = json;
-      setStatus('Saving…');
-      // merge:true so we never clobber the memberUids field on the store doc
-      window.fbDB.collection('users').doc(docAtSchedule).set({
-        data: json,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true }).then(function(){
-        setStatus('☁️ Saved · ' + new Date().toLocaleTimeString());
-      }).catch(function(e){
-        setStatus('⚠️ Save failed: ' + e.code);
-        logDiagnostic('sync error','Save failed: '+(e.code||e.message||'unknown error'));
-        console.error('cloudPush error - app.js:8552', e);
-      });
-    }, 700);
+    var version=sessionVersion;
+    pushTimer = setTimeout(function(){if(version===sessionVersion)pushPending();},700);
   };
 
   // ---- Apply remote data into local store ----
@@ -9377,6 +9493,7 @@ function fbBranchDoLogin() {
       var keepUser = store.currentUser;          // currentUser is per-device, keep it
       store = JSON.parse(json);
       store.currentUser = keepUser;
+      lastPushedJSON = json;
       if(typeof ensure==='function') ensure();
       applySavedPrintPreference();
       localStorage.setItem(KEY, JSON.stringify(store)); // local cache, no cloud echo
@@ -9391,6 +9508,8 @@ function fbBranchDoLogin() {
   // Strict isolation: data comes ONLY from this user's own cloud doc.
   // A brand-new user starts with a fresh empty store (never the previous user's data).
   function loadUserData(authUid){
+    var version=++sessionVersion;
+    pending=null;writing=false;localRevision=0;
     cloudReady = false;            // block all pushes until we have the right store's data
     if(pushTimer){ clearTimeout(pushTimer); pushTimer = null; }  // drop any previous pending write
     if(unsub){ unsub(); unsub = null; }
@@ -9398,6 +9517,7 @@ function fbBranchDoLogin() {
 
     // 0) Am I a branch? Check branchMap first.
     window.fbDB.collection('branchMap').doc(authUid).get().then(function(branchSnap){
+      if(version!==sessionVersion)return;
       var isBranchSession = false;
       var branchData = null;
       var ownerUid = authUid;
@@ -9415,6 +9535,7 @@ function fbBranchDoLogin() {
           }).catch(function(e){logDiagnostic('branch','Could not load branch address: '+(e.code||e.message));})
         : Promise.resolve();
       return branchDetails.then(function(){return window.fbDB.collection('staffMap').doc(authUid).get();}).then(function(mapSnap){
+        if(version!==sessionVersion)return;
         if (!isBranchSession) {
           ownerUid = (mapSnap.exists && mapSnap.data() && mapSnap.data().ownerUid) ? mapSnap.data().ownerUid : authUid;
           isStaffSession = (ownerUid !== authUid);
@@ -9427,6 +9548,7 @@ function fbBranchDoLogin() {
         dataUid = ownerUid;                           // <-- read/write the OWNER's store doc
         // 2) Load that store's data.
         return window.fbDB.collection('users').doc(dataUid).get().then(function(snap){
+          if(version!==sessionVersion)return;
           var hasData = snap.exists && snap.data() && snap.data().data;
           applyingRemote = true;
           if(hasData){
@@ -9435,6 +9557,14 @@ function fbBranchDoLogin() {
             throw { code: 'owner-store-missing' };     // staff/branch but owner has no data -> abort safely
           }else{
             store = freshOwnerStore();                 // brand-new owner -> truly empty
+          }
+          lastPushedJSON=cloudJSON();
+          var cached=localStorage.getItem(pendingKey());
+          if(cached){
+            pending=JSON.parse(cached);
+            store=recoverChanges(JSON.parse(pending.base||'{}'),JSON.parse(pending.json),store);
+            pending={base:lastPushedJSON,json:cloudJSON()};
+            localStorage.setItem(pendingKey(),JSON.stringify(pending));
           }
           if(typeof ensure==='function') ensure();
           // Cloud login IS the identity now -> set currentUser locally and skip the old
@@ -9463,7 +9593,6 @@ function fbBranchDoLogin() {
           }
         applySavedPrintPreference();
         localStorage.setItem(KEY, JSON.stringify(store));
-        lastPushedJSON = cloudJSON();
         applyingRemote = false;
         cloudReady = true;                           // pushes allowed now
         try{ closeModal('loginModal'); closeModal('passcodeModal'); }catch(e){}
@@ -9471,20 +9600,16 @@ function fbBranchDoLogin() {
         if(typeof buildMenu==='function') buildMenu();
         if(typeof refreshAll==='function') refreshAll();
         if(typeof nav==='function'){ try{ nav('home'); }catch(e){} }
-        if(!hasData && !isStaffSession){
-          // create the owner's store doc with an empty members list
-          window.fbDB.collection('users').doc(dataUid).set({
-            data: lastPushedJSON,
-            memberUids: [],
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true }).catch(function(e){ console.error('create store doc error - app.js:8652', e); });
-        }
+        if(!hasData && !isStaffSession && !isBranchSession && !pending){lastPushedJSON='{}';queueChanges();}
         startSnapshot(dataUid);
         hideAuthModal();                             // data ready -> reveal the app
         setStatus((isBranchSession ? '☁️ Branch connected · ' : isStaffSession ? '☁️ Joined store · ' : '☁️ Ready · ') + new Date().toLocaleTimeString());
+        if(pending)window.cloudPush();
       });
     });
     }).catch(function(e){
+      if(version!==sessionVersion)return;
+      applyingRemote=false;
       // No data loaded -> never fall back to in-memory data (could be another store's!)
       cloudReady = false; dataUid = null; isStaffSession = false;
       console.error('loadUserData error - app.js:8662', e);
@@ -9502,8 +9627,9 @@ function fbBranchDoLogin() {
   function startSnapshot(uid){
     if(unsub){ unsub(); unsub = null; }
     var ref = window.fbDB.collection('users').doc(uid);
+    var version=sessionVersion;
     unsub = ref.onSnapshot(function(snap){
-      if(!cloudReady) return;
+      if(!cloudReady || version!==sessionVersion || pending || writing) return;
       if(snap.metadata.hasPendingWrites) return;     // our own pending write
       if(!snap.exists) return;
       var d = snap.data();
@@ -9524,10 +9650,12 @@ function fbBranchDoLogin() {
   // ---- Manual / periodic one-shot refresh from the cloud ----
   window.cloudRefresh = function(manual){
     if(!cloudReady || !dataUid || !window.fbDB){ if(manual) toast('Please login first.'); return; }
+    if(pending || writing){pushPending();if(manual)toast('Local changes are waiting for cloud confirmation.');return;}
+    var version=sessionVersion, revision=localRevision;
     var btn = document.getElementById('tbRefresh');
     if(manual && btn){ btn.style.transition='transform .6s ease'; btn.style.transform='rotate(360deg)'; setTimeout(function(){ btn.style.transition=''; btn.style.transform=''; }, 600); }
     window.fbDB.collection('users').doc(dataUid).get().then(function(snap){
-      if(!cloudReady) return;
+      if(!cloudReady || version!==sessionVersion || revision!==localRevision || pending || writing) return;
       var json = snap.exists && snap.data() && snap.data().data;
       if(!json) return;
       if(json === lastPushedJSON || json === cloudJSON()){ if(manual) toast('Already up to date'); return; }
@@ -9732,6 +9860,8 @@ function fbBranchDoLogin() {
         var box=$('fbAccountBox'); if(box){ box.style.display='flex'; $('fbAccountEmail').textContent = user.email || 'Cloud account'; }
         loadUserData(user.uid);   // load ONLY this user's data, then hides cover
       }else{
+        sessionVersion++;
+        pending=null;writing=false;
         // Signed out -> stop sync AND wipe local data so the next user can't see it
         fbUser = null;
         cloudReady = false;

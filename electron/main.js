@@ -11,7 +11,7 @@
 // Supports Windows 7, 8, 8.1, 10 and 11 (Electron 22.x is the last
 // line that still supports Windows 7/8).
 // ============================================================
-const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 const os = require('os');
 const http = require('http');
@@ -19,6 +19,9 @@ const fs = require('fs');
 const url = require('url');
 const { execFile } = require('child_process');
 const { availablePrinters, checkPrinter, receiptPageSize } = require('./printer');
+const { listenPersistent } = require('./local-origin');
+const primaryInstance = app.requestSingleInstanceLock();
+if (!primaryInstance) app.quit();
 
 // Windows 7/8 need software rendering; on Windows 10/11 the GPU compositor
 // keeps scrolling surfaces from leaving stale text during rapid navigation.
@@ -30,6 +33,9 @@ if (process.platform === 'win32') app.setAppUserModelId('com.karobar.app');
 let mainWindow = null;
 let localServer = null;
 let serverPort = 0;
+app.on('second-instance', () => {
+  if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+});
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -85,11 +91,8 @@ function startLocalServer(rootDir) {
         res.writeHead(500); res.end('Server error');
       }
     });
-    server.on('error', reject);
-    // port 0 => OS picks a free port; bind to loopback only
-    server.listen(0, '127.0.0.1', function () {
-      resolve(server);
-    });
+    // Reuse the origin so Firebase Auth and unsynced local data survive restarts.
+    listenPersistent(server, app.getPath('userData')).then(resolve, reject);
   });
 }
 
@@ -195,6 +198,7 @@ ipcMain.handle('karobar-print-invoice', async function (_event, job) {
 });
 
 app.whenReady().then(function () {
+  if (!primaryInstance) return;
   Menu.setApplicationMenu(null); // hide the default Electron menu bar
 
   // During development you can run VS Code Live Server (port 5500)
@@ -210,8 +214,8 @@ app.whenReady().then(function () {
       // Use localhost (an authorized Firebase domain) so Google sign-in works.
       createWindow('http://localhost:' + serverPort + '/index.html');
     }).catch(function (e) {
-      // Fallback to file:// if the server somehow can't start.
-      createWindow('file://' + path.join(rootDir, 'index.html'));
+      dialog.showErrorBox('Karobar could not start', 'The saved local address is unavailable. Close any other Karobar instance and retry. Your saved data has not been removed.\n\n' + e.message);
+      app.quit();
     });
   }
 
