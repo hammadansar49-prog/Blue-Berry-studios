@@ -1,7 +1,7 @@
 # KAROBAR — Desktop App (Windows)
 
 Yeh app ab ek **Windows desktop application** ke taur par bhi chalti hai (Electron se).
-Windows **7, 8, 8.1, 10, 11** sab par chalti hai.
+Electron 22 Windows **7, 8, 8.1, 10, 11** ko target karta hai. Har OS/driver par is release ka hardware test nahi hua.
 
 > Electron **22.x** isliye use kiya hai kyunke yehi aakhri version hai jo Windows 7/8 ko
 > support karta hai. Naye Electron sirf Windows 10/11 chalte hain.
@@ -57,7 +57,7 @@ npm run dist
 Build complete hone par installer yahan milega:
 
 ```
-dist/KAROBAR-Setup-1.0.0.exe
+dist/KAROBAR-Setup-1.0.1.exe
 ```
 
 Yeh ek **NSIS installer** hai:

@@ -10,14 +10,25 @@ var firebaseConfig = {
   measurementId: "G-98S6C96P84"
 };
 
-// Initialize Firebase (compat SDK)
-firebase.initializeApp(firebaseConfig);
-
-// Global handles used by the sync code at the bottom of app.js
-window.fbAuth = firebase.auth();
-window.fbDB = firebase.firestore();
-
-// Keep the user signed in across page reloads
-window.fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){
-  console.warn('Auth persistence error', e);
-});
+// A missing CDN SDK must not crash the local app during an offline launch.
+window.fbAuth = null;
+window.fbDB = null;
+window.fbPersistenceReady = Promise.resolve();
+if (typeof firebase !== 'undefined' && firebase.auth && firebase.firestore) {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    window.fbAuth = firebase.auth();
+    window.fbDB = firebase.firestore();
+    // Cache authenticated document reads for offline desktop reopening.
+    window.fbPersistenceReady = window.fbDB.enablePersistence({ synchronizeTabs: true }).catch(function (e) {
+      console.warn('Offline cloud cache unavailable', e.code || e.message);
+    });
+    window.fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function (e) {
+      console.warn('Auth persistence error', e);
+    });
+  } catch (e) {
+    window.fbAuth = null;
+    window.fbDB = null;
+    console.warn('Cloud services unavailable', e);
+  }
+}

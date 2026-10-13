@@ -4,6 +4,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('karobarDesktop', {
   isDesktop: true,
+  listPrinters: () => ipcRenderer.invoke('karobar-print-list'),
+  printHTML: job => ipcRenderer.invoke('karobar-print-html', job),
+  printRaw: job => ipcRenderer.invoke('karobar-print-raw', job),
+  savePDF: job => ipcRenderer.invoke('karobar-print-pdf', job),
+  printerConfig: config => ipcRenderer.invoke('karobar-printer-config', config),
   // Ask the main process to open the Google login page in the system browser.
   openGoogleLogin: function () { return ipcRenderer.invoke('karobar-open-google'); },
   // Receive the Google credential (id/access token) captured from the browser.

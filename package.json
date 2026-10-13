@@ -1,6 +1,6 @@
 {
   "name": "karobar",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "KAROBAR - Billing & POS desktop app",
   "main": "electron/main.js",
   "author": "Hammad Ansar",
@@ -10,7 +10,8 @@
     "dev": "set ELECTRON_START_URL=http://localhost:5500&& electron .",
     "icon": "node scripts/make-icon.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.58",

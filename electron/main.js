@@ -11,11 +11,19 @@
 // Supports Windows 7, 8, 8.1, 10 and 11 (Electron 22.x is the last
 // line that still supports Windows 7/8).
 // ============================================================
-const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
+const crypto = require('crypto');
+const APP_PORT = 17843;
+let googleState = null;
+const primaryInstance = app.requestSingleInstanceLock();
+if (!primaryInstance) app.quit();
+app.on('second-instance', function () {
+  if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+});
 
 // Older Windows (7/8) + some GPUs render Chromium poorly; disabling
 // GPU acceleration makes the app boot reliably everywhere.
@@ -24,6 +32,7 @@ app.disableHardwareAcceleration();
 let mainWindow = null;
 let localServer = null;
 let serverPort = 0;
+require('./printing').registerPrinting(() => mainWindow);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -48,9 +57,19 @@ function startLocalServer(rootDir) {
     const server = http.createServer(function (req, res) {
       try {
         const parsed = url.parse(req.url, true);
+        const allowedHosts = ['localhost:' + APP_PORT, '127.0.0.1:' + APP_PORT];
+        if (allowedHosts.indexOf(req.headers.host) < 0) { res.writeHead(403); res.end('Forbidden host'); return; }
+        if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end('Method not allowed'); return; }
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Referrer-Policy', 'no-referrer');
         // Google login helper (in the system browser) posts the captured
         // credential here; relay it to the app window to finish sign-in.
         if (parsed.pathname === '/__google_done') {
+          if (!googleState || Date.now() > googleState.expires || parsed.query.state !== googleState.token || !(parsed.query.idToken || parsed.query.accessToken)) {
+            res.writeHead(403); res.end('Sign-in session expired. Start Google sign-in again from KAROBAR.'); return;
+          }
+          googleState = null;
           const tokens = {
             idToken: parsed.query.idToken || '',
             accessToken: parsed.query.accessToken || ''
@@ -67,8 +86,11 @@ function startLocalServer(rootDir) {
         if (pathname === '/' || pathname === '') pathname = '/index.html';
         // strip leading slash and normalise to avoid path traversal
         const safe = path.normalize(pathname).replace(/^([/\\])+/, '');
-        const filePath = path.join(rootDir, safe);
-        if (filePath.indexOf(rootDir) !== 0) { res.writeHead(403); res.end('Forbidden'); return; }
+        const filePath = path.resolve(rootDir, safe);
+        const relative = path.relative(rootDir, filePath);
+        const publicFiles = ['index.html', 'google.html', 'app.js', 'styles.css', 'firebase-config.js'];
+        const publicAsset = relative.startsWith('assets' + path.sep) && !relative.split(path.sep).some(function (part) { return part.startsWith('.'); });
+        if (relative.startsWith('..') || path.isAbsolute(relative) || (!publicAsset && publicFiles.indexOf(relative) < 0)) { res.writeHead(403); res.end('Forbidden'); return; }
         fs.readFile(filePath, function (err, data) {
           if (err) { res.writeHead(404); res.end('Not found'); return; }
           const ext = path.extname(filePath).toLowerCase();
@@ -80,8 +102,9 @@ function startLocalServer(rootDir) {
       }
     });
     server.on('error', reject);
-    // port 0 => OS picks a free port; bind to loopback only
-    server.listen(0, '127.0.0.1', function () {
+    // Stable origin preserves localStorage and Firebase sessions across restarts.
+    // Never change ports on conflict: that would hide existing user data.
+    server.listen(APP_PORT, '127.0.0.1', function () {
       resolve(server);
     });
   });
@@ -105,6 +128,7 @@ function createWindow(startUrl) {
     }
   });
 
+  mainWindow.karobarAppURL = startUrl;
   mainWindow.loadURL(startUrl);
 
   mainWindow.once('ready-to-show', function () {
@@ -115,13 +139,18 @@ function createWindow(startUrl) {
   // External http(s) links (WhatsApp, support, etc.) open in the
   // user's real browser. Blank-target windows (the print/download
   // popups the app creates) are allowed so printing keeps working.
+  const appOrigin = new URL(startUrl).origin;
+  function trustedURL(value) {
+    try { return new URL(value).origin === appOrigin; } catch (e) { return false; }
+  }
+  mainWindow.webContents.on('will-navigate', function (event, target) {
+    if (!trustedURL(target)) { event.preventDefault(); if (/^https?:\/\//i.test(target)) shell.openExternal(target); }
+  });
   mainWindow.webContents.setWindowOpenHandler(function (details) {
-    const u = details.url || '';
-    if (/^https?:\/\//i.test(u) && u.indexOf('127.0.0.1') === -1 && u.indexOf('localhost') === -1) {
-      shell.openExternal(u);
-      return { action: 'deny' };
-    }
-    return { action: 'allow' };
+    const target = details.url || '';
+    if (target === 'about:blank' || trustedURL(target)) return { action: 'allow' };
+    if (/^https?:\/\//i.test(target)) shell.openExternal(target);
+    return { action: 'deny' };
   });
 
   mainWindow.on('closed', function () {
@@ -130,12 +159,16 @@ function createWindow(startUrl) {
 }
 
 // The app asks us to open the Google login page in the user's real browser.
-ipcMain.handle('karobar-open-google', function () {
-  if (serverPort) shell.openExternal('http://localhost:' + serverPort + '/google.html');
+ipcMain.handle('karobar-open-google', function (event) {
+  if (!mainWindow || event.sender !== mainWindow.webContents || !event.senderFrame || event.senderFrame.url !== mainWindow.karobarAppURL) throw new Error('Untrusted sign-in request');
+  if (!serverPort) return false;
+  googleState = { token: crypto.randomBytes(32).toString('hex'), expires: Date.now() + 10 * 60 * 1000 };
+  shell.openExternal('http://localhost:' + serverPort + '/google.html?state=' + googleState.token);
   return true;
 });
 
 app.whenReady().then(function () {
+  if (!primaryInstance) return;
   Menu.setApplicationMenu(null); // hide the default Electron menu bar
 
   // During development you can run VS Code Live Server (port 5500)
@@ -151,8 +184,8 @@ app.whenReady().then(function () {
       // Use localhost (an authorized Firebase domain) so Google sign-in works.
       createWindow('http://localhost:' + serverPort + '/index.html');
     }).catch(function (e) {
-      // Fallback to file:// if the server somehow can't start.
-      createWindow('file://' + path.join(rootDir, 'index.html'));
+      dialog.showErrorBox('KAROBAR cannot start', 'The local app server could not start on port ' + APP_PORT + '. Close other KAROBAR instances or the application using this port, then retry. Your saved data has not been changed.\n\n' + e.message);
+      app.quit();
     });
   }
 

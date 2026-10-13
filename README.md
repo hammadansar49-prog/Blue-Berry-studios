@@ -17,11 +17,11 @@ branch, and watch your sales and profits update live across all your devices.
 - Sales, purchases, expenses and customer/supplier ledgers
 - Inventory & stock control (multi-size items, unit conversions)
 - Professional invoices with **logo, barcode and QR code**
-- Print on **any printer** — thermal or standard
+- Print through installed **thermal, regular and label printer drivers**, with company logos; ESC/POS text/logo/cutter/drawer mode for compatible thermal devices
 - Payment breakdown (Cash, Bank, QR, Card) and **profit reports**
 - **Branch-wise sales reports** for owners and admins
 - Secure **Google & email login** with automatic cloud backup
-- Works **offline** and syncs automatically when the internet is back
+- After initial online setup, authenticated cached accounts can work **offline**; reconnect revalidates access and sync conflicts preserve local edits for reconciliation
 
 ## Platforms
 
@@ -32,6 +32,8 @@ branch, and watch your sales and profits update live across all your devices.
 ## Run / build the desktop app
 
 See [BUILD-DESKTOP.md](BUILD-DESKTOP.md) for full instructions.
+
+Read [printer setup and compatibility](docs/PRINTING.md), [release limitations](docs/RELEASE-AUDIT.md), and [billing audit](docs/BILLING-AUDIT.md) before handing this build to a client. Staff/branch cloud writes require a scoped backend; this build does not claim unrestricted multi-user write support.
 
 ```bash
 npm install      # one-time

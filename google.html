@@ -16,8 +16,8 @@
   .err{color:#e0413e;font-size:13px;margin-top:12px;min-height:16px}
   .g{width:20px;height:20px}
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="assets/firebase-app-compat.js"></script>
+<script src="assets/firebase-auth-compat.js"></script>
 </head>
 <body>
 <div class="box">
@@ -52,11 +52,13 @@ function err(t){ document.getElementById('err').textContent = t; }
 // Send the captured Google credential back to the KAROBAR desktop app.
 function sendBack(cred){
   var q = '/__google_done?idToken=' + encodeURIComponent(cred.idToken || '') +
-          '&accessToken=' + encodeURIComponent(cred.accessToken || '');
-  fetch(q).then(function(){
+          '&accessToken=' + encodeURIComponent(cred.accessToken || '') +
+          '&state=' + encodeURIComponent(new URLSearchParams(location.search).get('state') || '');
+  fetch(q).then(function(response){
+    if (!response.ok) throw new Error('Sign-in session expired. Start again from KAROBAR.');
     show('✅ Signed in successfully!<br>The KAROBAR app will continue automatically.<br>You can close this tab.');
-  }).catch(function(){
-    show('✅ Signed in with Google. If the app does not continue, please try again.');
+  }).catch(function(error){
+    err(error.message || 'Could not reach KAROBAR. Start sign-in again from the app.');
   });
 }
 
