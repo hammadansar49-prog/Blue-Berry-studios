@@ -21,4 +21,10 @@ function checkPrinter(printers, name) {
   return { ok: true, printer };
 }
 
-module.exports = { availablePrinters, checkPrinter };
+function receiptPageSize(widthMm, heightPx) {
+  if (![58, 80, 104].includes(widthMm)) throw new Error('Unsupported receipt paper width.');
+  const heightMm = Math.max(80, Math.min(2000, Math.ceil(Number(heightPx || 0) * 25.4 / 96 + 10)));
+  return { width: widthMm * 1000, height: heightMm * 1000 };
+}
+
+module.exports = { availablePrinters, checkPrinter, receiptPageSize };

@@ -122,6 +122,8 @@ Yeh tab aata tha jab app `file://` se chalti thi (Firebase login file:// par kaa
 
 Open Settings > Print > Thermal Printer, click Refresh printers, select the installed Windows printer, then Save. Test print sends a sample receipt. Invoice Print sends the job directly to that printer and reports whether the Windows spooler accepted it or returned an error. If Windows lists no printer, the app shows an official setup/driver support link and the detected device name when available. A working installed printer needs no extra download. Offline, jammed, and out-of-paper states reported by Windows block the job with a message. The browser version uses the browser print dialog.
 
+Paper width can be selected as 58 mm or 80 mm, with 104 mm for compatible models, in both Print Settings and the receipt preview. The chosen width is saved and sent to Electron's print job. An uploaded business logo prints at the top of the receipt; branch invoices show the branch address saved with the invoice. The centered Code 128 barcode identifies the saved invoice for lookup. The QR includes receipt details when they fit; large invoices use a smaller invoice reference payload, while the full transaction remains in Karobar.
+
 Spooler acceptance does not prove paper was physically printed. Windows drivers may not report all hardware faults. Auto cut and cash drawer controls are not implemented through this print path; they require printer-specific commands or driver support. Check those features on the actual device before relying on them.
 
 ### Branch login migration and Firestore rules
@@ -135,3 +137,6 @@ After migration, run `firebase.cmd deploy --only firestore:rules --project karob
   sirf tab install karna hoga jab Windows mein compatible printer pehle se available na ho.
 - `node_modules/` aur `dist/` git mein push nahi hote (`.gitignore` mein hain) — yeh har machine
   par `npm install` / `npm run dist` se bante hain.
+# Backup and restore
+
+Open **Sync, Share & Backup → Restore Backup** to create and download a dated Karobar JSON backup, or choose a backup file to restore. The screen shows current item, sale, and party counts and the last local backup time. A restore previews the selected file's business name and counts, then asks for confirmation before replacing the current account's data.

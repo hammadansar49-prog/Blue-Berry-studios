@@ -17,7 +17,7 @@ const http = require('http');
 const fs = require('fs');
 const url = require('url');
 const { execFile } = require('child_process');
-const { availablePrinters, checkPrinter } = require('./printer');
+const { availablePrinters, checkPrinter, receiptPageSize } = require('./printer');
 
 // Older Windows (7/8) + some GPUs render Chromium poorly; disabling
 // GPU acceleration makes the app boot reliably everywhere.
@@ -162,6 +162,9 @@ ipcMain.handle('karobar-print-invoice', async function (_event, job) {
   if (!job || typeof job.html !== 'string' || !job.html.trim() || job.html.length > 2000000 || typeof job.printerName !== 'string') {
     return { ok: false, error: 'Invalid print job.' };
   }
+  if (job.paperWidthMm != null && ![58, 80, 104].includes(job.paperWidthMm)) {
+    return { ok: false, error: 'Unsupported receipt paper width.' };
+  }
   let printers;
   try { printers = await mainWindow.webContents.getPrintersAsync(); }
   catch (e) { return { ok: false, error: 'Could not query Windows printers: ' + e.message }; }
@@ -170,8 +173,13 @@ ipcMain.handle('karobar-print-invoice', async function (_event, job) {
   const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   try {
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(job.html));
+    const printOptions = { silent: true, printBackground: true, deviceName: job.printerName };
+    if (job.paperWidthMm) {
+      const pixels = await win.webContents.executeJavaScript('Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)');
+      printOptions.pageSize = receiptPageSize(job.paperWidthMm, pixels);
+    }
     const result = await new Promise(resolve => {
-      win.webContents.print({ silent: true, printBackground: true, deviceName: job.printerName }, (success, reason) => {
+      win.webContents.print(printOptions, (success, reason) => {
         resolve(success ? { ok: true } : { ok: false, error: reason || 'Windows rejected the print job.' });
       });
     });

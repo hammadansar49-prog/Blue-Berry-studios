@@ -227,6 +227,7 @@ const MENU=[
 ];
 
 const menuEl=document.getElementById('menu');
+let renderedMenuMarkup='';
 function buildMenu(){
   const s=store.settings||{};
   const filteredMenu=MENU.map(m=>{
@@ -244,13 +245,22 @@ function buildMenu(){
     if(!m.sub) return true;
     return m.sub.length>0;
   });
-  menuEl.innerHTML = filteredMenu.map((m,i)=>{
+  const nextMarkup = filteredMenu.map((m,i)=>{
     if(m.sub){
       return `<div class="mi" data-grp="${i}"><span class="ic">${navIcon(m.ic)}</span>${m.t}<span class="chev">▼</span></div>
         <div class="submenu" id="grp${i}">${m.sub.map(s=>`<div class="smi" data-view="${s.k}">${s.t}${s.dot?'<span class="green-dot"></span>':''}${s.plus?'<span class="plus">+</span>':''}</div>`).join('')}</div>`;
     }
     return `<div class="mi" data-view="${m.k}"><span class="ic">${navIcon(m.ic)}</span>${m.t}${m.plus?'<span class="plus">+</span>':''}</div>`;
   }).join('');
+  if(nextMarkup===renderedMenuMarkup)return;
+  const previousScroll=menuEl.scrollTop;
+  const previousOpen=menuEl.querySelector('.mi.open')?.dataset.grp;
+  const previousActive=menuEl.querySelector('[data-view].active')?.dataset.view||currentView;
+  menuEl.innerHTML=nextMarkup;
+  renderedMenuMarkup=nextMarkup;
+  if(previousOpen!=null){menuEl.querySelector(`.mi[data-grp="${previousOpen}"]`)?.classList.add('open');menuEl.querySelector(`#grp${previousOpen}`)?.classList.add('show');}
+  if(previousActive)menuEl.querySelector(`[data-view="${previousActive}"]`)?.classList.add('active');
+  menuEl.scrollTop=previousScroll;
   menuEl.querySelectorAll('.mi[data-grp]').forEach(el=>el.onclick=()=>{
     const wasOpen=el.classList.contains('open');
     menuEl.querySelectorAll('.mi[data-grp]').forEach(x=>{x.classList.remove('open');});
@@ -1245,7 +1255,7 @@ function quickSale(){
   const bPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const bCreator=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
   const bCreatorName=store.currentUser?store.currentUser.name:'';
-  store.sales.push({id:saleId,no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone,date:dispDate(),rows,total,received:recv,mode:'Cash',branchPhone:bPhone,createdBy:bCreator,createdByName:bCreatorName});
+  store.sales.push({id:saleId,no:(store.settings.invPrefix||'')+String(store.counters.sale).padStart(2,'0'),party:cust,phone,date:dispDate(),rows,total,received:recv,mode:'Cash',branchPhone:bPhone,branchAddress:receiptBranchAddress(),createdBy:bCreator,createdByName:bCreatorName});
   store.counters.sale++;
   rows.forEach(r=>deductItemStock(r));
   let p=store.parties.find(x=>x.name===cust);
@@ -1257,14 +1267,40 @@ function quickSale(){
 }
 /* ===== INVOICE VIEW + PRINT ===== */
 let viewInv=null;
-function localQrDataUrl(value){
+function localQrDataUrl(value,size=90){
   if(!window.QRCode||!value)return '';
   try{
     const host=document.createElement('div');
-    new QRCode(host,{text:String(value),width:90,height:90,correctLevel:QRCode.CorrectLevel.M});
+    new QRCode(host,{text:String(value),width:size,height:size,correctLevel:QRCode.CorrectLevel.M});
     const canvas=host.querySelector('canvas');
     return canvas?canvas.toDataURL('image/png'):host.querySelector('img')?.src||'';
   }catch(e){logDiagnostic('error','QR generation failed: '+e.message);return '';}
+}
+function receiptPaperWidthMm(){
+  return ({'2inch':58,'3inch':80,'4inch':104})[store.settings?.pageSize]||80;
+}
+function receiptPaperClass(){return store.settings?.printerTab==='regular'?'':'receipt-paper-'+receiptPaperWidthMm();}
+function receiptBranchAddress(s){
+  if(s?.branchAddress)return s.branchAddress;
+  const user=store.currentUser;
+  if(user?.role==='branch'&&(!s?.createdBy||s.createdBy===user.branchCode))return user.branchAddress||'';
+  return '';
+}
+function receiptQrPayload(s){
+  const details={v:1,invoice:s.no,date:s.date,business:store.business.name||'Karobar',address:receiptBranchAddress(s)||store.business.address||'',branchPhone:s.branchPhone||'',customer:s.party||'',phone:s.phone||'',items:(s.rows||[]).map(r=>[r.item,r.qty,r.price,r.disc||0,r.size||'']),discount:s.discount||0,tax:s.tax||0,mode:s.mode||'',total:s.total,received:s.received};
+  const full=JSON.stringify(details);
+  if(full.length<=650)return {text:full,complete:true};
+  return {text:JSON.stringify({v:1,invoice:s.no,date:s.date,total:s.total,received:s.received,lookup:'Find saved invoice in Karobar by invoice number'}),complete:false};
+}
+function setReceiptPaperSize(size){
+  if(!['2inch','3inch','4inch'].includes(size))return;
+  store.settings.pageSize=size;
+  const selected=document.getElementById('set_printerName')?.value;
+  if(selected)store.settings.thermalPrinterName=selected;
+  persist();
+  if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();
+  else if(document.getElementById('nciPreview'))nciPreview();
+  if(currentView==='settings'&&setTab==='print')vSettings();
 }
 function buildInvoiceHTML(s){
   const b=store.business, st=store.settings||{};
@@ -1273,14 +1309,15 @@ function buildInvoiceHTML(s){
   const sub=rows.reduce((a,r)=>a+r.qty*r.price,0);
   const discTotal=sub-s.total;
   const invoicePhone=s.branchPhone||b.phone||'';
-  const qrData=invoicePhone?('tel:'+invoicePhone.replace(/[^0-9+]/g,'')):`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)}`;
-  const qrSrc=st.showQR!==false?localQrDataUrl(qrData):'';
+  const qrPayload=receiptQrPayload(s);
+  const qrSrc=(st.printerTab==='thermal'||st.showQR!==false)?localQrDataUrl(qrPayload.text,256):'';
+  const invoiceAddress=receiptBranchAddress(s)||b.address||'';
   const totalQty=rows.reduce((a,r)=>a+r.qty,0);
-  return `<div class="print-invoice">
+  return `<div class="print-invoice ${receiptPaperClass()}">
     <div class="pi-top">
-      <div class="pi-logo">${b.logo?`<img src="${b.logo}">`:'LOGO'}</div>
+      ${b.logo?`<div class="pi-logo"><img src="${b.logo}" alt="Business logo"></div>`:''}
       <div class="pi-co"><div class="pi-name">${b.name||'My Company'}</div>
-        <div class="pi-sub">${b.address||''}</div><div class="pi-sub">Phone: ${invoicePhone||'-'}</div></div>
+        <div class="pi-sub">${invoiceAddress}</div><div class="pi-sub">Phone: ${invoicePhone||'-'}</div></div>
       <div class="pi-title">INVOICE</div>
     </div>
     <div class="pi-meta">
@@ -1296,7 +1333,7 @@ function buildInvoiceHTML(s){
       }).join('')}</tbody></table>
     <div class="pi-bottom">
       <div class="pi-words"><b>Amount in words:</b><br>${words(s.total)} Rupees only
-        ${qrSrc?`<br><img class="pi-qr" src="${qrSrc}">`:''}</div>
+        ${qrSrc?`<br><img class="pi-qr" src="${qrSrc}" alt="Receipt data QR"><small>${qrPayload.complete?'Scan for receipt details':'Scan for invoice reference'}</small>`:''}</div>
       <div class="pi-tot">
         <div class="tr"><span>Sub Total</span><span>${rs(sub)}</span></div>
         ${discTotal>0?`<div class="tr" style="color:var(--red)"><span>Discount</span><span>-${rs(discTotal)}</span></div>`:''}
@@ -1306,8 +1343,8 @@ function buildInvoiceHTML(s){
       </div>
     </div>
     ${st.showTerms!==false?`<div class="pi-terms"><b>Terms &amp; Conditions:</b> ${st.terms||'Thanks for doing business with us!'}</div>`:''}
-    <div class="pi-barcode" style="text-align:center;margin-top:12px"><svg class="inv-barcode-svg" data-code="${s.no}"></svg>
-      <div style="font-size:11px;color:#888;margin-top:4px">${invoicePhone?'Scan QR to call: '+invoicePhone:''}</div></div>
+    <div class="pi-barcode"><svg class="inv-barcode-svg" data-code="${s.no}"></svg>
+      <div class="pi-barcode-label">${s.no} · Scan to find saved invoice</div></div>
     ${st.showSign!==false?`<div class="pi-sign">For ${b.name||'My Company'}<br><br>Authorised Signatory</div>`:''}
   </div>`;
 }
@@ -1556,10 +1593,10 @@ async function testThermalPrinter(){
   if(!window.karobarDesktop?.printInvoice){toast('Test print requires the Windows desktop app.');return;}
   if(!printerName){toast('Select a Windows printer first.');return;}
   if(status)status.textContent='Sending test print to '+printerName+'...';
-  const width=store.settings.pageSize==='2inch'?'58mm':store.settings.pageSize==='4inch'?'104mm':'80mm';
-  const html='<html><head><meta charset="utf-8"><style>@page{size:'+width+' auto;margin:2mm}body{font:13px Arial;text-align:center}</style></head><body><h3>KAROBAR</h3><p>Thermal printer test</p><p>'+new Date().toLocaleString()+'</p><p>--------------------</p></body></html>';
+  const width=receiptPaperWidthMm()+'mm';
+  const html='<html><head><meta charset="utf-8"><style>@page{margin:2mm}body{box-sizing:border-box;width:calc('+width+' - 4mm);font:13px Arial;text-align:center;margin:0}</style></head><body><h3>Karobar</h3><p>Thermal printer test</p><p>'+new Date().toLocaleString()+'</p><p>--------------------</p></body></html>';
   try{
-    const result=await window.karobarDesktop.printInvoice({printerName,html});
+    const result=await window.karobarDesktop.printInvoice({printerName,html,paperWidthMm:receiptPaperWidthMm()});
     const message=result.ok?'Test job accepted by Windows spooler. Check the receipt.':'Test print failed: '+result.error;
     if(status)status.textContent=message;
     toast(message);
@@ -1584,10 +1621,10 @@ async function printInvoice(){
         else svg.outerHTML='<div>'+logText(code)+'</div>';}
       catch(e){svg.outerHTML='<div>'+logText(code)+'</div>';}
     });
-    const width=store.settings.pageSize==='2inch'?'58mm':store.settings.pageSize==='4inch'?'104mm':'80mm';
-    const html=`<html><head><meta charset="utf-8"><title>Invoice</title><style>${printCSS()} @page{size:${width} auto;margin:2mm}body{padding:0}.print-invoice{width:100%;max-width:none}</style></head><body>${invoice.innerHTML}</body></html>`;
+    const width=receiptPaperWidthMm()+'mm';
+    const html=`<html><head><meta charset="utf-8"><title>Invoice</title><style>${printCSS()} @page{margin:2mm}body{padding:0}.print-invoice{width:calc(${width} - 4mm);max-width:none}</style></head><body>${invoice.innerHTML}</body></html>`;
     try{
-      const result=await window.karobarDesktop.printInvoice({printerName,html});
+      const result=await window.karobarDesktop.printInvoice({printerName,html,paperWidthMm:receiptPaperWidthMm()});
       toast(result.ok?'Print job accepted by Windows spooler.':'Print failed: '+result.error);
       logDiagnostic('print','Invoice '+viewInv.no+' → '+printerName+': '+(result.ok?'accepted by Windows spooler':'failed: '+result.error));
     }catch(e){toast('Print failed: '+e.message);logDiagnostic('print','Invoice '+viewInv.no+': failed: '+e.message);}
@@ -1622,7 +1659,7 @@ function saveInvoiceFromPreview(){
     rows:(viewInv.rows||[]).map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),
     total:viewInv.total,received:viewInv.received||0,mode:mode,
     status:viewInv.received>=viewInv.total?'paid':'unpaid',
-    branchPhone:branchPhone4,createdBy:createdBy4,createdByName:createdByName4
+    branchPhone:branchPhone4,branchAddress:receiptBranchAddress(),createdBy:createdBy4,createdByName:createdByName4
   };
   store.sales.push(savedInv);
   store.counters.sale++;
@@ -1650,8 +1687,8 @@ function downloadInvoice(){
 function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
 .print-invoice{max-width:760px;margin:auto}
 .pi-top{display:flex;align-items:center;gap:16px;border-bottom:2px solid #333;padding-bottom:14px;margin-bottom:14px}
-.pi-logo{width:80px;height:80px;background:#8a8f96;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;overflow:hidden}
-.pi-logo img{width:100%;height:100%;object-fit:cover}
+.pi-logo{width:80px;height:80px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.pi-logo img{max-width:100%;max-height:100%;object-fit:contain}
 .pi-co{flex:1}.pi-name{font-size:24px;font-weight:800}.pi-sub{color:#666;font-size:13px}
 .pi-title{font-size:26px;font-weight:800;color:#333}
 .pi-meta{display:flex;justify-content:space-between;font-size:14px;margin-bottom:16px}
@@ -1661,12 +1698,31 @@ function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;paddin
 .pi-tbl .r{text-align:right}
 .pi-edit-cell,.pi-row-pencil{display:none}
 .pi-bottom{display:flex;justify-content:space-between;gap:20px;font-size:14px}
-.pi-qr{margin-top:10px;border:1px solid #eee}
+.pi-qr{display:block;width:35mm;height:35mm;object-fit:contain;margin:10px auto 0}
+.pi-words small{display:block;text-align:center;color:#666;font-size:10px}
+.pi-barcode{text-align:center;margin:12px auto 0;max-width:100%}
+.pi-barcode svg{display:block;max-width:100%;margin:auto}
+.pi-barcode-label{font-size:10px;color:#666;margin-top:4px}
 .pi-tot{min-width:260px}
 .pi-tot .tr{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee}
 .pi-tot .tr.g{background:#eef0f3;font-weight:700;padding:7px 6px}
 .pi-terms{margin-top:18px;font-size:13px;color:#444;border-top:1px solid #eee;padding-top:12px}
-.pi-sign{text-align:right;margin-top:24px;font-size:13px;font-weight:600}`; }
+.pi-sign{text-align:right;margin-top:24px;font-size:13px;font-weight:600}
+.receipt-paper-58,.receipt-paper-80,.receipt-paper-104{font-size:11px}
+.receipt-paper-58 .pi-top,.receipt-paper-80 .pi-top,.receipt-paper-104 .pi-top{gap:7px;padding-bottom:7px;margin-bottom:8px}
+.receipt-paper-58 .pi-logo{width:24px;height:24px}.receipt-paper-80 .pi-logo{width:34px;height:34px}.receipt-paper-104 .pi-logo{width:44px;height:44px}
+.receipt-paper-58 .pi-name{font-size:14px}.receipt-paper-80 .pi-name{font-size:17px}.receipt-paper-104 .pi-name{font-size:19px}
+.receipt-paper-58 .pi-title{font-size:12px}.receipt-paper-80 .pi-title,.receipt-paper-104 .pi-title{font-size:15px}
+.receipt-paper-58 .pi-sub,.receipt-paper-80 .pi-sub,.receipt-paper-104 .pi-sub{font-size:10px;overflow-wrap:anywhere}
+.receipt-paper-58 .pi-meta,.receipt-paper-80 .pi-meta,.receipt-paper-104 .pi-meta{font-size:10px;margin-bottom:8px}
+.receipt-paper-58 .pi-tbl,.receipt-paper-80 .pi-tbl,.receipt-paper-104 .pi-tbl{font-size:10px;margin-bottom:8px;table-layout:fixed}
+.receipt-paper-58 .pi-tbl th,.receipt-paper-58 .pi-tbl td,.receipt-paper-80 .pi-tbl th,.receipt-paper-80 .pi-tbl td,.receipt-paper-104 .pi-tbl th,.receipt-paper-104 .pi-tbl td{padding:3px 2px;overflow-wrap:anywhere}
+.receipt-paper-58 .pi-tbl th:nth-child(5),.receipt-paper-58 .pi-tbl td:nth-child(5){display:none}
+.receipt-paper-58 .pi-bottom,.receipt-paper-80 .pi-bottom,.receipt-paper-104 .pi-bottom{display:flex;flex-direction:column;gap:7px;font-size:10px}
+.receipt-paper-58 .pi-tot,.receipt-paper-80 .pi-tot,.receipt-paper-104 .pi-tot{min-width:0}
+.receipt-paper-58 .pi-terms,.receipt-paper-80 .pi-terms,.receipt-paper-104 .pi-terms{font-size:10px;margin-top:8px;padding-top:6px}
+.receipt-paper-58 .pi-qr{width:34mm;height:34mm}
+.receipt-paper-58 .pi-sign,.receipt-paper-80 .pi-sign,.receipt-paper-104 .pi-sign{margin-top:12px;font-size:10px}`; }
 
 /* ============ CREATE INVOICE MODAL ============ */
 let posRows=[], posSelectedIdx=-1, posEditingId=null;
@@ -1785,7 +1841,7 @@ function posRemoveRow(i){
   posRenderRows();
   posCalcTotal();
 }
-function clearZero(el){if(el.value==='0')el.value='';}
+function clearZero(el){if(el.value!==''&&Number(el.value)===0)el.value='';}
 function posGetSizeOptions(itemName){
   const it=store.items.find(x=>x.name===itemName);
   const allSizes=['XS','S','M','L','XL','XXL','XXXL'];
@@ -2319,7 +2375,7 @@ function posSaveBill(){
   const createdByName=store.currentUser?store.currentUser.name:'';
   if(saveDirect){
     const saleId=id();
-    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid',branchPhone:branchPhone,createdBy:createdBy,createdByName:createdByName});
+    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid',branchPhone:branchPhone,branchAddress:receiptBranchAddress(),createdBy:createdBy,createdByName:createdByName});
     store.counters.sale++;
     if(s.stockMaintain!==false)rows.forEach(r=>deductItemStock(r));
     let p=store.parties.find(x=>x.name===cust);
@@ -2406,7 +2462,7 @@ function confirmSaveAndPrint(){
   const branchPhone2=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const createdBy2=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
   const createdByName2=store.currentUser?store.currentUser.name:'';
-  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid',branchPhone:branchPhone2,createdBy:createdBy2,createdByName:createdByName2});
+  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid',branchPhone:branchPhone2,branchAddress:receiptBranchAddress(),createdBy:createdBy2,createdByName:createdByName2});
   store.counters.sale++;
   if(s.stockMaintain!==false)rows.forEach(r=>deductItemStock(r));
   let p=store.parties.find(x=>x.name===cust);
@@ -5301,8 +5357,19 @@ function vGeneric(view){ return ()=>{
     ${m.btn&&m.act?`<button class="btn-big red" onclick="${m.act}()">${m.btn}</button>`:''}</div>`;
 }; }
 function doBackup(){
-  const data=JSON.stringify(store,null,2); const blob=new Blob([data],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bluberry-backup-'+new Date().toISOString().slice(0,10)+'.json'; a.click(); toast('Backup downloaded');logActivity('settings','Downloaded backup');
+  if(!hasPermission('admin','restore-backup')){showNoAccess();return;}
+  try{
+    const snapshot=JSON.parse(JSON.stringify(store));
+    const backup={format:'karobar-backup',version:1,createdAt:new Date().toISOString(),businessName:snapshot.business?.name||'',data:snapshot};
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='karobar-backup-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    localStorage.setItem('karobar_last_backup',backup.createdAt);
+    logActivity('settings','Created and downloaded backup');
+    if(currentView==='restorebackup')vRestoreBackup();
+    toast('Backup file downloaded');
+  }catch(e){console.error('Backup failed',e);toast('Backup could not be created');}
 }
 
 /* ============ EXPORT ITEMS ============ */
@@ -5780,6 +5847,13 @@ function filterSavedInv(){
     c.style.display=c.textContent.toLowerCase().includes(q)?'':'none';
   });
 }
+function invoiceNumberFromScan(raw){
+  const value=String(raw||'').trim();
+  if(value.startsWith('{')){
+    try{const data=JSON.parse(value);if(data.v===1&&typeof data.invoice==='string')return data.invoice.trim();}catch(e){}
+  }
+  return value;
+}
 function openBarcodeScanner(){
   var scanHtml=`
     <div style="text-align:center;margin-bottom:16px">
@@ -5794,7 +5868,7 @@ function openBarcodeScanner(){
 
   formModal('Scan Invoice Barcode', scanHtml,
     function(){
-      var no=document.getElementById('bc_scan_input').value.trim();
+      var no=invoiceNumberFromScan(document.getElementById('bc_scan_input').value);
       if(!no) return toast('Enter or scan invoice number');
       var s=store.sales.find(function(x){return x.no.toLowerCase()===no.toLowerCase();});
       closeModal('formModal');
@@ -5804,7 +5878,7 @@ function openBarcodeScanner(){
 
   document.getElementById('bc_scan_input').addEventListener('keydown', function(e){
     if(e.key==='Enter'){
-      var no=this.value.trim();
+      var no=invoiceNumberFromScan(this.value);
       if(!no) return;
       var s=store.sales.find(function(x){return x.no.toLowerCase()===no.toLowerCase();});
       closeModal('formModal');
@@ -5839,7 +5913,7 @@ function startScanner(){
         if(video.readyState>=2){
           detector.detect(video).then(function(barcodes){
             if(barcodes&&barcodes.length>0){
-              var code=barcodes[0].rawValue;
+              var code=invoiceNumberFromScan(barcodes[0].rawValue);
               var input=document.getElementById('bc_scan_input');
               if(input) input.value=code;
               var s=store.sales.find(function(x){return x.no.toLowerCase()===code.toLowerCase();});
@@ -6041,15 +6115,20 @@ function nciPreview(){
   const phone=(document.getElementById('nciPhone')?.value||'').trim();
   const rows=nciRows.filter(r=>(r.name||r.item)||r.price);
   const previewPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:b.phone;
+  const branchAddress=receiptBranchAddress();
+  const previewAddress=branchAddress||b.address||'';
+  const previewSale={no:invNo,date:dispDate(),party:cust,phone,rows:rows.map(r=>({item:r.name||r.item||'',qty:+r.qty||0,price:+r.price||0,disc:0,size:r.size||''})),total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,branchAddress,branchPhone:previewPhone};
+  const qrPayload=receiptQrPayload(previewSale);
+  const qrSrc=localQrDataUrl(qrPayload.text,256);
   const bizName=b.name||'My Business';
-  pv.innerHTML=`<div class="nci-inv">
+  pv.innerHTML=`<div class="nci-inv ${receiptPaperClass()}">
     <div class="nci-inv-head">
-      <div class="nci-inv-logo">${b.logo?`<img src="${b.logo}">`:``}</div>
+      ${b.logo?`<div class="nci-inv-logo"><img src="${b.logo}" alt="Business logo"></div>`:''}
       <div class="nci-inv-bizinfo">
         <div class="nci-inv-bizname">${bizName}</div>
         ${previewPhone?`<div class="nci-inv-bizline">Ph: ${previewPhone}</div>`:''}
         ${b.email?`<div class="nci-inv-bizline">${b.email}</div>`:''}
-        ${b.address?`<div class="nci-inv-bizline">${b.address}</div>`:''}
+        ${previewAddress?`<div class="nci-inv-bizline">${previewAddress}</div>`:''}
       </div>
     </div>
     <div class="nci-dash"></div>
@@ -6067,26 +6146,15 @@ function nciPreview(){
     </div>
     <div class="nci-dash"></div>
     <div class="nci-inv-codes">
-      <div class="nci-inv-code-col">
-        <svg class="nci-inv-barcode" id="nciBarcodeSvg"></svg>
-        <div class="nci-inv-code-lbl">${invNo}</div>
-      </div>
-      <div class="nci-inv-code-col">
-        <div class="nci-inv-qr" id="nciQrBox"></div>
-        <div class="nci-inv-code-lbl">${previewPhone?'Scan: '+previewPhone:'Contact'}</div>
-      </div>
+      <svg class="nci-inv-barcode" id="nciBarcodeSvg"></svg>
+      <div class="nci-inv-code-lbl">${invNo} · Scan to find saved invoice</div>
+      ${qrSrc?`<img class="nci-inv-qr" src="${qrSrc}" alt="Receipt data QR"><div class="nci-inv-code-lbl">${qrPayload.complete?'Scan for receipt details':'Scan for invoice reference'}</div>`:''}
     </div>
     <div class="nci-dash"></div>
     ${st.showTerms!==false?`<div class="nci-inv-terms"><b>Terms &amp; Conditions</b><div>${st.terms||'Thanks for doing business with us!'}</div></div>`:''}
   </div>`;
-  // Render a scannable CODE128 barcode of the invoice number and a QR of the branch phone.
+  // CODE128 identifies the saved invoice; the QR embeds receipt details when they fit.
   try{ if(window.JsBarcode){ JsBarcode('#nciBarcodeSvg', invNo, {format:'CODE128',width:1.5,height:42,fontSize:11,margin:0,displayValue:false}); } }catch(e){}
-  try{
-    const qb=document.getElementById('nciQrBox');
-    if(qb){ qb.innerHTML='';
-      if(window.QRCode && previewPhone){ new QRCode(qb,{text:String(previewPhone),width:80,height:80,correctLevel:QRCode.CorrectLevel.M}); }
-    }
-  }catch(e){}
 }
 function nciSwitchFull(){ openSale(); }
 // "Save & New" -> open a full slip preview popup with Save and Print buttons.
@@ -6105,7 +6173,9 @@ function nciShowSlip(){
   if(body&&pv) body.innerHTML=(issues.length?`<div class="nci-preview-warning" role="alert">Before printing: ${issues.join('; ')}.</div>`:'')+pv.innerHTML;
   const printButton=document.getElementById('nciFinalPrint');
   if(printButton){printButton.disabled=issues.length>0;printButton.title=issues.join('; ');}
+  const sizeSelect=document.getElementById('nciPaperSize');if(sizeSelect)sizeSelect.value=store.settings.pageSize||'3inch';
   showModal('nciSlipModal');
+  if(body)body.scrollTop=0;
 }
 function nciSlipSave(){ closeModal('nciSlipModal'); nciSave(); }
 async function nciSlipPrint(){
@@ -6171,7 +6241,7 @@ function nciSave(action){
   const branchPhone3=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const createdBy3=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
   const createdByName3=store.currentUser?store.currentUser.name:'';
-  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid',branchPhone:branchPhone3,createdBy:createdBy3,createdByName:createdByName3};
+  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid',branchPhone:branchPhone3,branchAddress:receiptBranchAddress(),createdBy:createdBy3,createdByName:createdByName3};
   store.sales.push(sale);
   store.counters.sale++;
   if(s.stockMaintain!==false)saleRows.forEach(r=>deductItemStock(r));
@@ -6399,37 +6469,39 @@ function vUserActivity(){
   var branchCode = isBranch ? store.currentUser.branchCode : '';
   var allUsers = store.users || [];
   var filteredUsers = isBranch ? allUsers.filter(u => u.createdBy === branchCode) : allUsers;
+  const userCount=filteredUsers.length+(isBranch?0:1);
+  const activityCount=(store.activityLog||[]).length;
 
   content.innerHTML=`<div class="page-head"><h2>${isBranch ? 'Branch Users' : 'User Activity'}</h2></div>
     <div class="ua-hub">
       ${hasPermission('admin','admin-users') ? `
       <div class="ua-card" onclick="addUser()">
-        <div class="ua-card-ic">👤</div>
+        <div class="ua-widget-kicker">Team management</div><div class="ua-widget-value">+ New</div>
         <div class="ua-card-title">Add User</div>
         <div class="ua-card-desc">Add new team members to manage your business.</div>
         <div class="ua-card-link">Open →</div>
       </div>` : ''}
       <div class="ua-card" onclick="viewUsers()">
-        <div class="ua-card-ic">👥</div>
+        <div class="ua-widget-kicker">Registered accounts</div><div class="ua-widget-value">${userCount}</div>
         <div class="ua-card-title">${isBranch ? 'My Users' : 'All Users'}</div>
         <div class="ua-card-desc">${isBranch ? 'View your branch users.' : 'View and manage all registered users.'}</div>
         <div class="ua-card-link">Open →</div>
       </div>
       <div class="ua-card" onclick="userActivityLog()">
-        <div class="ua-card-ic">📋</div>
+        <div class="ua-widget-kicker">Recorded events</div><div class="ua-widget-value">${activityCount}</div>
         <div class="ua-card-title">Activity Log</div>
         <div class="ua-card-desc">Track user actions and changes in the system.</div>
         <div class="ua-card-link">Open →</div>
       </div>
       ${!isBranch ? `
       <div class="ua-card" onclick="showAddBranchModal()">
-        <div class="ua-card-ic">🏢</div>
+        <div class="ua-widget-kicker">Locations</div><div class="ua-widget-value">+ New</div>
         <div class="ua-card-title">Add Branch</div>
         <div class="ua-card-desc">Create a new branch location.</div>
         <div class="ua-card-link">Open →</div>
       </div>
       <div class="ua-card" onclick="showAllBranchesModal()">
-        <div class="ua-card-ic">🏬</div>
+        <div class="ua-widget-kicker">Branch locations</div><div class="ua-widget-value" id="uaBranchCount">—</div>
         <div class="ua-card-title">All Branches</div>
         <div class="ua-card-desc">View and manage all branches with codes.</div>
         <div class="ua-card-link">Open →</div>
@@ -6443,6 +6515,11 @@ function vUserActivity(){
       ${filteredUsers.length===0 ? '<tr><td colspan="'+(isBranch?5:6)+'" style="text-align:center;color:#888;padding:20px">No users yet</td></tr>' : ''}
       </tbody></table>
     </div>`;
+  if(!isBranch&&window.fbDB&&window.fbAuth?.currentUser){
+    window.fbDB.collection('branches').where('ownerUid','==',window.fbAuth.currentUser.uid).get()
+      .then(snap=>{const node=document.getElementById('uaBranchCount');if(node)node.textContent=String(snap.size);})
+      .catch(()=>{const node=document.getElementById('uaBranchCount');if(node)node.textContent='—';});
+  }
 }
 function viewUsers(){
   var isBranch = store.currentUser && store.currentUser.role === 'branch';
@@ -6794,27 +6871,43 @@ function revealUserPass(pass){
   document.getElementById('viewPass').textContent=pass;
 }
 function vRestoreBackup(){
-  content.innerHTML=`<div class="page-head"><h2>Restore Backup</h2></div>
-    <div class="panel" style="padding:40px;text-align:center">
-      <div style="font-size:48px;margin-bottom:16px">💾</div>
-      <h3>Restore from Backup File</h3>
-      <p style="color:#888;margin:12px 0 24px">Select a .json backup file to restore your data</p>
-      <button class="btn btn-red" onclick="document.getElementById('restoreFile').click()">Choose Backup File</button>
-      <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="doRestore(this)">
+  const last=localStorage.getItem('karobar_last_backup');
+  const date=last&&!Number.isNaN(Date.parse(last))?new Date(last).toLocaleString():'No backup created on this device yet';
+  content.innerHTML=`<div class="page-head"><h2>Backup & Restore</h2></div>
+    <div class="backup-summary">
+      <div class="backup-stat"><span>Items</span><strong>${(store.items||[]).length}</strong></div>
+      <div class="backup-stat"><span>Sales</span><strong>${(store.sales||[]).length}</strong></div>
+      <div class="backup-stat"><span>Parties</span><strong>${(store.parties||[]).length}</strong></div>
+      <div class="backup-stat"><span>Last backup</span><strong class="backup-date">${escHtml(date)}</strong></div>
+    </div>
+    <div class="backup-actions">
+      <section class="backup-card"><span class="backup-step">01</span><h3>Create & download backup</h3>
+        <p>Save your current business data as a .json file on this computer. Keep a copy in a safe place.</p>
+        <button class="btn btn-red" onclick="doBackup()">Create Backup File</button></section>
+      <section class="backup-card"><span class="backup-step">02</span><h3>Restore a backup</h3>
+        <p>Choose a Karobar backup file. Review its business name and record counts before restoring.</p>
+        <button class="btn btn-outline" onclick="document.getElementById('restoreFile').click()">Choose Backup File</button>
+        <input type="file" id="restoreFile" accept=".json,application/json" hidden onchange="doRestore(this)"></section>
     </div>`;
 }
-function doRestore(input){
+async function doRestore(input){
   if(!hasPermission('admin','restore-backup')){showNoAccess();return;}
   const file=input.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=function(e){
-    try{const data=JSON.parse(e.target.result);
-      if(data.items&&data.sales){Object.assign(store,data);persist();refreshView();toast('Backup restored successfully!');nav('home');}
-      else toast('Invalid backup file');
-    }catch(err){toast('Error reading file');}
-  };
-  reader.readAsText(file);
+  try{
+    if(file.size>50*1024*1024)throw new Error('Backup file is too large');
+    const parsed=JSON.parse(await file.text());
+    const data=parsed?.format==='karobar-backup'&&parsed?.version===1?parsed.data:parsed;
+    if(!data||typeof data!=='object'||!Array.isArray(data.items)||!Array.isArray(data.sales)||!Array.isArray(data.parties)||!data.business||typeof data.business!=='object')throw new Error('This is not a valid Karobar backup');
+    const detail=`<b>${escHtml(parsed.businessName||data.business.name||'Unnamed business')}</b><br>${data.items.length} items, ${data.sales.length} sales, ${data.parties.length} parties.<br><br>This will replace the current business data on this account. Create a backup first if you need the current data.`;
+    input.value='';
+    if(!await confirmAsync(detail,{title:'Restore backup?',yesLabel:'Restore Backup',yesColor:'#e0413e'}))return;
+    const currentUser=store.currentUser;
+    store=Object.assign(defaults(),data,{currentUser});
+    persist();logActivity('settings','Restored backup from '+file.name);
+    nav('home');toast('Backup restored successfully');
+  }catch(err){input.value='';toast(err.message||'Could not read backup file');}
 }
+
 function vBank(){
   if(!store.banks.length){
     content.innerHTML=`<div class="page-head"><h2>Banks</h2></div>
@@ -7759,8 +7852,9 @@ function vSettings(){
           </div>
           <div class="sg-section"><div class="sg-section-title">Paper width</div>
             <div style="display:flex;gap:6px;margin-top:8px">
-              ${[{k:'2inch',l:'58 mm'},{k:'3inch',l:'80 mm'},{k:'4inch',l:'104 mm'}].map(p=>`<button type="button" onclick="store.settings.pageSize='${p.k}';vSettings()" style="padding:8px;background:${pSize===p.k?'var(--blue)':'#fff'};color:${pSize===p.k?'#fff':'#333'};border:1px solid var(--line);border-radius:6px">${p.l}</button>`).join('')}
+              ${[{k:'2inch',l:'58 mm'},{k:'3inch',l:'80 mm'},{k:'4inch',l:'104 mm'}].map(p=>`<button type="button" onclick="setReceiptPaperSize('${p.k}')" style="padding:8px;background:${pSize===p.k?'var(--blue)':'#fff'};color:${pSize===p.k?'#fff':'#333'};border:1px solid var(--line);border-radius:6px">${p.l}</button>`).join('')}
             </div>
+            <div style="font-size:11px;color:#777;margin-top:7px">Use the width loaded in your printer. 58 and 80 mm are common receipt rolls; 104 mm needs a compatible model.</div>
           </div>
           <div style="font-size:12px;color:#666">Install the printer in Windows first. Auto cut and cash drawer depend on the printer driver/model.</div>
         </div>
@@ -7969,12 +8063,17 @@ function vSettings(){
       <button style="padding:12px 30px;background:#e8453c;color:#fff;border:none;border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">🔄 Enable Service Reminders</button>
     </div>`;
   }
-  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.0</div></div>`;
+  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.1</div></div>`;
   content.innerHTML=`<div class="set-wrap">
       <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
       <div class="set-body"><button class="set-close" onclick="nav('home')" title="Close">✕</button>${body}</div>
     </div>`;
-  if(setTab==='print'&&(store.settings.printerTab||'thermal')==='thermal')refreshThermalPrinters();
+  if(setTab==='print'&&(store.settings.printerTab||'thermal')==='thermal'){
+    refreshThermalPrinters();
+    content.querySelectorAll('.sp-preview .inv-barcode-svg').forEach(svg=>{
+      try{if(window.JsBarcode)JsBarcode(svg,svg.dataset.code||'',{format:'CODE128',width:1.5,height:40,displayValue:false,margin:0});}catch(e){}
+    });
+  }
   if(!hasPermission('edit','settings')) content.querySelectorAll('.set-body input,.set-body select,.set-body textarea').forEach(el=>el.disabled=true);
 }
 function applyLiveSettings(){
@@ -8806,7 +8905,9 @@ async function saveBranch() {
     await window.fbDB.collection('branchMap').doc(branchId).set({
       ownerUid: ownerUid,
       branchCode: branchCode,
-      branchName: name
+      branchName: name,
+      phone: phone,
+      address: address
     });
 
     // Lookup is used by stock views and legacy branch migration.
@@ -9217,7 +9318,12 @@ function fbBranchDoLogin() {
       }
 
       // 1) Am I a staff member of someone else's store? Check the mapping.
-      return window.fbDB.collection('staffMap').doc(authUid).get().then(function(mapSnap){
+      const branchDetails=isBranchSession
+        ? window.fbDB.collection('branches').doc(authUid).get().then(function(snap){
+            if(snap.exists)branchData={...branchData,...snap.data()};
+          }).catch(function(e){logDiagnostic('branch','Could not load branch address: '+(e.code||e.message));})
+        : Promise.resolve();
+      return branchDetails.then(function(){return window.fbDB.collection('staffMap').doc(authUid).get();}).then(function(mapSnap){
         if (!isBranchSession) {
           ownerUid = (mapSnap.exists && mapSnap.data() && mapSnap.data().ownerUid) ? mapSnap.data().ownerUid : authUid;
           isStaffSession = (ownerUid !== authUid);
@@ -9248,6 +9354,8 @@ function fbBranchDoLogin() {
               role: 'branch',
               id: 'branch',
               branchCode: branchData.branchCode,
+              branchPhone: branchData.phone||'',
+              branchAddress: branchData.address||'',
               ownerUid: ownerUid
             };
           }else if(isStaffSession){

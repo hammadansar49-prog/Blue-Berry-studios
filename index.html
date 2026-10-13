@@ -599,11 +599,12 @@
 <!-- ============ INVOICE SLIP PREVIEW (Save / Print) ============ -->
 <div class="modal-overlay" id="nciSlipModal" style="z-index:9998">
   <div class="nci-slip-modal">
-    <div class="nci-slip-head"><b>Invoice Preview</b><span class="nci-slip-x" onclick="closeModal('nciSlipModal')">✕</span></div>
+    <div class="nci-slip-head"><b>Receipt Preview</b><button type="button" class="nci-slip-x" onclick="closeModal('nciSlipModal')" aria-label="Close preview">✕</button></div>
+    <div class="nci-paper-toolbar"><label for="nciPaperSize">Paper width</label><select id="nciPaperSize" onchange="setReceiptPaperSize(this.value)"><option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option></select><span>Preview and printer use this width</span></div>
     <div class="nci-slip-body" id="nciSlipBody"></div>
     <div class="nci-slip-actions">
-      <button class="nci-slip-btn save" onclick="nciSlipSave()">💾 Save</button>
-      <button class="nci-slip-btn print" id="nciFinalPrint" onclick="nciSlipPrint()">Print invoice</button>
+      <button class="nci-slip-btn save" onclick="nciSlipSave()">Save invoice</button>
+      <button class="nci-slip-btn print" id="nciFinalPrint" onclick="nciSlipPrint()">Print receipt</button>
     </div>
   </div>
 </div>

@@ -2312,3 +2312,43 @@ input[data-1p-ignore]:autofill{animation:onAutoFillStart 0s forwards}
 .keyboard-help-grid{display:grid;grid-template-columns:1fr auto;gap:12px 16px;align-items:center;font-size:14px}.keyboard-help-grid kbd{background:#f1f4fa;border:1px solid #d6ddeb;border-radius:6px;padding:5px 8px;white-space:nowrap;font-family:inherit;font-weight:700}
 .keyboard-help-trigger{border:1px solid #d8e2f2;border-radius:8px;background:#fff;color:#2b3850;padding:6px 10px;margin-left:8px;font-size:12px;font-weight:700;cursor:pointer}
 .keyboard-help-trigger:hover{background:#eaf2ff}
+.nci-slip-modal{width:min(560px,96vw)}
+.nci-slip-head{padding:14px 20px}
+.nci-slip-x{border:0;background:#f1f4f9;border-radius:8px;width:32px;height:32px;display:grid;place-items:center}
+.nci-paper-toolbar{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--line);background:#fff;flex-wrap:wrap;font-size:12px}
+.nci-paper-toolbar label{font-weight:700;color:#28364f}
+.nci-paper-toolbar select{border:1px solid #cbd5e6;border-radius:8px;padding:7px 10px;background:#fff;font-weight:700}
+.nci-paper-toolbar span{color:#78859a;font-size:11px}
+.nci-slip-body{padding:14px 10px;scrollbar-gutter:stable}
+.nci-slip-body .nci-inv{margin:0 auto;border-color:#dce3ef;box-shadow:0 8px 24px rgba(25,45,85,.08)}
+.nci-slip-actions{padding:12px 16px;gap:10px}
+.nci-slip-btn{min-height:48px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:14px;box-shadow:0 2px 6px rgba(17,34,68,.08)}
+.nci-slip-btn.save{border:1px solid #d9e6fa;background:#eef4ff}
+.nci-slip-btn.print{background:#e84240}
+.nci-slip-btn:focus-visible,.nci-paper-toolbar select:focus-visible{outline:2px solid #2f6df6;outline-offset:2px}
+.nci-inv.receipt-paper-58{width:min(58mm,100%);box-sizing:border-box;padding:10px 8px;font-size:10px}
+.nci-inv.receipt-paper-80{width:min(80mm,100%);box-sizing:border-box;padding:13px 12px;font-size:11px}
+.nci-inv.receipt-paper-104{width:min(104mm,100%);box-sizing:border-box;padding:16px 15px;font-size:12px}
+.nci-inv.receipt-paper-58 .nci-inv-bizname{font-size:14px}
+.nci-inv.receipt-paper-80 .nci-inv-bizname{font-size:17px}
+.nci-inv.receipt-paper-58 .nci-inv-logo img{max-width:24px;max-height:24px}
+.nci-inv.receipt-paper-80 .nci-inv-logo img{max-width:34px;max-height:34px}
+.nci-inv.receipt-paper-104 .nci-inv-logo img{max-width:44px;max-height:44px}
+.nci-inv.receipt-paper-58 .nci-inv-tbl{font-size:9px}
+.nci-inv.receipt-paper-58 .nci-inv-tbl th,.nci-inv.receipt-paper-58 .nci-inv-tbl td{padding:3px 1px;overflow-wrap:anywhere}
+.nci-inv-codes{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;margin:12px 0}
+.nci-inv-barcode{display:block;width:min(100%,230px);max-width:100%;height:auto;margin:0 auto}
+.nci-inv-qr,.nci-inv-qr img,.nci-inv-qr canvas{display:block;width:min(35mm,100%);height:auto;aspect-ratio:1;margin:8px auto 0}
+.nci-inv-code-lbl{font-size:10px;line-height:1.35}
+.sp-preview .print-invoice{box-sizing:border-box;max-width:100%;padding:10px;background:#fff}
+.sp-preview .print-invoice.receipt-paper-58{width:min(58mm,100%);font-size:10px}
+.sp-preview .print-invoice.receipt-paper-80{width:min(80mm,100%);font-size:11px}
+.sp-preview .print-invoice.receipt-paper-104{width:min(104mm,100%);font-size:12px}
+.sp-preview .pi-barcode{text-align:center}
+.sp-preview .pi-barcode svg{max-width:100%}
+.ua-card{display:flex;flex-direction:column;align-items:flex-start;min-height:235px}
+.ua-widget-kicker{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:#7887a1}
+.ua-widget-value{font-size:32px;line-height:1.2;font-weight:800;color:#2f6df6;margin:6px 0 18px}
+.ua-card-link{margin-top:auto;padding-top:7px}
+.ua-card:focus-visible{outline:2px solid #2f6df6;outline-offset:2px}
+.backup-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:22px 0}.backup-stat,.backup-card{background:#fff;border:1px solid #e5e9f1;border-radius:18px;padding:24px;box-shadow:0 2px 8px rgba(25,35,60,.04)}.backup-stat span{display:block;color:#7d8797;font-size:14px;margin-bottom:8px}.backup-stat strong{font-size:28px;color:#222b3f}.backup-stat .backup-date{font-size:16px;line-height:1.5}.backup-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.backup-card{min-height:230px}.backup-card h3{font-size:22px;margin:14px 0 8px}.backup-card p{color:#737e8f;line-height:1.55;max-width:480px;min-height:58px}.backup-step{display:inline-grid;place-items:center;width:42px;height:42px;background:#eef3ff;color:#326bfa;border-radius:12px;font-weight:700}.backup-card .btn{margin-top:14px;min-width:190px}@media(max-width:900px){.backup-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.backup-actions{grid-template-columns:1fr}}@media(max-width:520px){.backup-summary{grid-template-columns:1fr}}
