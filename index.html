@@ -304,7 +304,7 @@
 <!-- ============ INVOICE VIEW / PRINT MODAL ============ -->
 <div class="modal-overlay" id="invViewModal">
   <div class="invview-modal">
-    <div class="iv-head"><h3>Invoice Preview</h3><button class="x" onclick="closeModal('invViewModal')">✕</button></div>
+    <div class="iv-head"><h3>Invoice Preview</h3><div class="iv-head-tools"><button type="button" class="btn btn-outline" id="ivLogoButton" onclick="document.getElementById('ivLogoFile').click()">Add business logo</button><input type="file" id="ivLogoFile" accept="image/png,image/jpeg,image/webp" hidden onchange="uploadInvoiceLogo(this)"><label for="ivPrintType">Print type</label><select id="ivPrintType" onchange="setInvoicePreviewPrintType(this.value)"><option value="regular">Standard</option><option value="thermal">Thermal</option></select><label for="ivPaperSize">Paper size</label><select id="ivPaperSize" onchange="setInvoicePreviewPaperSize(this.value)"><option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option></select><button class="x" onclick="closeModal('invViewModal')">✕</button></div></div>
     <div class="iv-body" id="iv_body"><!-- invoice html --></div>
     <div class="iv-foot">
       <button class="btn btn-outline" onclick="closeModal('invViewModal')">Close</button>
@@ -600,7 +600,7 @@
 <div class="modal-overlay" id="nciSlipModal" style="z-index:9998">
   <div class="nci-slip-modal">
     <div class="nci-slip-head"><b>Receipt Preview</b><button type="button" class="nci-slip-x" onclick="closeModal('nciSlipModal')" aria-label="Close preview">✕</button></div>
-    <div class="nci-paper-toolbar"><label for="nciPaperSize">Paper width</label><select id="nciPaperSize" onchange="setReceiptPaperSize(this.value)"><option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option></select><span>Preview and printer use this width</span></div>
+    <div class="nci-paper-toolbar"><button type="button" class="btn btn-outline" onclick="document.getElementById('ivLogoFile').click()">Add / change business logo</button><label for="nciPaperSize">Paper width</label><select id="nciPaperSize" onchange="setReceiptPaperSize(this.value)"><option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option></select><span>Preview and printer use this width</span></div>
     <div class="nci-slip-body" id="nciSlipBody"></div>
     <div class="nci-slip-actions">
       <button class="nci-slip-btn save" onclick="nciSlipSave()">Save invoice</button>

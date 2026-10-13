@@ -1279,7 +1279,7 @@ function localQrDataUrl(value,size=90){
 function receiptPaperWidthMm(){
   return ({'2inch':58,'3inch':80,'4inch':104})[store.settings?.pageSize]||80;
 }
-function receiptPaperClass(){return store.settings?.printerTab==='regular'?'':'receipt-paper-'+receiptPaperWidthMm();}
+function receiptPaperClass(){return store.settings?.printerTab==='regular'?'standard-paper-'+(store.settings.standardPageSize||'a4'):'receipt-paper-'+receiptPaperWidthMm();}
 function receiptBranchAddress(s){
   if(s?.branchAddress)return s.branchAddress;
   const user=store.currentUser;
@@ -1299,8 +1299,39 @@ function setReceiptPaperSize(size){
   if(selected)store.settings.thermalPrinterName=selected;
   persist();
   if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();
+  else if(document.getElementById('invViewModal')?.classList.contains('show')&&viewInv)refreshInvoicePreview();
   else if(document.getElementById('nciPreview'))nciPreview();
   if(currentView==='settings'&&setTab==='print')vSettings();
+}
+function refreshInvoicePreview(){
+  if(!viewInv)return;
+  const body=document.getElementById('iv_body');if(!body)return;
+  const scroll=body.scrollTop;
+  body.innerHTML=buildInvoiceHTML(viewInv);
+  renderInvoiceBarcodes();body.scrollTop=scroll;
+  const type=document.getElementById('ivPrintType');if(type)type.value=store.settings.printerTab==='regular'?'regular':'thermal';
+  const size=document.getElementById('ivPaperSize');if(size){
+    const thermal=store.settings.printerTab!=='regular';
+    size.innerHTML=thermal?'<option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option>':'<option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option>';
+    size.value=thermal?store.settings.pageSize||'3inch':store.settings.standardPageSize||'a4';
+  }
+  const logoButton=document.getElementById('ivLogoButton');if(logoButton)logoButton.textContent=store.business.logo?'Change business logo':'Add business logo';
+}
+function setInvoicePreviewPrintType(type){
+  if(type!=='regular'&&type!=='thermal')return;
+  store.settings.printerTab=type;persist();refreshInvoicePreview();
+}
+function setInvoicePreviewPaperSize(size){
+  if(store.settings.printerTab==='regular'){
+    if(!['a4','a5','letter'].includes(size))return;
+    store.settings.standardPageSize=size;persist();refreshInvoicePreview();
+  }else setReceiptPaperSize(size);
+}
+function uploadInvoiceLogo(input){
+  if(!hasPermission('edit','settings')){showNoAccess();return;}
+  const file=input.files?.[0];if(!file)return;
+  if(!/^image\/(png|jpeg|webp)$/.test(file.type)||file.size>2*1024*1024){toast('Choose a PNG, JPG or WebP image under 2 MB');input.value='';return;}
+  const reader=new FileReader();reader.onload=()=>{store.business.logo=reader.result;persist();refreshInvoicePreview();if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();toast('Business logo added to invoice');input.value='';};reader.readAsDataURL(file);
 }
 function buildInvoiceHTML(s){
   const b=store.business, st=store.settings||{};
@@ -1389,7 +1420,7 @@ function editInvItemChange(){
     <div style="border-top:1px solid #ddd;padding-top:6px;display:flex;justify-content:space-between;font-size:14px"><b>Total:</b><b style="color:var(--blue)">${rs(total)}</b></div>
     <div style="margin-top:8px;height:6px;background:#e0e0e0;border-radius:3px;overflow:hidden"><div style="height:100%;background:var(--blue);width:${Math.min((total/(viewInv?.total||1))*100,100)}%;border-radius:3px;transition:.3s"></div></div>`;
 }
-function showInvoiceView(s){ viewInv=s; document.getElementById('iv_body').innerHTML=buildInvoiceHTML(s);
+function showInvoiceView(s){ viewInv=s; refreshInvoicePreview();
   const rf=document.getElementById('iv_refund'); if(rf){ rf.style.display=s.refunded?'none':''; if(s.refunded){ document.getElementById('iv_body').insertAdjacentHTML('afterbegin','<div class="refunded-stamp">REFUNDED</div>'); } }
   const sv=document.getElementById('iv_save'); if(sv){ sv.style.display=(s.id&&s.id.indexOf('tmp_')!==0)?'none':''; }
   showModal('invViewModal');
@@ -1684,7 +1715,7 @@ function printAndSaveInvoice(){
 function downloadInvoice(){
   const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}<script>setTimeout(()=>{document.querySelectorAll('.inv-barcode-svg').forEach(svg=>{try{JsBarcode(svg,svg.getAttribute('data-code')||'000000',{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});}catch(e){}});window.print();},600)<\/script></body></html>`); w.document.close();
 }
-function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
+function printCSS(){ const pageRule=store.settings.printerTab==='regular'?`@page{size:${({a4:'A4',a5:'A5',letter:'letter'})[store.settings.standardPageSize]||'A4'};margin:10mm}`:'';return `${pageRule}body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
 .print-invoice{max-width:760px;margin:auto}
 .pi-top{display:flex;align-items:center;gap:16px;border-bottom:2px solid #333;padding-bottom:14px;margin-bottom:14px}
 .pi-logo{width:80px;height:80px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
@@ -1698,7 +1729,7 @@ function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;paddin
 .pi-tbl .r{text-align:right}
 .pi-edit-cell,.pi-row-pencil{display:none}
 .pi-bottom{display:flex;justify-content:space-between;gap:20px;font-size:14px}
-.pi-qr{display:block;width:35mm;height:35mm;object-fit:contain;margin:10px auto 0}
+.pi-qr{display:block;width:28mm;height:28mm;object-fit:contain;margin:10px auto 0}
 .pi-words small{display:block;text-align:center;color:#666;font-size:10px}
 .pi-barcode{text-align:center;margin:12px auto 0;max-width:100%}
 .pi-barcode svg{display:block;max-width:100%;margin:auto}
@@ -1721,7 +1752,7 @@ function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;paddin
 .receipt-paper-58 .pi-bottom,.receipt-paper-80 .pi-bottom,.receipt-paper-104 .pi-bottom{display:flex;flex-direction:column;gap:7px;font-size:10px}
 .receipt-paper-58 .pi-tot,.receipt-paper-80 .pi-tot,.receipt-paper-104 .pi-tot{min-width:0}
 .receipt-paper-58 .pi-terms,.receipt-paper-80 .pi-terms,.receipt-paper-104 .pi-terms{font-size:10px;margin-top:8px;padding-top:6px}
-.receipt-paper-58 .pi-qr{width:34mm;height:34mm}
+.receipt-paper-58 .pi-qr{width:18mm;height:18mm}.receipt-paper-80 .pi-qr{width:22mm;height:22mm}.receipt-paper-104 .pi-qr{width:26mm;height:26mm}
 .receipt-paper-58 .pi-sign,.receipt-paper-80 .pi-sign,.receipt-paper-104 .pi-sign{margin-top:12px;font-size:10px}`; }
 
 /* ============ CREATE INVOICE MODAL ============ */
@@ -5351,11 +5382,22 @@ const META={
   marketingtools:{ic:'📣',t:'Marketing Tools',d:'Grow your business with marketing tools.',btn:'Explore'}
 };
 function vGeneric(view){ return ()=>{
-  const m=META[view]||{ic:'📋',t:view.charAt(0).toUpperCase()+view.slice(1),d:'This section works just like Vyapar.',btn:''};
-  content.innerHTML=`<div class="empty-page"><div class="empty-ill">${m.ic}</div>
-    <h2>${m.t}</h2><p>${m.d}</p>
+  const m=META[view]||{t:view.charAt(0).toUpperCase()+view.slice(1),d:'',btn:''};
+  if(view==='challan'||view==='salereturn'){
+    const sales=store.sales||[],returns=sales.filter(x=>x.refunded),amount=sales.reduce((sum,x)=>sum+(Number(x.total)||0),0);
+    const isReturn=view==='salereturn';
+    content.innerHTML=`<div class="page-head"><h2>${m.t}</h2></div><div class="empty-widget-page">
+      <div class="empty-widget-grid">
+        <div class="empty-widget"><span>${isReturn?'Recorded returns':'Sales available'}</span><strong>${isReturn?returns.length:sales.length}</strong></div>
+        <div class="empty-widget"><span>${isReturn?'Sales to review':'Sales value'}</span><strong>${isReturn?sales.length:rs(amount)}</strong></div>
+        <div class="empty-widget"><span>Quick action</span><button class="btn btn-red" onclick="nav('sale')">${isReturn?'Open invoices to refund':'View sale invoices'}</button></div>
+      </div><div class="empty-widget-note"><h3>${m.t}</h3><p>${isReturn?'Open an existing sale invoice to record its return or refund.':'Select an existing sale invoice to review the items before dispatch.'}</p></div>
+    </div>`;return;
+  }
+  content.innerHTML=`<div class="empty-page"><h2>${m.t}</h2><p>${m.d}</p>
     ${m.btn&&m.act?`<button class="btn-big red" onclick="${m.act}()">${m.btn}</button>`:''}</div>`;
 }; }
+
 function doBackup(){
   if(!hasPermission('admin','restore-backup')){showNoAccess();return;}
   try{
@@ -5675,19 +5717,18 @@ function vPaymentIn(){
       ${rows.length?`<table class="data"><thead><tr><th>Party</th><th>Date</th><th>Type</th><th class="right">Amount</th></tr></thead><tbody>
         ${rows.map(p=>`<tr><td class="bold">${p.party}</td><td>${p.date}</td><td>${p.mode}</td><td class="right">${rs(p.amount)}</td></tr>`).join('')}
       </tbody></table>`
-      :`<div class="pos-empty">
-        <div class="pos-empty-ill">💰</div>
-        <div class="pos-empty-title">No Transactions to show</div>
-        <div class="pos-empty-sub">You haven't added any transactions yet.</div>
-        <button class="btn-big red" onclick="addPayment('in')" ${hasPermission('create','payment-in')?'':'style="display:none"'}>+ Add Payment-In</button>
-      </div>`}
+      :`<div class="payment-empty-widgets"><div class="empty-widget-grid">
+          <div class="empty-widget"><span>Payments received</span><strong>0</strong></div>
+          <div class="empty-widget"><span>Total received</span><strong>${rs(0)}</strong></div>
+          <div class="empty-widget"><span>Quick action</span><button class="btn btn-red" onclick="addPayment('in')" ${hasPermission('create','payment-in')?'':'disabled'}>Add Payment-In</button></div>
+        </div><p>No transactions yet. Add a payment to see it here.</p></div>`}
     </div>
     <div class="pos-bottom-actions">
-      <button class="pos-act-btn">⊞ Sale</button>
-      <button class="pos-act-btn">⊞ Purchase</button>
-      <button class="pos-act-btn">⊞ Expense</button>
-      <button class="pos-act-btn">💰 Payment-In</button>
-      <button class="pos-act-btn active">💰 Payment-Out</button>
+      <button class="pos-act-btn" onclick="nav('sale')">Sale</button>
+      <button class="pos-act-btn" onclick="nav('purchaseform')">Purchase</button>
+      <button class="pos-act-btn" onclick="nav('expenses')">Expense</button>
+      <button class="pos-act-btn active" onclick="nav('paymentin')">Payment-In</button>
+      <button class="pos-act-btn" onclick="nav('paymentout')">Payment-Out</button>
     </div>
   </div>`;
 }
@@ -5825,12 +5866,11 @@ function vSavedInvoices(){
             <button class="siv-btn" onclick="downloadSavedInv('${s.id}')">⬇️ Download</button>
           </div>
         </div>`;}).join('')}</div>`
-      :`<div class="pos-empty">
-        <div class="pos-empty-ill">🧾</div>
-        <div class="pos-empty-title">No Saved Invoices</div>
-        <div class="pos-empty-sub">All your printed and saved invoices will appear here.</div>
-        <button class="btn-big red" onclick="openSale()">+ Create First Invoice</button>
-      </div>`}
+      :`<div class="saved-empty-widgets"><div class="empty-widget-grid">
+          <div class="empty-widget"><span>Saved invoices</span><strong>0</strong></div>
+          <div class="empty-widget"><span>Customers</span><strong>${(store.parties||[]).length}</strong></div>
+          <div class="empty-widget"><span>Next step</span><button class="btn btn-red" onclick="openSale()">Create invoice</button></div>
+        </div><p>Saved invoices will appear here after you create one.</p></div>`}
     </div>
   </div>`;
   window._barcodeScannerActive=false;
@@ -8063,7 +8103,7 @@ function vSettings(){
       <button style="padding:12px 30px;background:#e8453c;color:#fff;border:none;border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">🔄 Enable Service Reminders</button>
     </div>`;
   }
-  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.1</div></div>`;
+  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.2</div></div>`;
   content.innerHTML=`<div class="set-wrap">
       <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
       <div class="set-body"><button class="set-close" onclick="nav('home')" title="Close">✕</button>${body}</div>
