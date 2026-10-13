@@ -30,7 +30,7 @@ function refreshOpenModals(){
 function seed(){ const d=defaults(); localStorage.setItem(KEY,JSON.stringify(d)); return d; }
 function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'',category:'',address:'',pincode:'',signature:''},parties:[],items:[],sales:[],purchases:[],
   expenses:[],payments:[],banks:[],refunds:[],trash:[],categories:['General'],counters:{sale:1,purchaseBase:1},activityLog:[],users:[],
-  widgets:{purchases:false,expenses:false,stock:false,cash:false,bank:false,lowstock:false},
+  widgets:{purchases:true,expenses:true,stock:true,avstock:true,cash:true,bank:false,lowstock:true},
   account:{phone:'3341100761'},
   companies:[{id:'c1',name:'hmdx',sync:true,current:true}],
   sharedCompanies:[{id:'s1',name:'Blueberry Studio Bahawalpur',adminPhone:'3132020534'}],
@@ -51,14 +51,14 @@ const PERMISSIONS = {
   owner: { view:['*'], create:['*'], edit:['*'], delete:['*'], admin:['*'] },
   admin: { view:['*'], create:['*'], edit:['*'], delete:['*'], admin:['*'] },
   manager: {
-    view:['dashboard','parties','items','invoices','reports','estimates','sale-orders','purchase-orders','bank','cash','cheques','loan','expenses','payment-in','payment-out','purchase','purchase-return'],
+    view:['dashboard','parties','items','invoices','reports','estimates','sale-orders','purchase-orders','bank','cash','cheques','loan','expenses','payment-in','payment-out','purchase','purchase-return','barcode','recycle','import','export'],
     create:['invoice','item','party','purchase','expense','payment-in','payment-out','sale-order','purchase-order'],
     edit:['item','party','invoice','estimate'],
     delete:['item','party','invoice'],
-    admin:[]
+    admin:['import','export','barcode','recycle']
   },
   cashier: {
-    view:['dashboard','parties','items','invoices','barcode','recycle'],
+    view:['dashboard','parties','items','invoices'],
     create:['invoice'],
     edit:[],
     delete:[],
@@ -81,6 +81,8 @@ const PERMISSIONS = {
 };
 
 function hasPermission(action, feature) {
+  const aliases={invoices:'invoice',parties:'party','purchase-orders':'purchase-order','create-invoice':'invoice'};
+  if(action!=='view') feature=aliases[feature]||feature;
   var role = (store.currentUser && store.currentUser.role) || 'owner';
   if (role === 'owner' || role === 'admin') return true;
   if (role === 'branch') {
@@ -120,10 +122,36 @@ function logActivity(type,detail){
   const cu=store.currentUser||null;
   const userName=cu?cu.name:'Owner';
   const userRole=cu?cu.role:'owner';
-  store.activityLog.unshift({id:id(),type,detail,time,date,ts:Date.now(),userName,userRole});
+  const userRecord=cu&&((store.users||[]).find(u=>u.id===cu.id)||null);
+  store.activityLog.unshift({id:id(),type,detail,time,date,ts:now.getTime(),userId:cu&&cu.id||null,branchCode:cu&&(cu.branchCode||(userRecord&&userRecord.createdBy))||null,userName,userRole});
   if(store.activityLog.length>500)store.activityLog.length=500;
   persist();
 }
+function logText(value){ return String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function activityDate(log){
+  if(Number.isFinite(Number(log.ts))&&Number(log.ts)>0) return new Date(Number(log.ts));
+  var date=log.date||'', match=date.match(/^(\d{1,2})[\s/-]([A-Za-z]{3}|\d{1,2})[\s/-](\d{4})$/);
+  if(!match)return null;
+  var month=/^\d+$/.test(match[2])?Number(match[2])-1:['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(match[2].toLowerCase());
+  var result=new Date(Number(match[3]),month,Number(match[1]));
+  return month>=0&&month<12&&result.getMonth()===month&&result.getDate()===Number(match[1])?result:null;
+}
+const DIAGNOSTIC_LOG_KEY='mybiz_diagnostics_v1';
+function diagnosticLogs(){try{return JSON.parse(localStorage.getItem(DIAGNOSTIC_LOG_KEY))||[];}catch(e){return [];}}
+function logDiagnostic(type,detail){
+  try{
+    var cu=store.currentUser||{}, logs=diagnosticLogs(), now=new Date();
+    logs.unshift({id:id(),type,detail:String(detail||''),ts:now.getTime(),date:now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),time:now.toLocaleTimeString('en-US'),userId:cu.id||null,userName:cu.name||'Owner',userRole:cu.role||'owner'});
+    localStorage.setItem(DIAGNOSTIC_LOG_KEY,JSON.stringify(logs.slice(0,300)));
+  }catch(e){console.error('Could not save diagnostic log',e);}
+}
+window.addEventListener('error',function(event){
+  logDiagnostic('error',(event.message||'Unknown error')+(event.filename?' ('+event.filename.split('/').pop()+':'+event.lineno+')':''));
+});
+window.addEventListener('unhandledrejection',function(event){
+  var reason=event.reason;
+  logDiagnostic('error','Unhandled rejection: '+(reason&&reason.message||String(reason)));
+});
 function id(){ return Math.random().toString(36).slice(2,9) }
 const rs = n => { const s=(store.settings||{}); return (s.currency||'Rs')+' '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:s.decimals||0,maximumFractionDigits:s.decimals||0}); };
 
@@ -149,13 +177,27 @@ function chartFmt(v){
   return v;
 }
 
+const NAV_ICON_PATHS={
+  home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/>',
+  users:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2"/><path d="M17 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 5v1"/>',
+  'shopping-bag':'<path d="M4 8h16l-1 13H5L4 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/>',
+  package:'<path d="m3 7 9-4 9 4v10l-9 4-9-4z"/><path d="m3 7 9 5 9-5M12 12v9M7.5 5l9 5"/>',
+  receipt:'<path d="M5 3h14v18l-2-1.5-3 1.5-2-1.5-3 1.5-2-1.5L5 21V3Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  cart:'<circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M2 4h2l3 12h12l2-9H5"/>',
+  chart:'<path d="M4 20V4M4 20h17M8 16v-5m5 5V7m5 9v-8"/>',
+  refresh:'<path d="M20 7V3l-3 3a8 8 0 0 0-13 5M4 17v4l3-3a8 8 0 0 0 13-5"/><path d="M16 7h4M4 17h4"/>',
+  tool:'<path d="M14 7a5 5 0 0 0-6 6l-5 5a2 2 0 0 0 3 3l5-5a5 5 0 0 0 6-6l-3 3-3-3 3-3Z"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M10 2h4l.5 2.2 2 .9 2-.9 2.8 2.8-.9 2 .9 2 .7 1-.7 1-.9 2 .9 2-2.8 2.8-2-.9-2 .9L14 22h-4l-.5-2.2-2-.9-2 .9-2.8-2.8.9-2-.9-2-.7-1 .7-1 .9-2-.9-2L5.5 4.2l2 .9 2-.9L10 2Z"/>'
+};
+function navIcon(name){return `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NAV_ICON_PATHS[name]||NAV_ICON_PATHS.package}</svg>`;}
+
 /* ============ MENU CONFIG ============ */
 const MENU=[
-  {k:'home', t:'Home', ic:'🏠', perm:'dashboard'},
-  {k:'parties', t:'Parties', ic:'👥', plus:true, perm:'parties'},
-  {k:'items', t:'Items', ic:'🛍️', plus:true, perm:'items'},
-  {k:'availablestock', t:'Available Stock', ic:'📦', perm:'items'},
-  {t:'Sale', ic:'🧾', perm:'invoices', sub:[
+  {k:'home', t:'Home', ic:'home', perm:'dashboard'},
+  {k:'parties', t:'Parties', ic:'users', plus:true, perm:'parties'},
+  {k:'items', t:'Items', ic:'shopping-bag', plus:true, perm:'items'},
+  {k:'availablestock', t:'Available Stock', ic:'package', perm:'items'},
+  {t:'Sale', ic:'receipt', perm:'invoices', sub:[
     {k:'createinvoice', t:'Create Invoice', plus:true, perm:'create-invoice'},
     {k:'sale', t:'Sale Invoices', plus:true, perm:'invoices'},
     {k:'savedinv', t:'Saved Invoices', perm:'invoices'},
@@ -164,24 +206,24 @@ const MENU=[
     {k:'saleorder', t:'Sale Order', plus:true, perm:'sale-orders'},
     {k:'challan', t:'Delivery Challan', plus:true, perm:'invoices'},
     {k:'salereturn', t:'Sale Return/ Cr. Note', plus:true, perm:'invoices'}]},
-  {t:'Purchase & Expense', ic:'🛒', perm:'purchase', sub:[
+  {t:'Purchase & Expense', ic:'cart', perm:'purchase', sub:[
     {k:'purchase', t:'Purchase Bills', plus:true, perm:'purchase'},
     {k:'paymentout', t:'Payment-Out', plus:true, perm:'payment-out'},
     {k:'expenses', t:'Expenses', plus:true, perm:'expenses'},
     {k:'purchaseorder', t:'Purchase Order', plus:true, perm:'purchase-orders'},
     {k:'purchasereturn', t:'Purchase Return/ Dr. Note', plus:true, perm:'purchase-return'}]},
-  {k:'reports', t:'Reports', ic:'📊', perm:'reports'},
-  {t:'Sync, Share & Backup', ic:'🔄', perm:'admin-users', sub:[
+  {k:'reports', t:'Reports', ic:'chart', perm:'reports'},
+  {t:'Sync, Share & Backup', ic:'refresh', perm:'admin-users', sub:[
     {k:'useractivity', t:'User Activity', dot:true, perm:'admin-users'},
     {k:'restorebackup', t:'Restore Backup', perm:'restore-backup'}]},
-  {t:'Utilities', ic:'🛠️', sub:[
+  {t:'Utilities', ic:'tool', sub:[
     {k:'importitems', t:'Import Items', perm:'import'},
     {k:'barcode', t:'Barcode Generator', perm:'barcode'},
     {k:'bulkupdate', t:'Update Items In Bulk', perm:'import'},
     {k:'importparties', t:'Import Parties', perm:'import'},
     {k:'exportitems', t:'Export Items', perm:'export'},
     {k:'recyclebin', t:'Recycle Bin', perm:'recycle'}]},
-  {k:'settings', t:'Settings', ic:'⚙️', perm:'settings'}
+  {k:'settings', t:'Settings', ic:'settings', perm:'settings'}
 ];
 
 const menuEl=document.getElementById('menu');
@@ -192,20 +234,22 @@ function buildMenu(){
     return {...m, sub: m.sub.filter(item=>{
       if(item.k==='estimate' && !s.estimate) return false;
       if(item.k==='saleorder' && !s.saleOrder) return false;
+      if(item.k==='createinvoice') return hasPermission('create','invoice');
+      if(['importitems','importparties','bulkupdate','exportitems','barcode','recyclebin'].includes(item.k)) return hasPermission('admin',item.k==='barcode'?'barcode':item.k==='recyclebin'?'recycle':item.k==='exportitems'?'export':'import');
       if(item.perm && !hasPermission('view', item.perm)) return false;
       return true;
     })};
   }).filter(m=>{
-    if(m.perm && !hasPermission('view', m.perm)) return false;
+    if(m.perm && !hasPermission(m.perm==='admin-users'?'admin':'view', m.perm)) return false;
     if(!m.sub) return true;
     return m.sub.length>0;
   });
   menuEl.innerHTML = filteredMenu.map((m,i)=>{
     if(m.sub){
-      return `<div class="mi" data-grp="${i}"><span class="ic">${m.ic}</span>${m.t}<span class="chev">▼</span></div>
+      return `<div class="mi" data-grp="${i}"><span class="ic">${navIcon(m.ic)}</span>${m.t}<span class="chev">▼</span></div>
         <div class="submenu" id="grp${i}">${m.sub.map(s=>`<div class="smi" data-view="${s.k}">${s.t}${s.dot?'<span class="green-dot"></span>':''}${s.plus?'<span class="plus">+</span>':''}</div>`).join('')}</div>`;
     }
-    return `<div class="mi" data-view="${m.k}"><span class="ic">${m.ic}</span>${m.t}${m.plus?'<span class="plus">+</span>':''}</div>`;
+    return `<div class="mi" data-view="${m.k}"><span class="ic">${navIcon(m.ic)}</span>${m.t}${m.plus?'<span class="plus">+</span>':''}</div>`;
   }).join('');
   menuEl.querySelectorAll('.mi[data-grp]').forEach(el=>el.onclick=()=>{
     const wasOpen=el.classList.contains('open');
@@ -228,10 +272,10 @@ function nav(view,el){
   const brandF=document.querySelector('.brand-footer');
   if(brandF) brandF.style.display=(view==='home'||view==='purchase'||view==='purchaseform')?'none':'';
   content.className=(view==='purchase'||view==='purchaseform')?'content pf-active':'content';
-  
+
   render(view);
   const viewNames={home:'Home',parties:'Parties',items:'Items',availablestock:'Available Stock',sale:'Sale Invoices',createinvoice:'Create Invoice',purchase:'Purchase Form',purchaseform:'Purchase Form',reports:'Reports',settings:'Settings',paymentin:'Payment-In',paymentout:'Payment-Out',expenses:'Expenses',saleorder:'Sale Order',savedinv:'Saved Invoices',bank:'Bank Accounts',cash:'Cash In Hand',cheques:'Card Payments',barcode:'Barcode Generator',recyclebin:'Recycle Bin',importitems:'Import Items',estimate:'Estimate',profile:'My Company',gprofile:'Google Profile',useractivity:'User Activity',restorebackup:'Restore Backup',bulkupdate:'Bulk Update Items',importparties:'Import Parties'};
-  logActivity('navigation','Opened '+viewNames[view]);
+  logActivity('navigation','Opened '+(viewNames[view]||String(view||'unknown view')));
 }
 function render(view){
   const viewPerms={
@@ -244,7 +288,10 @@ function render(view){
     estimate:'estimates',profile:'settings',gprofile:'settings',
     useractivity:'admin-users',restorebackup:'restore-backup',bulkupdate:'import',importparties:'import'
   };
-  if(viewPerms[view] && !hasPermission('view', viewPerms[view])){showNoAccess();return;}
+  if(view==='createinvoice' && !hasPermission('create','invoice')){showNoAccess();return;}
+  const utilityPerms={importitems:'import',importparties:'import',bulkupdate:'import',exportitems:'export',barcode:'barcode',recyclebin:'recycle'};
+  if(utilityPerms[view] && !hasPermission('admin',utilityPerms[view])){showNoAccess();return;}
+  if(viewPerms[view] && !hasPermission(view==='useractivity'||view==='restorebackup'?'admin':'view', viewPerms[view])){showNoAccess();return;}
   const map={home:vWelcome,parties:vParties,items:vItems,availablestock:vAvailableStock,sale:vSaleList,createinvoice:vCreateInvoice,purchase:vPurchase,purchaseform:vPurchaseForm,purchaseorder:vPurchaseOrder,reports:vReports,
     settings:vSettings,paymentin:vPaymentIn,paymentout:vPaymentOut,expenses:vExpenses,purchasereturn:vPurchaseReturn,
     saleorder:vSaleOrder,savedinv:vSavedInvoices,
@@ -280,12 +327,16 @@ function showBranchDashboard() {
     </div>`;
 }
 
+function dashEmptySalesWidget(){
+  return `<div class="dash-empty-sales"><strong>No sales in this period</strong><span>Create an invoice to see your sales trend here.</span><button type="button" onclick="nav('createinvoice')">Create invoice</button></div>`;
+}
+
 /* ============ WELCOME / DASHBOARD ============ */
 function vWelcome(){
   const currentUser=store.currentUser||{name:'Owner',role:'owner'};
   const userName=currentUser.name||'Owner';
   const userRole=currentUser.role||'owner';
-  
+
   // Cashier simplified dashboard
   if(userRole==='cashier'){
     content.innerHTML=`
@@ -313,7 +364,7 @@ function vWelcome(){
       </div>`;
     return;
   }
-  
+
   const totalSales=(store.sales||[]).reduce((a,s)=>a+(s.refunded?0:s.total),0);
   const totalPurchases=(store.purchases||[]).reduce((a,p)=>a+p.total,0);
   const totalExpenses=(store.expenses||[]).reduce((a,e)=>a+e.amount,0);
@@ -379,8 +430,7 @@ function vWelcome(){
       ${xLabels}
     </svg>`;
   } else {
-    chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
-      <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales this month</div></div>`;
+    chartHTML=dashEmptySalesWidget();
   }
 
   content.innerHTML=`
@@ -549,8 +599,9 @@ function showWidgetModal(){
 }
 
 function toggleWidget(key){
-  if(!store.widgets) store.widgets={};
+  if(!store.widgetsConfigured) store.widgets={...(store.widgets||{}),purchases:true,expenses:true,stock:true,avstock:true,cash:true,lowstock:true};
   store.widgets[key]=!store.widgets[key];
+  store.widgetsConfigured=true;
   persist();
   closeModal('widgetModal');
   showWidgetModal();
@@ -558,8 +609,7 @@ function toggleWidget(key){
 }
 
 function renderWidgets(){
-  if(!store.widgets) return '';
-  const w=store.widgets;
+  const w=store.widgetsConfigured ? (store.widgets||{}) : {...(store.widgets||{}),purchases:true,expenses:true,stock:true,avstock:true,cash:true,lowstock:true};
   const items=[];
   if(w.purchases) items.push({label:'Purchases',val:rs((store.purchases||[]).reduce((a,p)=>a+p.total,0)),color:'#2f6df6'});
   if(w.expenses) items.push({label:'Expenses',val:rs((store.expenses||[]).reduce((a,e)=>a+e.amount,0)),color:'#e74c3c'});
@@ -723,9 +773,10 @@ function smoothPath(pts){
     const p3=pts[Math.min(i+2,pts.length-1)];
     const tension=0.3;
     const cp1x=p1.x+(p2.x-p0.x)*tension;
-    const cp1y=p1.y+(p2.y-p0.y)*tension;
+    const low=Math.min(p1.y,p2.y),high=Math.max(p1.y,p2.y);
+    const cp1y=Math.max(low,Math.min(high,p1.y+(p2.y-p0.y)*tension));
     const cp2x=p2.x-(p3.x-p1.x)*tension;
-    const cp2y=p2.y-(p3.y-p1.y)*tension;
+    const cp2y=Math.max(low,Math.min(high,p2.y-(p3.y-p1.y)*tension));
     d+=' C'+cp1x.toFixed(1)+','+cp1y.toFixed(1)+' '+cp2x.toFixed(1)+','+cp2y.toFixed(1)+' '+p2.x.toFixed(1)+','+p2.y.toFixed(1);
   }
   return d;
@@ -930,7 +981,7 @@ function dashChangeMonth(val){
       chartHTML=makeChart(points,xLabelsArr,maxSale);
     } else {
       chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
-        <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
+        <div style="text-align:center"><strong>No sales in this period</strong><div style="margin-top:8px">Create an invoice to see your trend.</div><button class="dash-empty-action" onclick="nav('createinvoice')">Create invoice</button></div></div>`;
     }
   } else if(val==='3'||val==='6'||val==='all'){
     // Multi-month ranges: bucket by month so different months never collapse into one point.
@@ -970,7 +1021,7 @@ function dashChangeMonth(val){
       chartHTML=makeChart(buckets,xLabelsArr,maxSale);
     } else {
       chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
-        <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
+        <div style="text-align:center"><strong>No sales in this period</strong><div style="margin-top:8px">Create an invoice to see your trend.</div><button class="dash-empty-action" onclick="nav('createinvoice')">Create invoice</button></div></div>`;
     }
   } else {
     // 'this' / 'last' month: bucket by day-of-month using the real number of days.
@@ -995,7 +1046,7 @@ function dashChangeMonth(val){
       chartHTML=makeChart(chartPoints,xLabelsArr,maxSale);
     } else {
       chartHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#ccc;font-size:14px">
-        <div style="text-align:center"><div style="font-size:40px;margin-bottom:8px">📊</div>No sales found</div></div>`;
+        <div style="text-align:center"><strong>No sales in this period</strong><div style="margin-top:8px">Create an invoice to see your trend.</div><button class="dash-empty-action" onclick="nav('createinvoice')">Create invoice</button></div></div>`;
     }
   }
   document.getElementById('dashChart').innerHTML=chartHTML;
@@ -1206,6 +1257,15 @@ function quickSale(){
 }
 /* ===== INVOICE VIEW + PRINT ===== */
 let viewInv=null;
+function localQrDataUrl(value){
+  if(!window.QRCode||!value)return '';
+  try{
+    const host=document.createElement('div');
+    new QRCode(host,{text:String(value),width:90,height:90,correctLevel:QRCode.CorrectLevel.M});
+    const canvas=host.querySelector('canvas');
+    return canvas?canvas.toDataURL('image/png'):host.querySelector('img')?.src||'';
+  }catch(e){logDiagnostic('error','QR generation failed: '+e.message);return '';}
+}
 function buildInvoiceHTML(s){
   const b=store.business, st=store.settings||{};
   const rows=(s.rows&&s.rows.length)?s.rows:[{item:'Sale',qty:1,price:s.total}];
@@ -1213,7 +1273,8 @@ function buildInvoiceHTML(s){
   const sub=rows.reduce((a,r)=>a+r.qty*r.price,0);
   const discTotal=sub-s.total;
   const invoicePhone=s.branchPhone||b.phone||'';
-  const qrData=invoicePhone?('tel:'+invoicePhone.replace(/[^0-9+]/g,'')):encodeURIComponent(`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)}`);
+  const qrData=invoicePhone?('tel:'+invoicePhone.replace(/[^0-9+]/g,'')):`Invoice ${s.no} | ${b.name||'My Company'} | Total ${rs(s.total)}`;
+  const qrSrc=st.showQR!==false?localQrDataUrl(qrData):'';
   const totalQty=rows.reduce((a,r)=>a+r.qty,0);
   return `<div class="print-invoice">
     <div class="pi-top">
@@ -1235,7 +1296,7 @@ function buildInvoiceHTML(s){
       }).join('')}</tbody></table>
     <div class="pi-bottom">
       <div class="pi-words"><b>Amount in words:</b><br>${words(s.total)} Rupees only
-        ${st.showQR!==false?`<br><img class="pi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${qrData}">`:''}</div>
+        ${qrSrc?`<br><img class="pi-qr" src="${qrSrc}">`:''}</div>
       <div class="pi-tot">
         <div class="tr"><span>Sub Total</span><span>${rs(sub)}</span></div>
         ${discTotal>0?`<div class="tr" style="color:var(--red)"><span>Discount</span><span>-${rs(discTotal)}</span></div>`:''}
@@ -1442,9 +1503,100 @@ async function trashPartyById(pid){
   toast('Party moved to recycle bin');
   logActivity('return','Moved party "'+p.name+'" to recycle bin');
 }
-function printInvoice(){
+async function refreshThermalPrinters(){
+  const select=document.getElementById('set_printerName');
+  const status=document.getElementById('set_printerStatus');
+  if(!select||!status)return;
+  if(!window.karobarDesktop?.getPrinters){status.textContent='Printer detection requires the Windows desktop app.';return;}
+  status.textContent='Checking Windows printers…';
+  try{
+    const printers=await window.karobarDesktop.getPrinters();
+    select.replaceChildren();
+    for(const printer of printers){
+      const option=document.createElement('option');
+      option.value=printer.name;
+      option.textContent=printer.displayName+(printer.isDefault?' (Windows default)':'');
+      select.appendChild(option);
+    }
+    if(!printers.length){
+      const hints=window.karobarDesktop.getPrinterHints?await window.karobarDesktop.getPrinterHints():[];
+      const device=hints.find(h=>h&&h.name)||null;
+      const name=device?device.name:'your printer';
+      const support=/epson/i.test(name)?'https://epson.com/Support/sl/s?lang=en':
+        /star micronics|star tsp/i.test(name)?'https://starmicronics.com/support/':
+        /bixolon/i.test(name)?'https://bixolonusa.com/support/downloads/':
+        /zebra/i.test(name)?'https://www.zebra.com/us/en/support-downloads/printers.html':
+        /xprinter/i.test(name)?'https://www.xprintertech.com/download.html':
+        /rongta/i.test(name)?'https://www.rongtatech.cn/en/driver-download/':
+        'https://support.microsoft.com/en-us/windows/hardware/printer/download-and-install-the-latest-printer-drivers';
+      status.replaceChildren();
+      status.appendChild(document.createTextNode('No installed Windows printer found'+(device?' for '+name:'')+'. '));
+      const link=document.createElement('a');
+      link.href=support;link.target='_blank';link.rel='noopener noreferrer';
+      link.textContent=device&&support.includes('microsoft.com')?'Find the model driver in Windows':'Open official driver support';
+      status.appendChild(link);
+      status.appendChild(document.createTextNode(' Then install/add the printer in Windows and click Refresh printers.'));
+      return;
+    }
+    if(printers.some(p=>p.name===store.settings.thermalPrinterName))select.value=store.settings.thermalPrinterName;
+    const showStatus=()=>{
+      const selected=printers.find(p=>p.name===select.value);
+      if(!selected){status.textContent='No Windows printers found. Check connection and driver.';return;}
+      const code=selected.status;
+      const fault=code===null?'Status unavailable':code&0x80?'Offline':code&0x10?'Out of paper':code&0x8?'Paper jam':code&0x2?'Printer error':code&0x1000?'Unavailable':'No fault reported by Windows';
+      status.textContent=`${selected.displayName}: ${fault}. Select and Save before printing.`;
+    };
+    select.onchange=showStatus;
+    showStatus();
+  }catch(e){status.textContent='Printer check failed: '+e.message;}
+}
+async function testThermalPrinter(){
+  const printerName=document.getElementById('set_printerName')?.value;
+  const status=document.getElementById('set_printerStatus');
+  if(!window.karobarDesktop?.printInvoice){toast('Test print requires the Windows desktop app.');return;}
+  if(!printerName){toast('Select a Windows printer first.');return;}
+  if(status)status.textContent='Sending test print to '+printerName+'...';
+  const width=store.settings.pageSize==='2inch'?'58mm':store.settings.pageSize==='4inch'?'104mm':'80mm';
+  const html='<html><head><meta charset="utf-8"><style>@page{size:'+width+' auto;margin:2mm}body{font:13px Arial;text-align:center}</style></head><body><h3>KAROBAR</h3><p>Thermal printer test</p><p>'+new Date().toLocaleString()+'</p><p>--------------------</p></body></html>';
+  try{
+    const result=await window.karobarDesktop.printInvoice({printerName,html});
+    const message=result.ok?'Test job accepted by Windows spooler. Check the receipt.':'Test print failed: '+result.error;
+    if(status)status.textContent=message;
+    toast(message);
+    logDiagnostic('print','Test print → '+printerName+': '+message);
+  }catch(e){
+    const message='Test print failed: '+e.message;
+    if(status)status.textContent=message;
+    toast(message);
+    logDiagnostic('print','Test print → '+printerName+': '+message);
+  }
+}
+async function printInvoice(){
+  if(!viewInv){toast('No invoice to print.');logDiagnostic('print','Invoice print blocked: no invoice selected');return;}
+  if(store.settings.printerTab==='thermal'&&window.karobarDesktop?.printInvoice){
+    const printerName=store.settings.thermalPrinterName;
+    if(!printerName){toast('Select and save a thermal printer in Print settings.');logDiagnostic('print','Invoice '+viewInv.no+': no thermal printer selected');return;}
+    const invoice=document.createElement('div');
+    invoice.innerHTML=buildInvoiceHTML(viewInv);
+    invoice.querySelectorAll('.inv-barcode-svg').forEach(svg=>{
+      const code=svg.getAttribute('data-code')||viewInv.no;
+      try{if(window.JsBarcode)JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});
+        else svg.outerHTML='<div>'+logText(code)+'</div>';}
+      catch(e){svg.outerHTML='<div>'+logText(code)+'</div>';}
+    });
+    const width=store.settings.pageSize==='2inch'?'58mm':store.settings.pageSize==='4inch'?'104mm':'80mm';
+    const html=`<html><head><meta charset="utf-8"><title>Invoice</title><style>${printCSS()} @page{size:${width} auto;margin:2mm}body{padding:0}.print-invoice{width:100%;max-width:none}</style></head><body>${invoice.innerHTML}</body></html>`;
+    try{
+      const result=await window.karobarDesktop.printInvoice({printerName,html});
+      toast(result.ok?'Print job accepted by Windows spooler.':'Print failed: '+result.error);
+      logDiagnostic('print','Invoice '+viewInv.no+' → '+printerName+': '+(result.ok?'accepted by Windows spooler':'failed: '+result.error));
+    }catch(e){toast('Print failed: '+e.message);logDiagnostic('print','Invoice '+viewInv.no+': failed: '+e.message);}
+    return;
+  }
   const w=window.open('','_blank','width=820,height=900');
-  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
+  if(!w){toast('Print window was blocked.');logDiagnostic('print','Invoice '+viewInv.no+': print window blocked');return;}
+  logDiagnostic('print','Invoice '+viewInv.no+': opened browser print preview');
+  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
   w.document.close(); w.focus();
   setTimeout(()=>{
     w.document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
@@ -1493,7 +1645,7 @@ function printAndSaveInvoice(){
   printInvoice();
 }
 function downloadInvoice(){
-  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}<script>setTimeout(()=>{document.querySelectorAll('.inv-barcode-svg').forEach(svg=>{try{JsBarcode(svg,svg.getAttribute('data-code')||'000000',{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});}catch(e){}});window.print();},600)<\/script></body></html>`); w.document.close();
+  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}<script>setTimeout(()=>{document.querySelectorAll('.inv-barcode-svg').forEach(svg=>{try{JsBarcode(svg,svg.getAttribute('data-code')||'000000',{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});}catch(e){}});window.print();},600)<\/script></body></html>`); w.document.close();
 }
 function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
 .print-invoice{max-width:760px;margin:auto}
@@ -1777,10 +1929,21 @@ function posCalcTotal(){
   const ret=recv>total?recv-total:0;
   document.getElementById('pos_return').textContent=rs(ret);
 }
+function posShowBillBreakup(){
+  const subtotal=posRows.filter(r=>r&&r.item).reduce((sum,r)=>sum+(+r.qty||0)*(+r.price||0),0);
+  const itemDiscount=posRows.filter(r=>r&&r.item).reduce((sum,r)=>sum+(+r.qty||0)*(+r.price||0)*(+r.disc||0)/100,0);
+  const taxBase=Math.max(0,subtotal-itemDiscount);
+  const s=store.settings||{};
+  const tax=s.posBillTax!==false&&s.posPricing!=='with'?taxBase*(+(s.taxRate||0))/100:0;
+  const flat=+document.getElementById('pos_disc')?.value||0;
+  const total=Math.max(0,taxBase+tax+posAdditional-posBillDisc-posLoyalty-flat);
+  const line=(label,value)=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #eee"><span>${label}</span><b>${rs(value)}</b></div>`;
+  formModal('Current Bill Breakup',line('Subtotal',subtotal)+line('Item discounts',-itemDiscount)+line('Tax',tax)+line('Additional charges',posAdditional)+line('Bill discounts',-posBillDisc-flat)+line('Loyalty',-posLoyalty)+line('Total',s.posRoundOff?Math.round(total):total),()=>closeModal('formModal'),'CLOSE');
+}
 function posShowSearch(i){
   const drop=document.getElementById('posDrop'+i); if(!drop)return;
   const q=(document.getElementById('posItem'+i)?.value||'').toLowerCase();
-  const items=q?store.items.filter(it=>it.name.toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q)):store.items;
+  const items=q?store.items.filter(it=>it.name.toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q)||(it.barcode||'').toLowerCase().includes(q)):store.items;
   if(!items.length){drop.innerHTML='<div class="pos-drop-empty">No matching items found</div>';drop.classList.add('show');return;}
   drop.innerHTML=items.map(it=>{
     const hasSz=it.sizes&&it.sizes.length>0;
@@ -1839,8 +2002,13 @@ function posPickCust(pid){
 }
 function posSearchItems(){
   const q=(document.getElementById('posSearchItem').value||'').toLowerCase();
-  if(!q){document.querySelectorAll('.pos-item-drop').forEach(d=>d.classList.remove('show'));return;}
-  const matches=store.items.filter(it=>it.name.toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q));
+  const searchDrop=document.getElementById('posSearchDrop');
+  if(!q){document.querySelectorAll('.pos-item-drop').forEach(d=>d.classList.remove('show'));if(searchDrop){searchDrop.innerHTML='';searchDrop.classList.remove('show');}return;}
+  const matches=store.items.filter(it=>it.name.toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q)||(it.barcode||'').toLowerCase().includes(q));
+  if(searchDrop){
+    searchDrop.innerHTML=matches.slice(0,8).map((it,i)=>`<button type="button" class="pos-search-result${i===0?' active':''}" data-item-id="${it.id}" onclick="posSearchChoose('${it.id}')"><span><b>${it.name}</b><small>${it.code||it.barcode||'No code'}</small></span><strong>${rs(it.price)}</strong></button>`).join('')||'<div class="pos-search-empty">No matching items. Try a name, code, or barcode.</div>';
+    searchDrop.classList.add('show');
+  }
   document.querySelectorAll('.pos-item-drop').forEach(d=>d.classList.remove('show'));
   if(matches.length&&posRows.length){
     const lastIdx=posRows.length-1;
@@ -1860,6 +2028,14 @@ function posSearchItems(){
     }
   }
 }
+function posSearchChoose(itemId){
+  const it=store.items.find(x=>x.id===itemId);if(!it)return;
+  const idx=posRows.length&&!(posRows[posRows.length-1].item)?posRows.length-1:posRows.length;
+  if(idx===posRows.length)posAddRow();
+  posPickItem(idx,it.id);
+  const field=document.getElementById('posSearchItem');if(field){field.value='';field.focus();}
+  const drop=document.getElementById('posSearchDrop');if(drop){drop.innerHTML='';drop.classList.remove('show');}
+}
 
 // Barcode scanner detection
 var _scannerKeys=[],_scannerTimer=null,_scannerDetected=false;
@@ -1869,7 +2045,7 @@ function setScannerUI(detected){
     var dot=document.getElementById(p[0]);
     var lbl=document.getElementById(p[1]);
     if(dot){dot.style.background=detected?'#27ae60':'#e74c3c';dot.style.boxShadow=detected?'0 0 8px rgba(39,174,96,0.6)':'0 0 6px rgba(231,76,60,0.5)';}
-    if(lbl){lbl.textContent=detected?'Scanner: Connected':'Scanner: Not connected';lbl.style.color=detected?'#27ae60':'#888';}
+    if(lbl){lbl.textContent=detected?'Fast input received - verify item code':'Scanner not confirmed - click to test';lbl.style.color=detected?'#27ae60':'#888';}
   });
 }
 function scannerDetect(){
@@ -1883,18 +2059,36 @@ function scannerDetect(){
   if(_scannerTimer)clearTimeout(_scannerTimer);
   _scannerTimer=setTimeout(function(){_scannerDetected=false;setScannerUI(false);},3000);
 }
+function openScannerTest(){
+  formModal('Test barcode input',`<p>Scan an item barcode into the field below, or type its code and press Enter. A keyboard-style scanner sends input to the focused field; the app cannot confirm a physical connection until it receives a scan.</p><div class="field"><label>Item code or barcode</label><input id="scannerTestCode" autocomplete="off" placeholder="Scan or type a code" onkeydown="if(event.key==='Enter'){event.preventDefault();testScannerCode()}"></div><div id="scannerTestResult" role="status"></div>`,testScannerCode,'Check item');
+  setTimeout(()=>document.getElementById('scannerTestCode')?.focus(),0);
+}
+function testScannerCode(){
+  const code=document.getElementById('scannerTestCode')?.value.trim();
+  const result=document.getElementById('scannerTestResult');if(!result)return;
+  if(!code){result.textContent='Scan or type a code first.';return;}
+  const item=findItemByScan(code);
+  if(item){result.textContent='Found: '+item.name+' ('+(item.code||item.barcode||'no code')+').';}
+  else result.textContent='Input received, but no saved item matches this code.';
+}
 function posSearchKey(ev){
+  const drop=document.getElementById('posSearchDrop');
+  const options=[...(drop?.querySelectorAll('.pos-search-result')||[])];
+  if(ev.key==='ArrowDown'||ev.key==='ArrowUp'){
+    if(!options.length)return;ev.preventDefault();
+    const current=Math.max(0,options.findIndex(x=>x.classList.contains('active')));
+    const next=(current+(ev.key==='ArrowDown'?1:-1)+options.length)%options.length;
+    options.forEach((x,i)=>x.classList.toggle('active',i===next));options[next].scrollIntoView({block:'nearest'});return;
+  }
+  if(ev.key==='Escape'){drop?.classList.remove('show');return;}
   if(ev.key!=='Enter')return;
+  if(drop?.classList.contains('show')&&options.length){ev.preventDefault();(options.find(x=>x.classList.contains('active'))||options[0]).click();return;}
   var q=(document.getElementById('posSearchItem').value||'').trim();
   if(!q)return;
   ev.preventDefault();
   document.getElementById('posSearchItem').value='';
   document.querySelectorAll('.pos-item-drop').forEach(function(d){d.classList.remove('show');});
-  if(_scannerDetected){
-    posBarcodeAutoAdd(q);
-  }else{
-    posBarcodeAutoAdd(q);
-  }
+  posBarcodeAutoAdd(q);
 }
 function findItemByScan(code){
   var c=(code||'').trim().toLowerCase();
@@ -2086,7 +2280,7 @@ function reReturnType(idx,type){
 }
 function posSaveBill(){
   const cust=document.getElementById('pos_cust').value.trim();
-  if(!cust)return toast('Enter Customer Name');
+  if(!cust){toast('Enter Customer Name');document.getElementById('pos_cust')?.focus();return;}
   const phone=document.getElementById('pos_phone').value.trim();
   const rows=posRows.filter(r=>r&&r.item);
   if(!rows.length)return toast('Add at least one item');
@@ -2177,7 +2371,7 @@ function confirmSaveAndPrint(){
   const mode=document.getElementById('pos_paymode').value;
   if(mode!=='Credit'&&recv===0)recv=total;   // paid mode with no amount entered = full bill paid via that mode
   const isPaid=(mode==='Cash'&&recv>=total)||(recv>=total);
-  const invNo=(s.invPrefix||'INV-')+String(store.counters.sale).padStart(2,'0');
+  const invNo=(s.invPrefix===undefined?'INV-':s.invPrefix)+String(store.counters.sale).padStart(2,'0');
   const saleDate=s.addTime?dispDate()+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):dispDate();
   if(posEditingId){
     const old=store.sales.find(x=>x.id===posEditingId);
@@ -2224,7 +2418,7 @@ function confirmSaveAndPrint(){
   closeModal('invViewModal');
   const printContent=document.getElementById('iv_body').innerHTML;
   const pw=window.open('','','width=800,height=600');
-  pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>'+printContent+'</body></html>');
+  pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>'+printContent+'</body></html>');
   pw.document.close();
   pw.focus();
   setTimeout(()=>{
@@ -2252,7 +2446,19 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.pos-td-name'))document.querySelectorAll('.pos-item-drop').forEach(d=>d.classList.remove('show'));
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){document.querySelectorAll('.pos-item-drop').forEach(d=>d.classList.remove('show')); closeModal('anythingModal');}
+  if(e.key==='Escape'){
+    document.querySelectorAll('.pos-item-drop,.pos-search-dropdown').forEach(d=>d.classList.remove('show'));
+    const topModal=[...document.querySelectorAll('.modal-overlay.show')].pop();
+    if(topModal)closeModal(topModal.id);
+    const help=document.getElementById('keyboardHelp');if(help)help.remove();
+  }
+  const typing=/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName||'')||document.activeElement?.isContentEditable;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openAnything();return;}
+  if((e.ctrlKey||e.metaKey)&&!typing&&/^[1-6]$/.test(e.key)){
+    const pages=['home','parties','items','availablestock','sale','reports'];
+    e.preventDefault();nav(pages[Number(e.key)-1]);return;
+  }
+  if(!typing&&!e.ctrlKey&&!e.metaKey&&e.key==='?'){e.preventDefault();showKeyboardHelp();return;}
   if((e.ctrlKey||e.metaKey)&&e.key==='f'){e.preventDefault();openAnything();}
   if(document.getElementById('anythingModal').classList.contains('show')){
     const list=document.querySelectorAll('.anything-item');
@@ -2263,6 +2469,7 @@ document.addEventListener('keydown',e=>{
     if(e.key==='Enter'&&active){active.click();}
   }
   if(document.getElementById('saleModal')?.classList.contains('show')){
+    if(e.key==='F1'){e.preventDefault();document.getElementById('posSearchItem')?.focus();}
     if((e.ctrlKey||e.metaKey)&&e.key==='t'){e.preventDefault();posAddTab();}
     if(e.key==='F2'){e.preventDefault();posChangeQty();}
     if(e.key==='F3'){e.preventDefault();posItemDiscount();}
@@ -2276,6 +2483,33 @@ document.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey)&&e.key==='p'){e.preventDefault();posSaveBill();}
   }
 });
+function showKeyboardHelp(){
+  const old=document.getElementById('keyboardHelp');if(old){old.remove();return;}
+  const overlay=document.createElement('div');overlay.id='keyboardHelp';overlay.className='keyboard-help-overlay';
+  overlay.innerHTML=`<div class="keyboard-help-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><div class="keyboard-help-head"><h2>Keyboard shortcuts</h2><button type="button" onclick="document.getElementById('keyboardHelp')?.remove()" aria-label="Close">Close</button></div><div class="keyboard-help-grid"><span>Search anything</span><kbd>Ctrl + K</kbd><span>Go to Home / Parties / Items / Stock / Sales / Reports</span><kbd>Ctrl + 1–6</kbd><span>Open sale item search</span><kbd>F1</kbd><span>New sale tab / Save sale</span><kbd>Ctrl + T / Ctrl + P</kbd><span>Choose search result</span><kbd>↑ ↓ Enter</kbd><span>Close dialog or suggestions</span><kbd>Esc</kbd><span>Move between controls</span><kbd>Tab / Shift + Tab</kbd></div></div>`;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});document.body.appendChild(overlay);
+  overlay.querySelector('button')?.focus();
+}
+function keyboardEnhance(root=document){
+  root.querySelectorAll('[onclick]').forEach(el=>{
+    if(el.dataset.keyboardReady)return;
+    el.dataset.keyboardReady='1';
+    if(el.matches('button,a,input,select,textarea,[role="button"]'))return;
+    if(el.tabIndex<0)el.tabIndex=0;
+    if(!el.hasAttribute('role'))el.setAttribute('role','button');
+    el.addEventListener('keydown',event=>{
+      if(event.target!==el||!['Enter',' '].includes(event.key))return;
+      event.preventDefault();event.stopPropagation();el.click();
+    });
+  });
+}
+let keyboardEnhanceQueued=false;
+new MutationObserver(()=>{
+  if(keyboardEnhanceQueued)return;
+  keyboardEnhanceQueued=true;
+  requestAnimationFrame(()=>{keyboardEnhanceQueued=false;keyboardEnhance();});
+}).observe(document.body,{childList:true,subtree:true});
+keyboardEnhance();
 let _anythingIdx=0;
 function openAnything(){
   showModal('anythingModal');
@@ -2334,8 +2568,10 @@ function drawInv(){
   const co=store.business.name||'My Company';
   const branchPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const ph=branchPhone||store.business.phone||'';
-  const qrData=ph?('tel:'+ph.replace(/[^0-9+]/g,'')):encodeURIComponent(`Invoice from ${co} | Total Rs ${t.total}`);
-  document.getElementById('p_qr').src=`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${qrData}`;
+  const qrData=ph?('tel:'+ph.replace(/[^0-9+]/g,'')):`Invoice from ${co} | Total Rs ${t.total}`;
+  const qrSrc=localQrDataUrl(qrData);
+  const qrImg=document.getElementById('p_qr');
+  if(qrImg){qrImg.src=qrSrc;qrImg.style.display=qrSrc?'':'none';}
   // apply Settings show/hide
   const s=store.settings||{}, q=sel=>document.querySelector(sel);
   if(document.getElementById('p_logo')) document.getElementById('p_logo').style.display=s.showLogo===false?'none':'';
@@ -2361,7 +2597,7 @@ function vParties(){
     content.innerHTML=`<div class="empty-page">
       <h2>Party Details</h2>
       <p>Add your customers and suppliers to manage your business easily. Track payments and grow your business without any hassle!</p>
-      <div class="empty-ill">👥🪪</div>
+      <div class="empty-quick-grid"><button onclick="addParty()"><b>01</b><strong>Add customer</strong><span>Save contact details and balances</span></button><button onclick="addParty()"><b>02</b><strong>Add supplier</strong><span>Track purchases and payables</span></button><button onclick="nav('paymentin')"><b>03</b><strong>Record payment</strong><span>Keep incoming payments organized</span></button></div>
       <button class="btn-big red" onclick="addParty()">＋ Add Your First Party</button></div>`;
     return;
   }
@@ -2482,7 +2718,7 @@ function vItems(){
     content.innerHTML=`<div class="empty-page">
       <h2>Item / Service Details</h2>
       <p>Add products and services you sell. Track stock, set prices and create invoices in seconds.</p>
-      <div class="empty-ill">🛍️📦</div>
+      <div class="empty-quick-grid"><button onclick="openItem()"><b>01</b><strong>Add a product</strong><span>Set price, category and stock</span></button><button onclick="openItem()"><b>02</b><strong>Add a service</strong><span>Create a service for billing</span></button><button onclick="nav('availablestock')"><b>03</b><strong>View stock</strong><span>See quantities in your branch</span></button></div>
       <button class="btn-big red" onclick="openItem()">＋ Add Your First Item</button></div>`;
     return;
   }
@@ -2581,6 +2817,7 @@ function filterCategories(){const q=(document.getElementById('ipSearch').value||
 function filterUnits(){filterCategories();}
 function filterCatItems(){const q=(document.getElementById('catItemSearch')?.value||'').toLowerCase();document.querySelectorAll('#catItemsBody tr').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(q)?'':'none';});}
 function addCategory(){
+  if(!hasPermission('create','item')){showNoAccess();return;}
   formModal('Add Category',`<div class="field"><label>Category Name</label><input id="f_newcat" placeholder="Enter category name"></div>`,
   ()=>{const c=document.getElementById('f_newcat').value.trim();if(!c)return toast('Enter category name');
     if(!store.categories)store.categories=['General'];
@@ -2588,6 +2825,7 @@ function addCategory(){
     store.categories.push(c);persist();refreshView();closeModal('formModal');selCategory=c;vItems();toast('Category added');},'ADD');
 }
 function showCatMenu(cat,el){
+  if(!hasPermission('edit','item')){showNoAccess();return;}
   const existing=document.querySelector('.cat-context-menu');if(existing)existing.remove();
   const menu=document.createElement('div');menu.className='cat-context-menu';
   menu.innerHTML=`<div onclick="renameCategory('${cat}')">✏️ Rename</div><div class="del" onclick="deleteCategory('${cat}')">🗑 Delete</div>`;
@@ -2596,6 +2834,7 @@ function showCatMenu(cat,el){
   document.addEventListener('click',function h(){menu.remove();document.removeEventListener('click',h);},{once:true});
 }
 function renameCategory(old){
+  if(!hasPermission('edit','item')){showNoAccess();return;}
   formModal('Rename Category',`<div class="field"><label>Category Name</label><input id="f_rencat" value="${old}"></div>`,
   ()=>{const c=document.getElementById('f_rencat').value.trim();if(!c)return;
     const idx=store.categories.indexOf(old);if(idx>=0)store.categories[idx]=c;
@@ -2607,6 +2846,7 @@ async function deleteCategory(cat){
   store.categories=store.categories.filter(c=>c!==cat);persist();refreshView();selCategory='Items not in any Category';vItems();toast('Category deleted');logActivity('item','Deleted category: '+cat);
 }
 function moveToCategory(){
+  if(!hasPermission('edit','item')){showNoAccess();return;}
   if(!selCategory||selCategory==='Items not in any Category')return toast('Select a category first');
   const uncatItems=store.items.filter(i=>!store.categories.includes(i.cat)||i.cat==='');
   if(!uncatItems.length)return toast('No uncategorized items to move');
@@ -2680,7 +2920,7 @@ function renderItemDetail(it){
   const txns=getItemTransactions(it.name);
   return `<div class="ip-detail">
     <div class="ip-detail-head">
-      <div><span class="ip-det-name">${it.name.toUpperCase()}</span> <span class="ip-det-edit" onclick="openEditItem('${it.id}')">✏️</span> <span class="ip-det-edit" onclick="trashItemById('${it.id}')" title="Move to Trash" style="color:var(--red)">🗑</span></div>
+      <div><span class="ip-det-name">${it.name.toUpperCase()}</span> <button class="ip-action-btn" type="button" onclick="openEditItem('${it.id}')">Edit</button> <button class="ip-action-btn danger" type="button" onclick="trashItemById('${it.id}')">Delete</button></div>
     </div>
     <div class="ip-detail-grid">
       <div class="ip-det-row"><span class="ip-det-label">SALE PRICE:</span> <span class="ip-det-val blue">${rs(it.price)}</span></div>
@@ -2988,7 +3228,7 @@ function vBulkUpdate(){
     <div class="bulk-youtube-row">
       <span class="bulk-yt-ic">▶</span>
       <span class="bulk-yt-text">Watch Youtube tutorial to learn more</span>
-      <button class="bulk-yt-btn" onclick="toast('Video tutorial coming soon')">▷ Watch Video</button>
+
     </div>
     <div class="bulk-footer">
       <div class="bulk-footer-stats">
@@ -3640,6 +3880,7 @@ function poCalcTotals(){
 }
 
 function savePurchaseOrder(){
+  if(!hasPermission('create','purchase-order')){showNoAccess();return;}
   if(!poData.party) return toast('Select a party');
   const t=poCalcTotals();
   const dt=poData.date.split('-');
@@ -3716,7 +3957,7 @@ function printPurchaseOrder(idx){
 }
 
 async function deletePurchaseOrder(idx){
-  if(!hasPermission('delete','item')){showNoAccess();return;}
+  if(!hasPermission('delete','purchase-order')){showNoAccess();return;}
   if(!await confirmAsync('Delete this Purchase Order?',{title:'Delete Purchase Order',icon:'&#x1F5D1;&#xFE0F;',yesLabel:'Delete',yesColor:'#e74c3c'}))return;
   store.purchaseOrders.splice(idx,1);
   persist();toast('Deleted');vPurchaseOrder();
@@ -3853,7 +4094,7 @@ function vPurchaseForm(){
           <select class="pf-pay-select" id="pfPayMode" onchange="pfTabs[${pfActiveTab}].payMode=this.value">
             <option ${cur.payMode==='Cash'?'selected':''}>Cash</option><option ${cur.payMode==='Credit'?'selected':''}>Credit</option><option ${cur.payMode==='Card Payment'?'selected':''}>Card Payment</option><option ${cur.payMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
           </select>
-          <div class="pf-add-payment" onclick="toast('Multiple payment types coming soon')">+ Add Payment type</div>
+
         </div>
         <div class="pf-bottom-right">
           <div class="pf-disc-row">
@@ -3866,7 +4107,7 @@ function vPurchaseForm(){
       </div>
     </div>
     <div class="pf-footer">
-      <button class="pf-share-btn" onclick="toast('Share coming soon')">Share <span class="pf-share-arrow">▾</span></button>
+
       <button class="pf-save-btn" onclick="pfSave()">Save</button>
     </div>
   </div>`;
@@ -4000,9 +4241,7 @@ function vPurchaseReturn(){
       <div class="hub-select"><select><option>ALL FIRMS</option>${firms.map(f=>`<option>${f}</option>`).join('')}</select></div>
       <div class="hub-select"><select><option>ALL USERS</option></select></div>
       <div style="flex:1"></div>
-      <div class="hub-action-icon" onclick="toast('Excel coming soon')" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px">
-        <span style="font-size:20px">📊</span><span style="font-size:10px;color:var(--muted)">Excel</span>
-      </div>
+
       <div class="hub-action-icon" onclick="window.print()" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px">
         <span style="font-size:20px">🖨️</span><span style="font-size:10px;color:var(--muted)">Print</span>
       </div>
@@ -4048,7 +4287,7 @@ function vPurchaseReturn(){
               <td class="right" style="font-weight:600;color:${isPaid?'var(--green)':'var(--red)'}">${rs(bal)}</td>
               <td><span class="hub-pill ${isPaid?'hub-pill-paid':'hub-pill-unpaid'}">${isPaid?'Paid':'Unpaid'}</span></td>
               <td><div class="hub-actions">
-                <span class="hub-action-icon" onclick="toast('Print coming soon')" title="Print">🖨️</span>
+
                 <span class="hub-action-icon" onclick="toast('More')" title="More">⋮</span>
               </div></td>
             </tr>`;
@@ -5059,7 +5298,7 @@ function vGeneric(view){ return ()=>{
   const m=META[view]||{ic:'📋',t:view.charAt(0).toUpperCase()+view.slice(1),d:'This section works just like Vyapar.',btn:''};
   content.innerHTML=`<div class="empty-page"><div class="empty-ill">${m.ic}</div>
     <h2>${m.t}</h2><p>${m.d}</p>
-    ${m.btn?`<button class="btn-big red" onclick="${m.act?m.act+'()':"toast('"+m.t+" (demo)')"}">${m.btn}</button>`:''}</div>`;
+    ${m.btn&&m.act?`<button class="btn-big red" onclick="${m.act}()">${m.btn}</button>`:''}</div>`;
 }; }
 function doBackup(){
   const data=JSON.stringify(store,null,2); const blob=new Blob([data],{type:'application/json'});
@@ -5464,7 +5703,7 @@ function vPaymentOut(){
       </div>
       <div class="hub-empty-title">No Transactions to show</div>
       <div class="hub-empty-sub">You haven't added any transactions yet.</div>
-      <button class="hub-btn hub-btn-red" style="margin-top:16px" onclick="addPayment('out')">＋ Add Payment-Out</button>
+      ${hasPermission('create','payment-out')?`<button class="hub-btn hub-btn-red" style="margin-top:16px" onclick="addPayment('out')">＋ Add Payment-Out</button>`:``}
     </div>`}
   </div>`;
 }
@@ -5552,7 +5791,7 @@ function openBarcodeScanner(){
       <div style="margin-top:12px;font-size:12px;color:#aaa">Or enter invoice number manually:</div>
       <input id="bc_scan_input" placeholder="e.g. INV-01" style="width:100%;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:14px;margin-top:8px;box-sizing:border-box">
     </div>`;
-  
+
   formModal('Scan Invoice Barcode', scanHtml,
     function(){
       var no=document.getElementById('bc_scan_input').value.trim();
@@ -5562,7 +5801,7 @@ function openBarcodeScanner(){
       stopScanner();
       if(s){ showInvoiceView(s); } else toast('No invoice found for '+no);
     }, 'FIND INVOICE');
-  
+
   document.getElementById('bc_scan_input').addEventListener('keydown', function(e){
     if(e.key==='Enter'){
       var no=this.value.trim();
@@ -5573,7 +5812,7 @@ function openBarcodeScanner(){
       if(s){ showInvoiceView(s); } else toast('No invoice found for '+no);
     }
   });
-  
+
   startScanner();
 }
 
@@ -5593,7 +5832,7 @@ function startScanner(){
     video.play();
     var st=document.getElementById('scannerStatus');
     if(st) st.textContent='Scanning... point camera at barcode';
-    
+
     if('BarcodeDetector' in window){
       var detector=new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','qr_code','upc_a','upc_e']});
       _scannerInterval=setInterval(function(){
@@ -5665,9 +5904,9 @@ function vCreateInvoice(){
           <div class="nci-fld"><label>Customer Name<b>*</b></label><input id="nciCust" value="${nciCustName}" placeholder="Enter Name" oninput="nciCustName=this.value;nciPreview()" autocomplete="off"></div>
           <div class="nci-fld"><label>Customer Phone Number</label><div class="nci-phone"><span class="cc">+92</span><input id="nciPhone" value="${nciCustPhone}" placeholder="Enter Number" oninput="nciCustPhone=this.value;nciPreview()"></div></div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:#f8f9fa;border-radius:10px;margin-bottom:8px;border:1px solid #e0e0e0">
+        <div class="scanner-status" role="button" tabindex="0" onclick="openScannerTest()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openScannerTest()}" style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:#f8f9fa;border-radius:10px;margin-bottom:8px;border:1px solid #e0e0e0">
           <div id="nciScannerDot" title="Scanner status" style="width:10px;height:10px;border-radius:50%;background:#e74c3c;box-shadow:0 0 6px rgba(231,76,60,0.5);transition:all 0.3s"></div>
-          <span style="font-size:11px;color:#888" id="nciScannerLabel">Scanner: Not connected</span>
+          <span style="font-size:11px;color:#888" id="nciScannerLabel">Scanner not confirmed - click to test</span>
         </div>
         <table class="nci-tbl"><thead><tr><th>#</th><th>ITEM</th><th>QTY</th><th>PRICE</th><th class="right">TOTAL <span class="nci-add-ic" onclick="nciAddRow()">⊕</span></th><th></th></tr></thead>
           <tbody id="nciRows"></tbody></table>
@@ -5698,6 +5937,7 @@ function vCreateInvoice(){
               <option ${nciPayMode==='Bank Transfer'?'selected':''}>Bank Transfer</option>
               <option ${nciPayMode==='QR Code'?'selected':''}>QR Code</option>
               <option ${nciPayMode==='Card Payment'?'selected':''}>Card Payment</option>
+              <option ${nciPayMode==='Credit'?'selected':''}>Credit</option>
             </select>
           </div>
         </div>
@@ -5713,10 +5953,10 @@ function vCreateInvoice(){
       <div class="nci-right">
         <div class="nci-preview" id="nciPreview"></div>
         <div class="nci-actions">
-          <button class="nci-save" onclick="nciShowSlip()">Save &amp; New</button>
-          <span class="nci-rnd wa" onclick="nciSave('whatsapp')" title="Save &amp; WhatsApp">🟢</span>
-          <span class="nci-rnd" onclick="nciSave('print')" title="Save &amp; Print">🖨️</span>
-          <span class="nci-rnd" onclick="nciSave('download')" title="Save &amp; Download">⬇️</span>
+          <button class="nci-save" onclick="nciSave('new')">Save &amp; New</button>
+          <button class="nci-rnd wa" type="button" onclick="nciSave('whatsapp')" title="Save and share invoice">Share</button>
+          <button class="nci-rnd" type="button" onclick="nciShowSlip()" title="Preview invoice before printing">Print</button>
+          <button class="nci-rnd" type="button" onclick="nciSave('download')" title="Save and download invoice">PDF</button>
         </div>
       </div>
     </div>
@@ -5727,7 +5967,7 @@ function nciRenderRows(){
   const tb=document.getElementById('nciRows'); if(!tb)return;
   tb.innerHTML=nciRows.map((r,i)=>`<tr>
     <td>${i+1}</td>
-    <td class="nci-item-cell"><input id="nciItem${i}" value="${(r.name||r.item||'').replace(/"/g,'&quot;')}" placeholder="Enter Item" oninput="nciSetItem(${i},this.value)" onfocus="nciShowDrop(${i})" autocomplete="off"><div class="nci-drop" id="nciDrop${i}"></div></td>
+    <td class="nci-item-cell"><input id="nciItem${i}" value="${(r.name||r.item||'').replace(/"/g,'&quot;')}" placeholder="Enter Item" oninput="nciSetItem(${i},this.value)" onkeydown="nciItemKey(event,${i})" onfocus="nciShowDrop(${i})" autocomplete="off"><div class="nci-drop" id="nciDrop${i}"></div></td>
     <td><input type="number" id="nciQty${i}" value="${r.qty}" onfocus="clearZero(this)" oninput="nciSet(${i},'qty',this.value)"></td>
     <td><input type="number" id="nciPrice${i}" value="${r.price}" onfocus="clearZero(this)" oninput="nciSet(${i},'price',this.value)"></td>
     <td class="nci-rowtot-cell"><span class="nci-rowtot">${nciFmt((+r.qty||0)*(+r.price||0))}</span></td>
@@ -5740,8 +5980,17 @@ function nciShowDrop(i){
   const items=q?store.items.filter(it=>it.name.toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q)):store.items;
   if(!items.length){drop.classList.remove('show');return;}
   drop.innerHTML=items.map(it=>`<div class="nci-drop-row" onclick="nciPickItem(${i},'${it.id}')">
-    <span class="nci-drop-name">${it.name}${it.size?` <small>(${it.size})</small>`:''}</span><span class="nci-drop-price">${rs(it.price)}</span></div>`).join('');
+    <span class="nci-drop-name">${it.name}${it.code?' ? '+it.code:''}${it.size?` <small>(${it.size})</small>`:''}</span><span class="nci-drop-price">${rs(it.price)}</span></div>`).join('');
   drop.classList.add('show');
+}
+function nciItemKey(ev,i){
+  if(ev.key!=='Enter')return;
+  ev.preventDefault();
+  const code=(ev.target.value||'').trim();
+  const item=findItemByScan(code);
+  if(!item){toast('No item found for: '+code);return;}
+  nciPickItem(i,item.id);
+  setScannerUI(true);
 }
 function nciSetItem(i,val){ if(!nciRows[i])return; nciRows[i].name=val; nciRows[i].item=val; nciShowDrop(i); nciCalc(); }
 function nciPickItem(i,iid){
@@ -5787,7 +6036,7 @@ function nciCalc(){
 function nciPreview(){
   const pv=document.getElementById('nciPreview'); if(!pv)return;
   const b=store.business, st=store.settings||{}, t=nciTotals();
-  const invNo=(st.invPrefix||'INV-')+String(store.counters.sale);
+  const invNo=(st.invPrefix===undefined?'INV-':st.invPrefix)+String(store.counters.sale).padStart(2,'0');
   const cust=(document.getElementById('nciCust')?.value||'').trim();
   const phone=(document.getElementById('nciPhone')?.value||'').trim();
   const rows=nciRows.filter(r=>(r.name||r.item)||r.price);
@@ -5795,7 +6044,7 @@ function nciPreview(){
   const bizName=b.name||'My Business';
   pv.innerHTML=`<div class="nci-inv">
     <div class="nci-inv-head">
-      <div class="nci-inv-logo">${b.logo?`<img src="${b.logo}">`:`<div class="nci-inv-logobox">${(bizName[0]||'B').toUpperCase()}</div>`}</div>
+      <div class="nci-inv-logo">${b.logo?`<img src="${b.logo}">`:``}</div>
       <div class="nci-inv-bizinfo">
         <div class="nci-inv-bizname">${bizName}</div>
         ${previewPhone?`<div class="nci-inv-bizline">Ph: ${previewPhone}</div>`:''}
@@ -5844,19 +6093,47 @@ function nciSwitchFull(){ openSale(); }
 function nciShowSlip(){
   if(!hasPermission('create','invoices')){showNoAccess();return;}
   const cust=(document.getElementById('nciCust')?.value||'').trim();
-  if(!cust)return toast('Enter Customer Name');
   const rows=nciRows.filter(r=>(r.name||r.item)&&(+r.qty>0));
-  if(!rows.length)return toast('Add at least one item');
   const t=nciTotals();
-  if(t.total<=0)return toast('Enter item price');
+  const issues=[];
+  if(!cust)issues.push('Enter customer name');
+  if(!rows.length)issues.push('Add at least one item');
+  if(t.total<=0)issues.push('Enter an item price');
   nciPreview(); // make sure the slip (logo, barcode, QR, totals) is up to date
   const body=document.getElementById('nciSlipBody');
   const pv=document.getElementById('nciPreview');
-  if(body&&pv) body.innerHTML=pv.innerHTML;
+  if(body&&pv) body.innerHTML=(issues.length?`<div class="nci-preview-warning" role="alert">Before printing: ${issues.join('; ')}.</div>`:'')+pv.innerHTML;
+  const printButton=document.getElementById('nciFinalPrint');
+  if(printButton){printButton.disabled=issues.length>0;printButton.title=issues.join('; ');}
   showModal('nciSlipModal');
 }
 function nciSlipSave(){ closeModal('nciSlipModal'); nciSave(); }
-function nciSlipPrint(){ closeModal('nciSlipModal'); nciSave('print'); }
+async function nciSlipPrint(){
+  const btn=document.getElementById('nciFinalPrint');if(btn?.disabled)return;
+  if(store.settings.printerTab==='thermal'&&window.karobarDesktop?.getPrinters){
+    const selected=store.settings.thermalPrinterName;
+    let error='';
+    if(!selected)error='Select a thermal printer in Settings > Print first.';
+    else try{
+      const printers=await window.karobarDesktop.getPrinters();
+      const printer=printers.find(p=>p.name===selected);
+      if(!printer)error='Selected printer is not installed or connected in Windows.';
+      else if(printer.status!=null){
+        const faults=[[0x80,'offline'],[0x2,'error'],[0x8,'paper jam'],[0x10,'out of paper'],[0x1000,'unavailable']];
+        const fault=faults.find(([bit])=>(printer.status&bit)!==0);
+        if(fault)error='Printer reports '+fault[1]+'.';
+      }
+    }catch(e){error='Could not check printer: '+e.message;}
+    if(error){
+      const body=document.getElementById('nciSlipBody');
+      const warning=body?.querySelector('.nci-preview-warning')||document.createElement('div');
+      warning.className='nci-preview-warning';warning.textContent=error;
+      if(!warning.parentElement)body?.prepend(warning);
+      return;
+    }
+  }
+  closeModal('nciSlipModal');nciSave('print');
+}
 function nciReset(){ nciRows=[{name:'',item:'',qty:1,price:0,size:''}]; nciDiscP=0; nciDiscAmt=0; nciTaxRate=0; nciReceived=0; nciFully=false; nciCustName=''; nciCustPhone=''; nciPayMode='Cash'; }
 function nciWhatsApp(s){
   let digits=(s.phone||'').replace(/\D/g,'').replace(/^0+/,''); digits=digits.replace(/^92/,'');
@@ -5868,17 +6145,17 @@ function nciSave(action){
   if(!hasPermission('create','invoices') && action!=='preview'){showNoAccess();return;}
   const s=store.settings||{};
   const cust=(document.getElementById('nciCust')?.value||'').trim();
-  if(!cust)return toast('Enter Customer Name');
+  if(!cust){toast('Enter Customer Name before saving');document.getElementById('nciCust')?.focus();return;}
   const phone=(document.getElementById('nciPhone')?.value||'').trim();
   const rows=nciRows.filter(r=>(r.name||r.item)&&(+r.qty>0));
-  if(!rows.length)return toast('Add at least one item');
+  if(!rows.length){toast('Add at least one item before saving');document.querySelector('.nci-item-cell input')?.focus();return;}
   if(s.blockNewItem){
     const unknown=rows.find(r=>!store.items.find(it=>it.name===r.name||it.name===r.item));
     if(unknown)return toast('New items blocked in settings. Add items from Items page first.');
   }
   if(s.blockNewParty&&!store.parties.find(p=>p.name===cust))return toast('New parties blocked in settings. Add party from Parties page first.');
   const t=nciTotals();
-  if(t.total<=0)return toast('Enter item price');
+  if(t.total<=0){toast('Enter item price before saving');document.querySelector('.nci-row-price input')?.focus();return;}
   if(s.negativeStock!==false){
     const negItem=rows.find(r=>{const it=store.items.find(x=>x.name===r.item);if(!it||typeof it.stock!=='number')return false;
       if(it.sizes&&it.sizes.length&&r.size){const sz=it.sizes.find(s=>s.size===r.size);return sz?(sz.stock<=0||sz.stock<r.qty):true;}
@@ -5890,7 +6167,7 @@ function nciSave(action){
   const saleRows=rows.map(r=>({item:r.name||r.item,qty:+r.qty||0,price:+r.price||0,disc:0,size:r.size||''}));
   const saleId=id();
   // A paid mode (Cash/Bank/QR/Card Payment) with no "Received" entered = bill fully paid via that mode.
-  const effRecv=(nciPayMode!=='Credit' && (+t.received||0)===0) ? t.total : t.received;
+  const effRecv=t.received;
   const branchPhone3=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const createdBy3=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
   const createdByName3=store.currentUser?store.currentUser.name:'';
@@ -6070,22 +6347,27 @@ function poUpdateTotal(){
 }
 
 function savePaymentOut(dir){
+  if(dir!=='out'&&dir!=='in') return toast('Invalid payment direction');
+  if(!hasPermission('create',dir==='out'?'payment-out':'payment-in')){showNoAccess();return;}
   const party=(document.getElementById('po_party')?.value||'').trim();
   if(!party) return toast('Select a party');
-  const amount=+(document.getElementById('po_paid')?.value)||0;
-  const disc=+(document.getElementById('po_disc')?.value)||0;
+  const amount=Number(document.getElementById('po_paid')?.value);
+  const disc=Number(document.getElementById('po_disc')?.value||0);
   const mode=document.getElementById('po_mode')?.value||'Cash';
   const receipt=document.getElementById('po_receipt')?.value||'';
   const dateStr=document.getElementById('po_date')?.value||'';
   const desc=(document.getElementById('po_desc_field')?.value||'').trim();
-  const dateParts=dateStr.split('-');
-  const formattedDate=dateParts[2]+'/'+dateParts[1]+'/'+dateParts[0];
+  const parsedDate=/^\d{4}-\d{2}-\d{2}$/.test(dateStr)?new Date(dateStr+'T00:00:00'):null;
+  const validDate=parsedDate&&!Number.isNaN(parsedDate.getTime())&&parsedDate.getFullYear()===Number(dateStr.slice(0,4))&&parsedDate.getMonth()+1===Number(dateStr.slice(5,7))&&parsedDate.getDate()===Number(dateStr.slice(8,10));
+  const dateParts=validDate?dateStr.split('-'):null;
+  const formattedDate=dateParts?dateParts[2]+'/'+dateParts[1]+'/'+dateParts[0]:dispDate();
   const finalAmount=amount-disc;
-  if(finalAmount<=0) return toast('Enter a valid amount');
-  store.payments.push({id:id(),dir,party,amount:finalAmount,mode,date:formattedDate||dispDate(),receipt,desc,disc,createdBy:pmCurBranchCode(),createdByName:pmCurBranchName()});
+  if(!Number.isFinite(amount)||!Number.isFinite(disc)||amount<=0||disc<0||disc>=amount) return toast('Enter valid paid and discount amounts');
+  store.payments.push({id:id(),dir,party,amount:finalAmount,mode,date:formattedDate,receipt,desc,disc,createdBy:pmCurBranchCode(),createdByName:pmCurBranchName()});
   const pt=store.parties.find(x=>x.name===party);
   if(pt) pt.balance+=dir==='in'?-finalAmount:finalAmount;
   persist();
+  logActivity('payment',(dir==='out'?'Payment out':'Payment in')+': '+party+' | '+rs(finalAmount));
   closeModal('payOutModal');
   toast('Payment saved!');
   if(dir==='out') vPaymentOut(); else vPaymentIn();
@@ -6102,7 +6384,7 @@ function sharePaymentOut(){
 }
 
 
-function addExpense(){ 
+function addExpense(){
   if(!hasPermission('create','expense')){showNoAccess();return;}
   formModal('Add Expense',`
   <div class="field"><label>Category</label><input id="f_cat" placeholder="Rent / Salary / Bills"></div>
@@ -6117,7 +6399,7 @@ function vUserActivity(){
   var branchCode = isBranch ? store.currentUser.branchCode : '';
   var allUsers = store.users || [];
   var filteredUsers = isBranch ? allUsers.filter(u => u.createdBy === branchCode) : allUsers;
-  
+
   content.innerHTML=`<div class="page-head"><h2>${isBranch ? 'Branch Users' : 'User Activity'}</h2></div>
     <div class="ua-hub">
       ${hasPermission('admin','admin-users') ? `
@@ -6166,12 +6448,12 @@ function viewUsers(){
   var isBranch = store.currentUser && store.currentUser.role === 'branch';
   var branchCode = isBranch ? store.currentUser.branchCode : '';
   var allUsers = store.users || [];
-  
+
   // Filter: branch sees only its users, admin sees all
   var filteredUsers = isBranch ? allUsers.filter(u => u.createdBy === branchCode) : allUsers;
-  
+
   var adminRow = isBranch ? '' : `<tr style="cursor:pointer" onclick="viewUserCredentials('admin')"><td class="bold">Admin</td><td>Owner</td><td>••••••</td><td>-</td><td><span class="pill paid">Active</span></td><td><span class="pill" style="background:#e8f4ff;color:var(--blue);cursor:pointer">👁 View</span></td></tr>`;
-  
+
   content.innerHTML=`<div class="page-head"><h2>${isBranch ? 'Branch Users' : 'All Users'}</h2><button class="btn btn-red" onclick="addUser()" ${hasPermission('admin','admin-users')?'':'style="display:none"'}>+ Add User</button></div>
     <div class="panel"><table class="data"><thead><tr><th>Name</th><th>Role</th><th>Password</th><th>Created</th>${!isBranch ? '<th>Branch</th>' : ''}<th>Status</th><th>Actions</th></tr></thead><tbody>
     ${adminRow}
@@ -6204,35 +6486,36 @@ function userActivityLog(){
   if(isBranch){
     var branchUserNames=[currentUserName];
     (store.users||[]).forEach(function(u){ if(u.createdBy===branchCode) branchUserNames.push(u.name); });
-    logs=logs.filter(function(l){ return branchUserNames.indexOf(l.userName)!==-1; });
+    logs=logs.filter(function(l){ return l.branchCode ? l.branchCode===branchCode : branchUserNames.indexOf(l.userName)!==-1; });
   }else if(isStaff){
-    logs=logs.filter(function(l){ return l.userName===currentUserName; });
+    logs=logs.filter(function(l){ return l.userId ? l.userId===store.currentUser.id : l.userName===currentUserName; });
   }
   // admin/owner: no filter — see everything
   // Sort by newest first
   logs=logs.slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
-  
+
   // Get unique users for filter
   var userSet={};
   logs.forEach(l=>{if(l.userName)userSet[l.userName]=1;});
   var users=['All Users'].concat(Object.keys(userSet));
-  
+
   window._activityLogs=logs;
-  
+
   content.innerHTML=`<div class="page-head"><h2>Users Activity Table</h2></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px"><button onclick="printActivityLog()">Print activity</button><button onclick="showDiagnosticLogs()">Error, sync & print history</button></div>
     <div id="actFilterBar"></div>
     <div class="panel" style="overflow-x:auto">
       <table class="data"><thead><tr>
         <th>FULL NAME</th><th>DATE & TIME</th><th>ROLE</th><th>ACTIONS</th><th>DETAILS</th>
       </tr></thead><tbody id="actTableBody"></tbody></table>
     </div>`;
-  
+
   // Render filter bar
   document.getElementById('actFilterBar').innerHTML=`
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:#f8f9fa;border-radius:10px">
       <span style="font-size:13px;color:#666;font-weight:600">Filter by:</span>
       <select id="actUserFilter" onchange="filterActivityTable()" style="padding:8px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fff">
-        ${users.map(u=>`<option value="${u}">${u}</option>`).join('')}
+        ${users.map(u=>`<option value="${logText(u)}">${logText(u)}</option>`).join('')}
       </select>
       <select id="actPeriodFilter" onchange="filterActivityTable()" style="padding:8px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fff">
         <option value="all">All Time</option>
@@ -6247,40 +6530,48 @@ function userActivityLog(){
         <input type="date" id="actDateTo" onchange="filterActivityTable()" style="padding:7px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px">
       </div>
     </div>`;
-  
+
   renderActivityTable(logs);
+}
+function showDiagnosticLogs(){
+  var logs=diagnosticLogs().filter(l=>{
+    var cu=store.currentUser||{};
+    return cu.role==='owner'||cu.role==='admin'||(l.userId&&l.userId===cu.id);
+  });
+  content.innerHTML='<div class="page-head"><h2>Error, sync & print history</h2></div><button onclick="userActivityLog()">Activity log</button><div class="panel" style="overflow-x:auto"><table class="data"><thead><tr><th>Date & time</th><th>Actor</th><th>Type</th><th>Details</th></tr></thead><tbody>'+ (logs.length?logs.map(l=>'<tr><td>'+logText(l.date)+' '+logText(l.time)+'</td><td>'+logText(l.userName)+'</td><td>'+logText(l.type)+'</td><td>'+logText(l.detail)+'</td></tr>').join(''):'<tr><td colspan="4">No diagnostic entries on this device</td></tr>')+'</tbody></table></div>';
 }
 
 function renderActivityTable(logs){
   var container=document.getElementById('actTableBody');
   var countEl=document.getElementById('actCount');
   if(!container)return;
-  
+  window._visibleActivityLogs=logs;
+
   if(countEl)countEl.textContent=logs.length+' activities';
-  
+
   if(!logs.length){
     container.innerHTML='<tr><td colspan="5" style="text-align:center;color:#888;padding:40px">No activities found</td></tr>';
     return;
   }
-  
+
   const typeColors={item:'#1a73e8',party:'#27ae60',invoice:'#ff6b35',user:'#9b59b6',settings:'#e67e22',return:'#e74c3c',exchange:'#3498db',navigation:'#607d8b',purchase:'#00897b',expense:'#e67e22',payment:'#4caf50'};
-  
+
   container.innerHTML=logs.map(l=>{
     var actionType=l.type||'activity';
     var actionLabel=actionType.toUpperCase();
     var detail=l.detail||'-';
     var bgColor=typeColors[actionType]||'#607d8b';
-    
+
     var roleLabel=(l.userRole||'owner');
     if(roleLabel==='owner')roleLabel='Admin (Owner)';
     else if(roleLabel==='branch')roleLabel='Branch';
     else roleLabel=roleLabel.charAt(0).toUpperCase()+roleLabel.slice(1);
     return `<tr>
-      <td style="font-weight:600;color:#222">${l.userName||'Owner'}</td>
-      <td style="color:#666">${l.date||''} ${l.time||''}</td>
-      <td><span style="color:#666">${roleLabel}</span></td>
-      <td><span style="background:${bgColor};color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap">${actionLabel}</span></td>
-      <td style="color:#1a73e8;font-weight:500">${detail}</td>
+      <td style="font-weight:600;color:#222">${logText(l.userName||'Owner')}</td>
+      <td style="color:#666">${logText(l.date||'')} ${logText(l.time||'')}</td>
+      <td><span style="color:#666">${logText(roleLabel)}</span></td>
+      <td><span style="background:${bgColor};color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap">${logText(actionLabel)}</span></td>
+      <td style="color:#1a73e8;font-weight:500">${logText(detail)}</td>
     </tr>`;
   }).join('');
 }
@@ -6291,15 +6582,15 @@ function filterActivityTable(){
   var periodFilter=document.getElementById('actPeriodFilter')?document.getElementById('actPeriodFilter').value:'all';
   var dateFrom=document.getElementById('actDateFrom')?document.getElementById('actDateFrom').value:'';
   var dateTo=document.getElementById('actDateTo')?document.getElementById('actDateTo').value:'';
-  
+
   var filtered=logs.filter(l=>{
     // User filter
     if(userFilter!=='All Users'&&l.userName!==userFilter)return false;
-    
+
     // Period filter
-    if(periodFilter!=='all'&&l.date){
-      var parts=l.date.split(/[\s/-]/);
-      var logDate=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+    var logDate=activityDate(l);
+    if(periodFilter!=='all'){
+      if(!logDate)return false;
       var now=new Date();
       var start;
       if(periodFilter==='today'){
@@ -6313,28 +6604,29 @@ function filterActivityTable(){
       }
       if(start&&logDate<start)return false;
     }
-    
+
     // Custom date range
     if(dateFrom||dateTo){
-      var parts=l.date.split(/[\s/-]/);
-      var logDate=new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+      if(!logDate)return false;
       if(dateFrom&&logDate<new Date(dateFrom))return false;
-      if(dateTo&&logDate>new Date(dateTo))return false;
+      if(dateTo&&logDate>=new Date(new Date(dateTo).getTime()+86400000))return false;
     }
-    
+
     return true;
   });
-  
+
   renderActivityTable(filtered);
 }
 function filterActivity(){
   filterActivityTable();
 }
 function printActivityLog(){
-  const logs=store.activityLog||[];
+  const logs=window._visibleActivityLogs||[];
   const typeColors={item:'#1a73e8',party:'#27ae60',invoice:'#ff6b35',user:'#9b59b6',settings:'#e67e22',return:'#e74c3c',exchange:'#3498db',navigation:'#607d8b'};
   const typeIcons={item:'📦',party:'👤',invoice:'📄',user:'👥',settings:'⚙️',return:'↩️',exchange:'🔄',navigation:'🧭'};
   const win=window.open('','','width=900,height=700');
+  if(!win){toast('Allow pop-ups to print the activity log');return;}
+  logDiagnostic('print','Opened activity log print preview ('+logs.length+' entries)');
   win.document.write(`<html><head><title>Activity Log</title>
     <style>
       body{font-family:'Segoe UI',sans-serif;padding:30px;color:#333}
@@ -6354,7 +6646,7 @@ function printActivityLog(){
       const roleColors={owner:'#e74c3c',admin:'#9b59b6',manager:'#1a73e8',cashier:'#27ae60',viewer:'#607d8b'};
       const rc=roleColors[l.userRole]||'#607d8b';
       const tc=typeColors[l.type]||'#888';
-      return `<tr><td>${i+1}</td><td>${l.date} ${l.time}</td><td><span class="user-badge" style="background:${rc}">${l.userName||'Owner'}</span></td><td><span class="user-badge" style="background:${rc}">${(l.userRole||'owner').charAt(0).toUpperCase()+(l.userRole||'owner').slice(1)}</span></td><td><span class="type-badge" style="background:${tc}">${(l.type||'').toUpperCase()}</span></td><td>${l.detail}</td></tr>`;
+      return `<tr><td>${i+1}</td><td>${logText(l.date||'')} ${logText(l.time||'')}</td><td><span class="user-badge" style="background:${rc}">${logText(l.userName||'Owner')}</span></td><td><span class="user-badge" style="background:${rc}">${logText((l.userRole||'owner').charAt(0).toUpperCase()+(l.userRole||'owner').slice(1))}</span></td><td><span class="type-badge" style="background:${tc}">${logText((l.type||'').toUpperCase())}</span></td><td>${logText(l.detail||'')}</td></tr>`;
     }).join('')}
     </tbody></table></body></html>`);
   win.document.close();win.print();
@@ -6370,6 +6662,7 @@ function userRoles(){
     </tbody></table></div>`;
 }
 function addUser(){
+  if(!hasPermission('admin','admin-users')){showNoAccess();return;}
   var isBranch=store.currentUser&&store.currentUser.role==='branch';
   formModal('Add User',`<div class="field"><label>User Name</label><input id="f_username" placeholder="Enter username" oninput="checkUsernameExists()"></div>
     <div id="f_userError" style="color:var(--red);font-size:12px;margin-top:-8px;margin-bottom:10px;display:none">⚠ Username already exists!</div>
@@ -6511,6 +6804,7 @@ function vRestoreBackup(){
     </div>`;
 }
 function doRestore(input){
+  if(!hasPermission('admin','restore-backup')){showNoAccess();return;}
   const file=input.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=function(e){
@@ -6541,7 +6835,7 @@ function vBank(){
     ${store.banks.map(b=>`<tr><td class="bold">${b.name}</td><td class="muted">${b.acc||'-'}</td><td class="right">${rs(b.bal)}</td></tr>`).join('')}
     </tbody></table></div>`;
 }
-function addBank(){ 
+function addBank(){
   if(!hasPermission('create','bank')){showNoAccess();return;}
   formModal('Add Bank Account',`
   <div class="field"><label>Bank Name *</label><input id="f_bn"></div>
@@ -6867,7 +7161,7 @@ function bcUniversalPrint(labelsHtml,totalLabels){
   const sz=bcGetSize();
   const printerType=document.getElementById('bc_printer')?.value||'Regular Printer';
   const fullHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Barcode Labels - Print</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+  <script src="vendor/JsBarcode.all.min.js"><\/script>
   <style>
   *{-webkit-print-color-adjust:exact!important;color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}
   html,body{margin:0;padding:0;font-family:'Segoe UI',Tahoma,Arial,Helvetica,sans-serif;font-size:12px;color:#000;background:#fff}
@@ -7237,7 +7531,7 @@ function vGProfile(){
       <div class="gp-check">✅ Make your business visible in Google Search</div>
       <div class="gp-check">✅ Help nearby customers find you on Maps</div>
       <div class="gp-check">✅ Show your hours, phone, and location clearly</div>
-      <button class="gp-btn" onclick="toast('Google sign-in (demo)')">G  Sign in with Google</button>
+
     </div>
   </div>`;
 }
@@ -7311,7 +7605,7 @@ function pfDeleteLogo(){
 function pfLogo(inp){ if(!hasPermission('edit','settings')){showNoAccess();return;} const f=inp.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ store.business.logo=e.target.result; persist(); refreshView(); document.getElementById('pf_logo').innerHTML=`<img src="${e.target.result}">`; document.getElementById('pfLogoMenu').innerHTML=`<div onclick="pfReplaceLogo()">✏️ Replace Logo</div><div class="del" onclick="pfDeleteLogo()">🗑 Delete Logo</div>`; toast('Logo saved'); }; r.readAsDataURL(f); }
 function pfSign(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{ store.business.signature=e.target.result; persist(); refreshView(); toast('Signature added'); }; r.readAsDataURL(f); }
-function saveProfile(){ 
+function saveProfile(){
   if(!hasPermission('edit','settings')){showNoAccess();return;}
   const b=store.business;
   b.name=document.getElementById('pf_name').value.trim(); b.phone=document.getElementById('pf_phone').value.trim();
@@ -7324,7 +7618,7 @@ function saveProfile(){
 let setTab='general';
 function vSettings(){
   const s=store.settings;
-  const tabs=[['general','GENERAL'],['transaction','TRANSACTION'],['print','PRINT'],['taxes','TAXES'],['txnmsg','TRANSACTION MESSAGE'],['party','PARTY'],['item','ITEM'],['reminders','SERVICE REMINDERS']];
+  const tabs=[['general','GENERAL'],['transaction','TRANSACTION'],['print','PRINT'],['taxes','TAXES'],['txnmsg','TRANSACTION MESSAGE'],['party','PARTY'],['item','ITEM'],['about','ABOUT']];
   const ig=`<span class="info-icon" title="More info">i</span>`;
   let body='';
   if(setTab==='general'){
@@ -7373,7 +7667,7 @@ function vSettings(){
         <div class="sg-section" style="margin-top:30px">
           <div class="sg-section-title">Customize Your View</div>
           <div class="sg-zoom-label">Choose Your Screen Zoom/Scale</div>
-          <div class="sg-zoom-desc">You can use this setting to resize the Vyapar screen, making it larger or smaller to fit your preferences.</div>
+          <div class="sg-zoom-desc">You can use this setting to resize the Karobar screen, making it larger or smaller to fit your preferences.</div>
           <div class="sg-slider-row"><input type="range" class="sg-slider" id="set_zoom" min="70" max="130" value="${s.zoom||100}" step="5" oninput="document.getElementById('zoomVal').textContent=this.value+'%'"><span id="zoomVal" style="font-size:12px;min-width:36px">${s.zoom||100}%</span><button class="sg-apply-btn" onclick="applyZoom()">Apply</button></div>
         </div>
         <div style="text-align:right;margin-top:20px"><button onclick="saveSettings()" style="background:#e0413e;color:#fff;border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-size:14px">Save</button></div>
@@ -7417,7 +7711,7 @@ function vSettings(){
               <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:10px">${escHtml(curFirm)}</div>
               <fieldset style="border:1px solid var(--line);border-radius:8px;padding:12px;margin:0"><legend style="font-size:11px;color:var(--muted);padding:0 6px">Prefixes</legend>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                  <div><label style="font-size:11px;color:var(--muted)">Sale</label><select id="set_prefixSale" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>${s.invPrefix||'INV-'}</option><option>None</option></select></div>
+                  <div><label style="font-size:11px;color:var(--muted)">Sale</label><select id="set_prefixSale" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>${s.invPrefix===undefined?'INV-':s.invPrefix||'None'}</option>${s.invPrefix?'':'<option>INV-</option>'}<option>None</option></select></div>
                   <div><label style="font-size:11px;color:var(--muted)">Credit Note</label><select style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>None</option></select></div>
                   <div><label style="font-size:11px;color:var(--muted)">Sale Order</label><select style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>None</option></select></div>
                   <div><label style="font-size:11px;color:var(--muted)">Purchase Order</label><select style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>None</option></select></div>
@@ -7455,116 +7749,22 @@ function vSettings(){
       </div>`;
     if(printTab==='thermal'){
       const lastInv=(store.sales||[]).slice(-1)[0]||{};
-      const invItems=lastInv.rows||[];
-      const invTotal=lastInv.total||0;
-      const invReceived=lastInv.received||0;
-      const invParty=lastInv.party||'Sample Party Name';
       body+=`<div class="sp-layout">
-      <div class="sp-settings">
-      <div class="sg-wrap">
-        <div>
-          <div class="sg-section"><div class="sg-section-title">CHANGE LAYOUT</div>
-            <div style="display:flex;gap:10px;margin:10px 0;flex-wrap:wrap">
-              ${[2,3,4,5].map(n=>`<div onclick="store.settings.printTheme=${n};vSettings()" style="cursor:pointer;text-align:center;border:2px solid ${s.printTheme===n?'var(--blue)':'transparent'};border-radius:8px;padding:6px;transition:.15s">
-                <div style="width:70px;height:80px;background:#f5f7fa;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center">
-                  <div style="width:44px;height:52px;background:#e0e3ea;border-radius:3px"></div>
-                </div>
-                <div style="font-size:10px;margin-top:4px;color:${s.printTheme===n?'var(--blue)':'#555'}">Theme ${n}</div>
-              </div>`).join('')}
+        <div class="sp-settings">
+          <div class="sg-section"><div class="sg-section-title">Windows thermal printer</div>
+            <select id="set_printerName" style="max-width:100%;padding:8px"></select>
+            <button type="button" onclick="refreshThermalPrinters()">Refresh printers</button>
+            <button type="button" onclick="testThermalPrinter()">Test print</button>
+            <div id="set_printerStatus" style="font-size:12px;margin-top:8px" role="status">Checking printers...</div>
+          </div>
+          <div class="sg-section"><div class="sg-section-title">Paper width</div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              ${[{k:'2inch',l:'58 mm'},{k:'3inch',l:'80 mm'},{k:'4inch',l:'104 mm'}].map(p=>`<button type="button" onclick="store.settings.pageSize='${p.k}';vSettings()" style="padding:8px;background:${pSize===p.k?'var(--blue)':'#fff'};color:${pSize===p.k?'#fff':'#333'};border:1px solid var(--line);border-radius:6px">${p.l}</button>`).join('')}
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" id="set_thermalDefault" ${s.thermalDefault?'checked':''} style="width:16px;height:16px;accent-color:var(--blue)"><label for="set_thermalDefault" style="font-size:12px;color:#3b4150">Make Thermal Printer Default</label><span style="color:var(--blue);font-size:11px;cursor:pointer;margin-left:auto">Set default thermal printer</span>${ig}</div>
-          <div class="sg-section" style="margin-top:12px"><div class="sg-section-title">Page Size</div>
-            <div style="display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:8px 0">
-              ${[{k:'2inch',l:'2 Inch',s:'58mm'},{k:'3inch',l:'3 Inch',s:'68mm'},{k:'4inch',l:'4 Inch',s:'88mm'},{k:'custom',l:'Custom',s:'48 (Chars)'}].map(p=>`<div onclick="store.settings.pageSize='${p.k}';vSettings()" style="flex:1;text-align:center;padding:8px 4px;cursor:pointer;background:${pSize===p.k?'var(--blue)':'#fff'};color:${pSize===p.k?'#fff':'#333'};font-size:11px;border-right:1px solid var(--line);transition:.15s"><div style="font-weight:600">${p.l}</div><div style="font-size:9px;opacity:.7">${p.s}</div></div>`).join('')}
-            </div>
-          </div>
-          <div class="sg-currency-row" style="margin-top:8px"><label style="font-size:12px">Printing Type</label>${ig}<select style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>Text Printing</option><option>Graphical Printing</option></select></div>
-          ${tg('set_textBold',s.textBold!==false,'Use Text Styling(Bold)')}
-          ${tg('set_autoCut',s.autoCut!==false,'Auto Cut Paper After Printing')}
-          ${tg('set_openDrawer',s.openDrawer,'Open Cash Drawer After Printing')}
-          <div class="sg-currency-row" style="margin-top:4px"><label style="font-size:12px">Extra lines at the end</label>${ig}<input type="number" value="0" min="0" style="width:44px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;text-align:center"></div>
+          <div style="font-size:12px;color:#666">Install the printer in Windows first. Auto cut and cash drawer depend on the printer driver/model.</div>
         </div>
-        <div>
-          <div class="sg-section">
-            ${tg('set_coName',s.showCoName,'Company Name')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.name||'Blueberry Studio Bahawal')}</div>
-            ${tg('set_coLogo',s.showLogo,'Company Logo')}<span style="color:var(--blue);font-size:11px;margin-left:24px;cursor:pointer">(Change)</span>
-            ${tg('set_coAddress',s.showAddress,'Address')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.address||'Flux Mall Civil Hospital Road Bahawalpur')}</div>
-            ${tg('set_coEmail',s.showEmail,'Email')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.email||'blueberryfatraders@gmail.com')}</div>
-            ${tg('set_coPhone',s.showCoPhone,'Phone Number')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.phone||'03132020534')}</div>
-            <div style="margin:8px 0"><span style="color:var(--blue);font-size:12px;cursor:pointer">Change Transaction Names &gt;</span></div>
-          </div>
-          <div class="sg-section"><div class="sg-section-title">Item table</div>
-            ${tg('set_tSno',s.tSno!==false,'S.No')}
-            ${tg('set_tUom',s.tUom!==false,'Units of Measurement')}
-            ${tg('set_tMrp',s.tMrp!==false,'MRP')}
-            ${tg('set_tSize',s.tSize,'Size')}
-            ${tg('set_tModel',s.tModel,'Model No.')}
-            ${tg('set_tSerial',s.tSerial,'Serial No.')}
-          </div>
-        </div>
-        <div>
-          <div class="sg-section"><div class="sg-section-title">Totals & Taxes</div>
-            ${tg('set_tTotalQty',s.tTotalQty!==false,'Total Item Quantity')}
-            <div style="display:flex;align-items:center;gap:6px">${tg('set_tAmountDec',s.tAmountDec!==false,'Amount with Decimal')}<span style="font-size:11px;color:var(--muted)">e.g. 0.00</span></div>
-            ${tg('set_tReceived',s.tReceived!==false,'Received Amount')}
-            ${tg('set_tBalance',s.tBalance!==false,'Balance Amount')}
-            ${tg('set_tPartyBal',s.tPartyBal,'Current Balance of Party')}
-            ${tg('set_tTaxDetails',s.tTaxDetails,'Tax Details')}
-            ${tg('set_tYouSaved',s.tYouSaved!==false,'You Saved')}
-            ${tg('set_tGrouping',s.tGrouping!==false,'Print Amount with Grouping')}
-            <div class="sg-currency-row" style="margin-top:4px"><label style="font-size:12px">Amount in Words</label>${ig}<select style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>English</option><option>Hindi</option><option>Urdu</option></select></div>
-          </div>
-          <div class="sg-section"><div class="sg-section-title">Footer</div>
-            ${tg('set_tDesc',s.tDesc!==false,'Print Description')}
-            <div style="margin:6px 0"><span style="color:var(--blue);font-size:12px;cursor:pointer">Terms and Conditions &gt;</span></div>
-          </div>
-          <div class="sg-section"><div class="sg-section-title">Vyapar Printer Setup</div>
-            <div style="display:flex;flex-direction:column;gap:5px;margin-top:6px">
-              ${['2 Inch (VYPRTP2001)','3 Inch (VYPRTP3001)','2 Inch (VYPRTP2002)'].map(p=>`<div style="border:1px solid var(--red);border-radius:8px;padding:7px 12px;color:var(--red);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">${p} - Quick Setup <span>⬇</span></div>`).join('')}
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-      <div class="sp-preview"><div class="sp-invoice">
-        <div style="text-align:center;margin-bottom:12px">
-          ${s.showLogo&&store.business.logo?`<div style="text-align:center;margin-bottom:8px"><img src="${store.business.logo}" style="max-width:160px;max-height:60px;object-fit:contain"></div>`:`<div style="text-align:center;margin-bottom:8px"><span style="font-size:18px;font-weight:700;color:var(--blue);font-family:cursive">${escHtml(store.business.name||'Blueberry Studio')}</span></div>`}
-          ${s.showCoPhone!==false?`<div>Ph.No.: ${escHtml(store.business.phone||'03132020534')}</div>`:''}
-          ${s.showEmail!==false?`<div>Email: ${escHtml(store.business.email||'blueberryfatraders@gmail.com')}</div>`:''}
-        </div>
-        <div style="border-top:1px dashed #999;margin:8px 0"></div>
-        <div style="text-align:center;font-weight:700;margin:6px 0">Invoice</div>
-        <div style="display:flex;justify-content:space-between;margin:4px 0"><span>Invoice No.: ${escHtml(lastInv.no||'Inv12345')}</span><span>Date: ${escHtml(lastInv.date||new Date().toLocaleDateString('en-GB'))}</span></div>
-        <div style="border-top:1px dashed #999;margin:8px 0"></div>
-        <div style="text-align:center;font-weight:600;margin:4px 0">${escHtml(store.business.name||'Vyapar tech solutions')} (${escHtml(invParty)})</div>
-        <div style="text-align:center;margin-bottom:6px">Ph. No.: ${escHtml(store.business.phone||'+91 9333 911 911')}</div>
-        <div style="margin:4px 0"><b>Customer Name:</b></div>
-        <div style="margin-bottom:8px">${escHtml(invParty)}</div>
-        <div style="border-top:1px dashed #999;margin:6px 0"></div>
-        <table style="width:100%;border-collapse:collapse;font-size:10px">
-          <thead><tr style="border-bottom:1px dashed #999">
-            <th style="text-align:left;padding:4px 0">#</th>
-            <th style="text-align:left;padding:4px 2px">Item Name<br><span style="font-weight:400">Qty Discount(%)</span></th>
-            <th style="text-align:right;padding:4px 2px">MRP</th>
-            <th style="text-align:right;padding:4px 2px">Price</th>
-            <th style="text-align:right;padding:4px 0">Amount<br><span style="font-weight:400">Final Amt</span></th>
-          </tr></thead>
-          <tbody>${invItems.length?invItems.map((r,i)=>`<tr style="border-bottom:1px dashed #ddd"><td style="padding:4px 0">${i+1}</td><td style="padding:4px 2px">${escHtml(r.item||'Item')}<br><span style="color:#666">${r.qty||1} units</span></td><td style="text-align:right;padding:4px 2px">${rs(r.price||0)}</td><td style="text-align:right;padding:4px 2px">${rs(r.price||0)}</td><td style="text-align:right;padding:4px 0">${rs((r.qty||1)*(r.price||0))}</td></tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:16px;color:#999">No items yet</td></tr>`}</tbody>
-        </table>
-        <div style="border-top:1px dashed #999;margin:6px 0"></div>
-        <div style="display:flex;justify-content:space-between;font-weight:600;margin:4px 0"><span>Qty: ${invItems.reduce((a,r)=>a+(r.qty||0),0)}</span><span>Items: ${invItems.length}</span><span>${rs(invTotal)}</span></div>
-        <div style="border-top:1px dashed #999;margin:6px 0"></div>
-        <div style="font-size:10px">
-          <div style="display:flex;justify-content:flex-end;gap:4px"><span style="min-width:80px;text-align:right">Total</span><span>:</span><span style="min-width:60px;text-align:right;font-weight:700">${rs(invTotal)}</span></div>
-          <div style="display:flex;justify-content:flex-end;gap:4px"><span style="min-width:80px;text-align:right">Received</span><span>:</span><span style="min-width:60px;text-align:right">${rs(invReceived)}</span></div>
-          <div style="display:flex;justify-content:flex-end;gap:4px"><span style="min-width:80px;text-align:right">Balance</span><span>:</span><span style="min-width:60px;text-align:right">${rs(invTotal-invReceived)}</span></div>
-        </div>
-        <div style="border-top:1px dashed #999;margin:8px 0"></div>
-        <div style="text-align:center;font-size:10px;color:#666;margin:6px 0">Balance to be paid in 3 days</div>
-        <div style="text-align:center;font-weight:700;margin:8px 0">Terms & Conditions</div>
-        <div style="text-align:center;font-size:10px;color:#666">${escHtml(s.terms||'Product Purchase are non Refundable')}</div>
-      </div></div>
+        <div class="sp-preview">${lastInv.id?buildInvoiceHTML(lastInv):'<div class="sg-section">Create an invoice to see its print preview here.</div>'}</div>
       </div>`;
     } else {
       body+=`<div class="sg-section"><div class="sg-section-title">Regular Printer Settings</div>
@@ -7769,12 +7969,16 @@ function vSettings(){
       <button style="padding:12px 30px;background:#e8453c;color:#fff;border:none;border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px">🔄 Enable Service Reminders</button>
     </div>`;
   }
+  if(setTab==='about') body=`<div class="about-panel"><img src="assets/icon.png" alt="Karobar"><h2>Karobar</h2><p>Billing, inventory and point of sale</p><div class="about-credit">Developed by <strong>Muhammad Hammad Ansar</strong></div><div class="about-version">Version 2.0.0</div></div>`;
   content.innerHTML=`<div class="set-wrap">
       <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
       <div class="set-body"><button class="set-close" onclick="nav('home')" title="Close">✕</button>${body}</div>
     </div>`;
+  if(setTab==='print'&&(store.settings.printerTab||'thermal')==='thermal')refreshThermalPrinters();
+  if(!hasPermission('edit','settings')) content.querySelectorAll('.set-body input,.set-body select,.set-body textarea').forEach(el=>el.disabled=true);
 }
 function applyLiveSettings(){
+  if(!hasPermission('edit','settings')){showNoAccess();return;}
   const s=store.settings, g=id=>document.getElementById(id);
   const chk=k=>{const e=g('set_'+k);if(e)s[k]=e.checked;};
   const val=k=>{const e=g('set_'+k);if(e&&e.value!==undefined)s[k]=e.value;};
@@ -7783,10 +7987,11 @@ function applyLiveSettings(){
   val('cur');num('dec');chk('passcode');chk('tin');chk('negativeStock');chk('blockNewItem');chk('blockNewParty');chk('estimate');chk('proforma');chk('multiFirm');chk('saleOrder');chk('stockTransfer');chk('txnHistory');
   // Transaction
   chk('invNo');chk('addTime');chk('cashSale');chk('billingName');chk('poDetails');chk('quickEntry');chk('noPreview');chk('passcodeTxn');chk('discPayment');chk('linkPayments');chk('dueDates');chk('inclTax');chk('showPurchase');chk('last5Price');chk('freeItemQty');chk('countField');chk('txnTax');chk('txnDiscount');chk('roundOff');
-  val('prefixSale');
+  const salePrefix=g('set_prefixSale');if(salePrefix)s.invPrefix=salePrefix.value==='None'?'':salePrefix.value;
   const bt=document.querySelector('input[name="billingType"]:checked');if(bt)s.billingType=bt.value;
   // Print - thermal printer checkboxes
   chk('thermalDefault');num('itemQtyDec');
+  const printerSelect=g('set_printerName');if(printerSelect&&printerSelect.value)s.thermalPrinterName=printerSelect.value;
   chk('textBold');chk('autoCut');chk('openDrawer');
   // Company fields - map to keys used by invoice preview (thermal uses set_coLogo, regular uses set_showLogo)
   s.showLogo=!!(g('set_coLogo')&&g('set_coLogo').checked||g('set_showLogo')&&g('set_showLogo').checked);
@@ -7803,7 +8008,7 @@ function applyLiveSettings(){
   chk('tTotalQty');chk('tAmountDec');chk('tReceived');chk('tBalance');chk('tPartyBal');chk('tTaxDetails');chk('tYouSaved');chk('tGrouping');chk('tDesc');
   if(g('set_terms'))s.terms=g('set_terms').value;
   // Taxes
-  num('taxrate');
+  const taxInput=g('set_taxrate');if(taxInput)s.taxRate=Math.max(0,+taxInput.value||0);
   // Transaction Message
   chk('smsParty');chk('smsUpdate');chk('smsSelf');chk('smsBalance');chk('smsLink');chk('smsSales');chk('smsPurchase');chk('smsSalesRet');chk('smsPurchRet');chk('smsPayIn');chk('smsPayOut');chk('smsSaleOrd');chk('smsPurchOrd');chk('smsEstimate');chk('smsProforma');chk('smsChallan');chk('smsCancelled');
   const txnMsgEl=g('set_txnmsg');if(txnMsgEl)s.txnMsg=(txnMsgEl.textContent||'').trim();
@@ -7815,17 +8020,18 @@ function applyLiveSettings(){
   if(g('set_zoom')){s.zoom=+g('set_zoom').value;applyZoom();}
   persist();
 }
-function applyZoom(){const s=store.settings,z=s.zoom||100;document.documentElement.style.fontSize=(z/100*14)+'px';}
+function applyZoom(){const s=store.settings;const input=document.getElementById('set_zoom');if(input){s.zoom=+input.value||100;persist();}const z=s.zoom||100;document.documentElement.style.fontSize=(z/100*14)+'px';}
 function uploadLogo(inp){if(!hasPermission('edit','settings')){showNoAccess();return;}const f=inp.files[0];if(!f)return;const r=new FileReader();
   r.onload=e=>{store.business.logo=e.target.result;persist();refreshView();toast('Logo saved');};r.readAsDataURL(f);}
 function saveSettings(){
+  if(!hasPermission('edit','settings')){showNoAccess();return;}
   applyLiveSettings();
   buildMenu();
   persist();toast('Settings saved');logActivity('settings','Updated settings');
 }
-function restoreBackup(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader();
+function restoreBackup(inp){ if(!hasPermission('admin','restore-backup')){showNoAccess();return;} const f=inp.files[0]; if(!f)return; const r=new FileReader();
   r.onload=e=>{ try{ const d=JSON.parse(e.target.result); localStorage.setItem(KEY,JSON.stringify(d)); toast('Backup restored'); location.reload(); }catch(err){ toast('Invalid backup file'); } }; r.readAsText(f); }
-async function resetAll(){ if(await confirmAsync('Delete <b>ALL</b> data and start fresh?<br><span style="color:#888;font-size:12px">This permanently erases everything on this device.</span>',{title:'Reset Everything',icon:'&#x26A0;&#xFE0F;',yesLabel:'Delete All',yesColor:'#e74c3c'})){ localStorage.removeItem(KEY); location.reload(); } }
+async function resetAll(){ if(!hasPermission('edit','settings')){showNoAccess();return;} if(await confirmAsync('Delete <b>ALL</b> data and start fresh?<br><span style="color:#888;font-size:12px">This permanently erases everything on this device.</span>',{title:'Reset Everything',icon:'&#x26A0;&#xFE0F;',yesLabel:'Delete All',yesColor:'#e74c3c'})){ localStorage.removeItem(KEY); location.reload(); } }
 
 /* ============ COMPANY LIST ============ */
 let companyTabSel='my';
@@ -7871,7 +8077,7 @@ function renderCompanies(){
         <div class="cm-sync"><span class="cm-sync-ic">🖥️</span> SYNC ${c.sync?'ON':'OFF'}</div>
         <span class="cm-vsep"></span>
         <button class="cm-open" onclick="openCompany('${c.id}')">Open</button>
-        <span class="cm-dots" onclick="toast('Company options (demo)')">⋮</span>
+
       </div></div>`).join(''):`<div class="cm-empty">No companies found</div>`;
   } else {
     sub.textContent='Below are your branches — open any branch to see its sales & items';
@@ -7881,7 +8087,7 @@ function renderCompanies(){
       <div><div class="cm-card-name">🏪 ${b.name}</div><div class="cm-card-sub">Branch Code: ${b.code}${b.phone?' · Ph: '+b.phone:''}</div></div>
       <div class="cm-card-right">
         <button class="cm-open" onclick="openBranchView('${b.code}')">Open</button>
-        <span class="cm-dots" onclick="toast('Branch options coming soon')">⋮</span>
+
       </div></div>`).join(''):`<div class="cm-empty">No branches created yet. Create branches from the Branches page.</div>`;
   }
 }
@@ -7942,6 +8148,7 @@ function vAvailableStock(){
   content.innerHTML=`<div class="stock-page">
     <div class="stock-head">
       <div class="stock-title">Available Stock</div>
+      ${stockTab==='local'?'<button class="stock-add-btn" onclick="openAddMoreStock()">+ Add More Stock</button>':''}
       <div class="stock-tabs">
         <button class="stock-tab ${stockTab==='local'?'active':''}" onclick="stockTab='local';vAvailableStock()">My Branch</button>
         <button class="stock-tab ${stockTab==='other'?'active':''}" onclick="stockTab='other';vAvailableStock()">Other Branches</button>
@@ -7963,6 +8170,17 @@ function vAvailableStock(){
     <div id="otherBranchesContent" class="stock-loading">Loading other branches...</div>`}
   </div>`;
   if(stockTab==='other')loadOtherBranches(q);
+}
+function openAddMoreStock(){
+  if(!hasPermission('edit','item')){showNoAccess();return;}
+  const items=store.items||[];
+  if(!items.length){openItem();return;}
+  const options=items.map(it=>`<option value="${it.id}">${escHtml(it.name)}${it.code?' ('+escHtml(it.code)+')':''}</option>`).join('');
+  formModal('Add More Stock',`<div class="field"><label>Select item</label><select id="stockItemSelect">${options}</select></div><div class="field"><button type="button" class="btn" onclick="closeModal('formModal');openItem()">+ Create new item</button></div>`,()=>{
+    const id=document.getElementById('stockItemSelect')?.value;
+    closeModal('formModal');
+    if(id){nav('items');adjustStock(id);}
+  },'CONTINUE');
 }
 function renderStockRows(items){
   let rows=[];let idx=0;
@@ -8001,7 +8219,9 @@ function loadOtherBranches(q){
   const el=document.getElementById('otherBranchesContent');
   if(!el)return;
   if(!window.fbDB){el.innerHTML='<div class="stock-empty">Firebase not connected</div>';return;}
-  window.fbDB.collection('branchLookup').get().then(snap=>{
+  const ownerUid=store.currentUser?.ownerUid||window.fbAuth?.currentUser?.uid;
+  if(!ownerUid){el.innerHTML='<div class="stock-empty">Store account not found</div>';return;}
+  window.fbDB.collection('branchLookup').where('ownerUid','==',ownerUid).get().then(snap=>{
     const branches=[];
     const currentBranchCode=store.currentUser?.branchCode||'';
     snap.forEach(doc=>{
@@ -8334,8 +8554,10 @@ function showPaymentBreakdown(){
   const fromEl=document.getElementById('pmFrom');
   const toEl=document.getElementById('pmTo');
   if(!fromEl.value){
-    fromEl.value='2020-01-01';
-    toEl.value='2099-12-31';
+    const now=new Date();
+    const today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    fromEl.value=today;
+    toEl.value=today;
   }
   window.pmBranchFilter='all';
   const bbar=document.getElementById('pmBranchBar');
@@ -8399,11 +8621,14 @@ function renderPaymentBreakdown(){
 }
 function parsePmDate(dateStr){
   if(!dateStr)return null;
-  const parts=dateStr.split(/[\s/-]/);
-  if(parts.length<3)return null;
-  const day=parseInt(parts[0]),month=parseInt(parts[1])-1,year=parseInt(parts[2]);
-  if(isNaN(day)||isNaN(month)||isNaN(year))return null;
-  return new Date(year,month,day);
+  const iso=/^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(dateStr);
+  const local=/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(dateStr);
+  if(!iso&&!local)return null;
+  const year=+(iso?iso[1]:local[3]);
+  const month=+(iso?iso[2]:local[2]);
+  const day=+(iso?iso[3]:local[1]);
+  const date=new Date(year,month-1,day);
+  return date.getFullYear()===year&&date.getMonth()===month-1&&date.getDate()===day?date:null;
 }
 function showProfitView(){
   const profitDiv=document.getElementById('pmProfitView');
@@ -8495,24 +8720,22 @@ function generateBranchCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// Check if branch code exists - check branchLookup and owner's branches
+// Check global code reservations and this owner's branches.
 async function checkBranchCodeExists(code) {
   try {
-    // Check branchLookup first (fast document read)
-    const lookupDoc = await window.fbDB.collection('branchLookup').doc(code).get();
-    if (lookupDoc.exists) return true;
-    
+    const reserved = await window.fbDB.collection('globalBranchCodes').doc(code).get();
+    if (reserved.exists) return true;
+
     // Also check owner's own branches
     const ownerUid = window.fbAuth.currentUser.uid;
     const branchId = 'branch_' + code;
     const branchDoc = await window.fbDB.collection('branches').doc(branchId).get();
     if (branchDoc.exists && branchDoc.data().ownerUid === ownerUid) return true;
-    
+
     return false;
   } catch (e) {
     console.error('Error checking branch code: - app.js:8170', e.message);
-    // On error, assume not exists (safe to try this code)
-    return false;
+    throw e;
   }
 }
 
@@ -8520,32 +8743,34 @@ async function checkBranchCodeExists(code) {
 async function generateUniqueBranchCode() {
   let attempts = 0;
   const maxAttempts = 50;
-  
+
   while (attempts < maxAttempts) {
     const code = generateBranchCode();
     const exists = await checkBranchCodeExists(code);
-    
+
     if (!exists) {
       return code;
     }
-    
+
     attempts++;
     await new Promise(r => setTimeout(r, 100));
   }
-  
+
   throw new Error('Could not generate unique code after ' + maxAttempts + ' attempts. Try again.');
 }
 
-// Save new branch (no password - code only login)
+// Save a branch with its own Firebase Auth account.
 async function saveBranch() {
   const name = (document.getElementById('brName').value || '').trim();
   const phone = (document.getElementById('brPhone').value || '').trim();
   const address = (document.getElementById('brAddress').value || '').trim();
+  const pass = document.getElementById('brPass').value || '';
   const errEl = document.getElementById('brError');
 
   // Validation
   if (!name) { errEl.textContent = 'Branch name is required'; return; }
   if (!phone) { errEl.textContent = 'Phone number is required'; return; }
+  if (pass.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; return; }
 
   // Disable save button
   const saveBtn = document.querySelector('#addBranchModal .btn-red');
@@ -8557,11 +8782,18 @@ async function saveBranch() {
     // Generate unique 6-digit code
     const branchCode = await generateUniqueBranchCode();
     const ownerUid = window.fbAuth.currentUser.uid;
-    const branchId = 'branch_' + branchCode;
+    let worker;
+    try { worker = firebase.app('staffWorker'); }
+    catch (e) { worker = firebase.initializeApp(firebaseConfig, 'staffWorker'); }
+    const sec = worker.auth();
+    const cred = await sec.createUserWithEmailAndPassword(branchCode + '@branch.karobar.app', pass);
+    const branchId = cred.user.uid;
+    await sec.signOut();
 
     // Save branch data to Firestore
     await window.fbDB.collection('branches').doc(branchId).set({
       branchCode: branchCode,
+      authUid: branchId,
       name: name,
       phone: phone,
       address: address,
@@ -8570,7 +8802,14 @@ async function saveBranch() {
       status: 'active'
     });
 
-    // Save to branchLookup for login (public read)
+    // Map the authenticated branch account to its owner's store.
+    await window.fbDB.collection('branchMap').doc(branchId).set({
+      ownerUid: ownerUid,
+      branchCode: branchCode,
+      branchName: name
+    });
+
+    // Lookup is used by stock views and legacy branch migration.
     await window.fbDB.collection('branchLookup').doc(branchCode).set({
       branchId: branchId,
       ownerUid: ownerUid,
@@ -8592,18 +8831,18 @@ async function saveBranch() {
       // Continue - this is optional
     }
 
-    // Add to owner's memberUids so branch can read owner's data
+    // Grant this authenticated branch access to the owner's store.
     await window.fbDB.collection('users').doc(ownerUid).update({
       memberUids: firebase.firestore.FieldValue.arrayUnion(branchId)
     });
 
     errEl.textContent = '';
     closeModal('addBranchModal');
-    
+
     // Show proper success screen
     showBranchSuccess(name, branchCode, phone, address);
     updateBadge();
-    
+
     logActivity('branch', 'Created branch: ' + name + ' (' + branchCode + ')');
 
   } catch (e) {
@@ -8614,11 +8853,42 @@ async function saveBranch() {
   }
 }
 
+// Existing code-only branches need an Auth account before protected rules are published.
+function activateBranchPassword(code) {
+  formModal('Set Branch Password', '<div class="field"><label>Password (at least 6 characters)</label><input id="legacyBranchPass" type="password" autocomplete="new-password"></div>', async function() {
+    const pass = document.getElementById('legacyBranchPass').value || '';
+    if (pass.length < 6) return toast('Password must be at least 6 characters');
+    const ownerUid = window.fbAuth.currentUser && window.fbAuth.currentUser.uid;
+    if (!ownerUid) return toast('Log in as owner first');
+    try {
+      const legacyId = 'branch_' + code;
+      const ref = window.fbDB.collection('branches').doc(legacyId);
+      const snap = await ref.get();
+      if (!snap.exists || snap.data().ownerUid !== ownerUid || snap.data().authUid) return toast('Branch is already secured or unavailable');
+      let worker;
+      try { worker = firebase.app('staffWorker'); }
+      catch (e) { worker = firebase.initializeApp(firebaseConfig, 'staffWorker'); }
+      const sec = worker.auth();
+      const cred = await sec.createUserWithEmailAndPassword(code + '@branch.karobar.app', pass);
+      const branchUid = cred.user.uid;
+      await sec.signOut();
+      await window.fbDB.collection('branchMap').doc(branchUid).set({ownerUid, branchCode: code, branchName: snap.data().name});
+      await window.fbDB.collection('users').doc(ownerUid).update({memberUids: firebase.firestore.FieldValue.arrayUnion(branchUid)});
+      await ref.update({authUid: branchUid});
+      await window.fbDB.collection('users').doc(ownerUid).update({memberUids: firebase.firestore.FieldValue.arrayRemove(legacyId)});
+      closeModal('formModal');
+      await renderAllBranches();
+      toast('Branch password activated');
+    } catch (e) { toast('Activation failed: ' + (e.code || e.message)); }
+  }, 'ACTIVATE');
+}
+
 // Show Add Branch modal
 function showAddBranchModal() {
   document.getElementById('brName').value = '';
   document.getElementById('brPhone').value = '';
   document.getElementById('brAddress').value = '';
+  document.getElementById('brPass').value = '';
   document.getElementById('brError').textContent = '';
   showModal('addBranchModal');
 }
@@ -8634,14 +8904,14 @@ function showBranchSuccess(name, code, phone, address) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  
+
   const container = document.getElementById('branchSuccessContent');
   container.innerHTML = `
     <div style="text-align:center;padding:16px 0 12px">
       <h2 style="margin:0 0 4px;font-size:18px;font-weight:700;color:#222">✅ Branch Created!</h2>
       <p style="margin:0;color:#888;font-size:13px">Share the code with your branch</p>
     </div>
-    
+
     <div style="background:#f8f9fa;border-radius:12px;padding:14px;margin:0 0 12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="font-weight:700;font-size:15px;color:#222">${name}</div>
@@ -8651,21 +8921,21 @@ function showBranchSuccess(name, code, phone, address) {
       ${address ? `<div style="font-size:13px;color:#555;margin-bottom:4px">📍 ${address}</div>` : ''}
       <div style="font-size:12px;color:#888">${dateStr} · ${timeStr}</div>
     </div>
-    
+
     <div style="background:linear-gradient(135deg,#1a73e8,#4285f4);border-radius:12px;padding:16px;text-align:center;margin:0 0 12px">
       <div style="font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Login Code</div>
       <div style="font-size:34px;font-weight:800;color:#fff;letter-spacing:5px;font-family:monospace">${code}</div>
     </div>
-    
+
     <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:center;margin:0 0 14px">
       <span style="font-size:16px">⚠️</span>
       <div style="font-size:12px;color:#856404"><b>Save this code!</b> You won't see it again.</div>
     </div>
-    
+
     <button onclick="copyBranchCode('${code}')" style="width:100%;padding:12px;background:#f8f9fa;border:1px solid var(--line);border-radius:10px;font-size:14px;font-weight:600;color:#333;cursor:pointer;margin-bottom:8px">
       📋 Copy Code
     </button>
-    
+
     <button onclick="closeModal('branchSuccessModal')" style="width:100%;padding:12px;background:#1a73e8;border:none;border-radius:10px;font-size:14px;font-weight:600;color:#fff;cursor:pointer">
       Done
     </button>
@@ -8696,7 +8966,7 @@ async function renderAllBranches() {
   const emptyState = document.getElementById('branchesEmpty');
   const table = document.getElementById('allBranchesTable');
   const countEl = document.getElementById('branchCount');
-  
+
   tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;padding:40px">Loading branches...</td></tr>';
   table.style.display = 'none';
   emptyState.style.display = 'none';
@@ -8715,13 +8985,13 @@ async function renderAllBranches() {
     }
 
     if (countEl) countEl.textContent = snapshot.size + ' branch' + (snapshot.size > 1 ? 'es' : '');
-    
+
     let html = '';
     let index = 1;
-    
+
     snapshot.forEach(doc => {
       const branch = doc.data();
-      
+
       // Format date/time
       let createdStr = '-';
       let timeStr = '';
@@ -8731,7 +9001,7 @@ async function renderAllBranches() {
         createdStr = date.toLocaleDateString('en-US', options);
         timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
       }
-      
+
       html += `
         <tr>
           <td style="color:#999;font-weight:500">${index}</td>
@@ -8755,6 +9025,7 @@ async function renderAllBranches() {
             </span>
           </td>
           <td style="display:flex;gap:6px">
+            ${!branch.authUid ? `<button onclick="activateBranchPassword('${branch.branchCode}')" class="branch-action-btn">Set Password</button>` : ''}
             <button onclick="copyBranchCode('${branch.branchCode}')" class="branch-action-btn">
               📋 Copy
             </button>
@@ -8789,21 +9060,28 @@ function deleteBranch(branchCode, branchName) {
 }
 async function doDeleteBranch(branchCode, branchName) {
   const ownerUid = window.fbAuth.currentUser.uid;
-  const branchId = 'branch_' + branchCode;
 
   try {
+    const lookupRef = window.fbDB.collection('branchLookup').doc(branchCode);
+    const lookup = await lookupRef.get();
+    if (!lookup.exists || lookup.data().ownerUid !== ownerUid) throw new Error('Branch not found');
+    const branchId = lookup.data().branchId;
+    const branchSnap = await window.fbDB.collection('branches').doc(branchId).get();
+    const authUid = branchSnap.exists && branchSnap.data().authUid;
     // 1) Delete from branches collection
     await window.fbDB.collection('branches').doc(branchId).delete();
 
     // 2) Delete from branchLookup
-    await window.fbDB.collection('branchLookup').doc(branchCode).delete();
+    await lookupRef.delete();
+
+    if (authUid) await window.fbDB.collection('branchMap').doc(authUid).delete();
 
     // 3) Try to delete from globalBranchCodes
     try { await window.fbDB.collection('globalBranchCodes').doc(branchCode).delete(); } catch(e){}
 
     // 4) Remove branchId from owner's memberUids
     await window.fbDB.collection('users').doc(ownerUid).update({
-      memberUids: firebase.firestore.FieldValue.arrayRemove(branchId)
+      memberUids: firebase.firestore.FieldValue.arrayRemove(authUid || branchId)
     });
 
     toast('Branch deleted successfully');
@@ -8820,6 +9098,7 @@ function branchLoginPrompt() {
   document.getElementById('fbAuthModal').style.display='none';
   document.getElementById('branchAuthModal').style.display='block';
   document.getElementById('branchCodeInput').value='';
+  document.getElementById('branchPassInput').value='';
   document.getElementById('branchAuthError').textContent='';
   setTimeout(()=>{document.getElementById('branchCodeInput').focus();},100);
 }
@@ -8829,12 +9108,14 @@ function showMainLogin() {
 }
 function fbBranchDoLogin() {
   var code=(document.getElementById('branchCodeInput').value||'').trim();
+  var pass=document.getElementById('branchPassInput').value||'';
   var errEl=document.getElementById('branchAuthError');
   if(!code){errEl.textContent='Enter branch code';return;}
   if(code.length!==6){errEl.textContent='Code must be 6 digits';return;}
+  if(!pass){errEl.textContent='Enter branch password';return;}
   errEl.textContent='Logging in...';
   errEl.style.color='#888';
-  window.fbBranchLogin(code,function(m){
+  window.fbBranchLogin(code,pass,function(m){
     errEl.textContent=m;
     errEl.style.color='#e74c3c';
   });
@@ -8892,6 +9173,7 @@ function fbBranchDoLogin() {
         setStatus('☁️ Saved · ' + new Date().toLocaleTimeString());
       }).catch(function(e){
         setStatus('⚠️ Save failed: ' + e.code);
+        logDiagnostic('sync error','Save failed: '+(e.code||e.message||'unknown error'));
         console.error('cloudPush error - app.js:8552', e);
       });
     }, 700);
@@ -8909,7 +9191,7 @@ function fbBranchDoLogin() {
       updateBadge();
       if(typeof buildMenu==='function') buildMenu();
       if(typeof refreshAll==='function') refreshAll();
-    }catch(e){ console.error('applyRemote error - app.js:8569', e); }
+    }catch(e){ logDiagnostic('sync error','Applying remote data failed: '+(e.message||e)); console.error('applyRemote error - app.js:8569', e); }
     finally{ applyingRemote = false; }
   }
 
@@ -8921,19 +9203,19 @@ function fbBranchDoLogin() {
     if(pushTimer){ clearTimeout(pushTimer); pushTimer = null; }  // drop any previous pending write
     if(unsub){ unsub(); unsub = null; }
     setStatus('Loading your data…');
-    
+
     // 0) Am I a branch? Check branchMap first.
     window.fbDB.collection('branchMap').doc(authUid).get().then(function(branchSnap){
       var isBranchSession = false;
       var branchData = null;
       var ownerUid = authUid;
-      
+
       if (branchSnap.exists && branchSnap.data() && branchSnap.data().ownerUid) {
         isBranchSession = true;
         branchData = branchSnap.data();
         ownerUid = branchSnap.data().ownerUid;
       }
-      
+
       // 1) Am I a staff member of someone else's store? Check the mapping.
       return window.fbDB.collection('staffMap').doc(authUid).get().then(function(mapSnap){
         if (!isBranchSession) {
@@ -8941,6 +9223,9 @@ function fbBranchDoLogin() {
           isStaffSession = (ownerUid !== authUid);
         } else {
           isStaffSession = false;
+        }
+        if(ownerUid===authUid && fbUser && /@(staff|branch)\.karobar\.app$/i.test(fbUser.email||'')){
+          throw {code:'user-deleted',message:'This staff or branch account is no longer linked to a store.'};
         }
         dataUid = ownerUid;                           // <-- read/write the OWNER's store doc
         // 2) Load that store's data.
@@ -8962,7 +9247,8 @@ function fbBranchDoLogin() {
               name: branchData.branchName || 'Branch',
               role: 'branch',
               id: 'branch',
-              branchCode: branchData.branchCode
+              branchCode: branchData.branchCode,
+              ownerUid: ownerUid
             };
           }else if(isStaffSession){
             var me = (store.users||[]).filter(function(u){return u.staffUid===authUid;})[0];
@@ -9003,6 +9289,7 @@ function fbBranchDoLogin() {
       // No data loaded -> never fall back to in-memory data (could be another store's!)
       cloudReady = false; dataUid = null; isStaffSession = false;
       console.error('loadUserData error - app.js:8662', e);
+      logDiagnostic('sync error','Loading store data failed: '+(e.code||e.message||'unknown error'));
       var errMsg = 'Please check your internet connection and try again.';
       if(e.code === 'user-deleted') errMsg = 'Your account has been removed. Contact admin.';
       else if(e.code === 'owner-store-missing') errMsg = 'Store data not found. Contact admin.';
@@ -9026,9 +9313,11 @@ function fbBranchDoLogin() {
       if(json === lastPushedJSON) return;            // echo of our own write
       if(json === cloudJSON()) return;               // already in sync
       applyRemote(json);
+      logDiagnostic('sync','Received remote store update');
       setStatus('☁️ Synced · ' + new Date().toLocaleTimeString());
     }, function(err){
       setStatus('⚠️ Sync error: ' + err.code);
+      logDiagnostic('sync error','Live sync failed: '+(err.code||err.message||'unknown error'));
       console.error('onSnapshot error - app.js:8689', err);
     });
   }
@@ -9190,88 +9479,18 @@ function fbBranchDoLogin() {
     });
   };
 
-  // ---- Branch logs in with code only (no password) ----
-  window.fbBranchLogin = function(branchCode, onErr) {
+  // Branch login uses Firebase Auth; branchMap resolves the owner's store.
+  window.fbBranchLogin = function(branchCode, pass, onErr) {
     var code = (branchCode || '').trim();
-    
-    if (!code) {
-      if (onErr) onErr('Branch code required');
+    if (!/^\d{6}$/.test(code) || !pass) {
+      if (onErr) onErr('Enter a valid 6-digit code and password.');
       return;
     }
-
-    // Find branch using branchLookup collection (public read, no auth needed)
-    window.fbDB.collection('branchLookup').doc(code).get()
-      .then(function(doc) {
-        if (!doc.exists) {
-          if (onErr) onErr('Invalid branch code');
-          return;
-        }
-
-        var lookupData = doc.data();
-        var ownerUid = lookupData.ownerUid;
-        var branchName = lookupData.branchName;
-        var branchPhone = lookupData.phone || '';
-        var branchAddress = lookupData.address || '';
-
-        if (!ownerUid) {
-          if (onErr) onErr('Branch configuration error');
-          return;
-        }
-
-        // Load owner's data
-        window.fbDB.collection('users').doc(ownerUid).get().then(function(ownerSnap) {
-          if (!ownerSnap.exists || !ownerSnap.data().data) {
-            if (onErr) onErr('Owner data not found');
-            return;
-          }
-
-          // Apply owner's data to local store
-          var jsonData = ownerSnap.data().data;
-          applyingRemote = true;
-          store = JSON.parse(jsonData);
-          store.currentUser = {
-            name: branchName,
-            role: 'branch',
-            id: 'branch',
-            branchCode: code,
-            branchPhone: branchPhone,
-            branchAddress: branchAddress,
-            ownerUid: ownerUid
-          };
-          if (typeof ensure === 'function') ensure();
-          localStorage.setItem(KEY, JSON.stringify(store));
-          lastPushedJSON = cloudJSON();
-          applyingRemote = false;
-          cloudReady = true;
-          dataUid = ownerUid;
-          
-          // Update memberUids if not already there
-          var memberUids = ownerSnap.data().memberUids || [];
-          var branchId = 'branch_' + code;
-          if (!memberUids.includes(branchId)) {
-            window.fbDB.collection('users').doc(ownerUid).update({
-              memberUids: firebase.firestore.FieldValue.arrayUnion(branchId)
-            });
-          }
-
-          // Close modals and navigate
-          try { closeModal('formModal'); closeModal('companyModal'); document.getElementById('branchAuthModal').style.display='none'; document.getElementById('fbAuthModal').style.display='none'; } catch(e) {}
-          var badge = document.getElementById('currentUserBadge');
-          if (badge) badge.textContent = branchName + ' (Branch)';
-          if (typeof refreshAll === 'function') refreshAll();
-          if (typeof nav === 'function') { try { nav('home'); } catch(e) {} }
-          hideAuthModal();
-          setStatus('☁️ Branch connected · ' + new Date().toLocaleTimeString());
-          
-          // Start live sync for owner's data
-          startSnapshot(ownerUid);
-          
-        }).catch(function(e) {
-          if (onErr) onErr('Error loading data: ' + e.message);
-        });
-      })
+    window.fbAuth.signInWithEmailAndPassword(code + '@branch.karobar.app', pass)
       .catch(function(e) {
-        if (onErr) onErr('Error: ' + e.message);
+        var msg = 'Invalid branch code or password.';
+        if (e.code === 'auth/network-request-failed') msg = 'Please check your internet connection and try again.';
+        if (onErr) onErr(msg);
       });
   };
 

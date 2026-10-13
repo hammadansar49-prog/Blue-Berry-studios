@@ -16,10 +16,13 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
+const { execFile } = require('child_process');
+const { availablePrinters, checkPrinter } = require('./printer');
 
 // Older Windows (7/8) + some GPUs render Chromium poorly; disabling
 // GPU acceleration makes the app boot reliably everywhere.
 app.disableHardwareAcceleration();
+if (process.platform === 'win32') app.setAppUserModelId('com.karobar.app');
 
 let mainWindow = null;
 let localServer = null;
@@ -95,7 +98,7 @@ function createWindow(startUrl) {
     minHeight: 640,
     show: false,
     backgroundColor: '#ffffff',
-    title: 'KAROBAR',
+    title: 'Karobar',
     icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     webPreferences: {
       contextIsolation: true,
@@ -133,6 +136,51 @@ function createWindow(startUrl) {
 ipcMain.handle('karobar-open-google', function () {
   if (serverPort) shell.openExternal('http://localhost:' + serverPort + '/google.html');
   return true;
+});
+
+ipcMain.handle('karobar-printers', async function () {
+  if (!mainWindow || mainWindow.isDestroyed()) throw new Error('App window is unavailable.');
+  return availablePrinters(await mainWindow.webContents.getPrintersAsync());
+});
+
+ipcMain.handle('karobar-printer-hints', function () {
+  if (process.platform !== 'win32') return [];
+  const script = "Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match '(printer|receipt|thermal|epson|bixolon|star micronics|zebra|xprinter|rongta|pos-)' } | Select-Object -First 8 FriendlyName,Status | ConvertTo-Json -Compress";
+  return new Promise(resolve => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, (err, stdout) => {
+      if (err || !stdout.trim()) return resolve([]);
+      try {
+        const devices = JSON.parse(stdout);
+        resolve((Array.isArray(devices) ? devices : [devices]).filter(d => d && typeof d.FriendlyName === 'string').map(d => ({ name: d.FriendlyName, status: d.Status || '' })));
+      } catch (e) { resolve([]); }
+    });
+  });
+});
+
+ipcMain.handle('karobar-print-invoice', async function (_event, job) {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'App window is unavailable.' };
+  if (!job || typeof job.html !== 'string' || !job.html.trim() || job.html.length > 2000000 || typeof job.printerName !== 'string') {
+    return { ok: false, error: 'Invalid print job.' };
+  }
+  let printers;
+  try { printers = await mainWindow.webContents.getPrintersAsync(); }
+  catch (e) { return { ok: false, error: 'Could not query Windows printers: ' + e.message }; }
+  const selected = checkPrinter(printers, job.printerName);
+  if (!selected.ok) return selected;
+  const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  try {
+    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(job.html));
+    const result = await new Promise(resolve => {
+      win.webContents.print({ silent: true, printBackground: true, deviceName: job.printerName }, (success, reason) => {
+        resolve(success ? { ok: true } : { ok: false, error: reason || 'Windows rejected the print job.' });
+      });
+    });
+    return result;
+  } catch (e) {
+    return { ok: false, error: 'Print failed: ' + e.message };
+  } finally {
+    if (!win.isDestroyed()) win.close();
+  }
 });
 
 app.whenReady().then(function () {

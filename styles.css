@@ -2256,3 +2256,59 @@ input[data-1p-ignore]:autofill{animation:onAutoFillStart 0s forwards}
   .stock-summary{flex-wrap:wrap;gap:12px}
 }
 
+
+/* Consistent KAROBAR navigation and restrained motion */
+.tb-logo{width:28px;height:28px;object-fit:contain;background:#080808;border-radius:5px;padding:1px}
+.user-avatar{width:26px;height:26px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(135deg,#e0413e,#f0b429);color:#fff;font-weight:800;font-size:12px;flex-shrink:0}
+.mi .ic{width:24px;height:24px;display:grid;place-items:center;color:#c4cbdd;opacity:1}
+.nav-icon{width:19px;height:19px;display:block;flex-shrink:0}
+.mi:hover .ic,.mi.active .ic{color:#fff}
+.mi,.smi,.tb-menu,.tb-refresh,.mycompany,.btn,.btn-big,.stock-add-btn,.dash-card,.dash-report-card,.ip-item,.pl-item,.ob-card{transition:background-color .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+.mi:hover,.smi:hover{transform:translateX(2px)}
+.btn:not(:disabled):hover,.btn-big:not(:disabled):hover,.stock-add-btn:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(30,34,56,.13)}
+.dash-card:hover,.dash-report-card:hover,.empty-quick-grid button:hover,.ob-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(30,34,56,.1)}
+.modal-overlay.show .modal,.modal-overlay[style*="display: flex"] .modal{animation:karobarModalIn .2s ease-out}
+@keyframes karobarModalIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.mi,.smi,.tb-menu,.tb-refresh,.mycompany,.btn,.btn-big,.stock-add-btn,.dash-card,.dash-report-card,.ip-item,.pl-item,.ob-card{transition:none!important}.modal-overlay.show .modal,.modal-overlay[style*="display: flex"] .modal{animation:none!important}}
+.empty-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:12px;width:min(100%,760px);margin:30px 0}
+.empty-quick-grid button{text-align:left;background:#f9fafc;border:1px solid #e9ebf0;border-radius:14px;padding:18px;cursor:pointer;color:#1e2238;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.empty-quick-grid button:hover{border-color:#e0413e}
+.empty-quick-grid b{display:block;color:#e0413e;font-size:12px;letter-spacing:.1em;margin-bottom:12px}
+.empty-quick-grid strong{display:block;font-size:15px;margin-bottom:6px}
+.empty-quick-grid span{display:block;color:#848a98;font-size:12px;line-height:1.45}
+.stock-add-btn{background:#e0413e;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+@media(max-width:760px){.empty-quick-grid{grid-template-columns:1fr}.stock-add-btn{width:100%}}
+
+.about-panel{max-width:560px;margin:52px auto;text-align:center;background:#fff;border:1px solid #e9ebf0;border-radius:18px;padding:36px;box-shadow:0 8px 28px rgba(30,34,56,.06)}
+.about-panel img{width:80px;height:80px;object-fit:contain;border-radius:14px;background:#000}
+.about-panel h2{margin:18px 0 6px;font-size:28px;color:#1e2238}
+.about-panel p{color:#848a98}
+.about-credit{margin-top:28px;padding-top:20px;border-top:1px solid #e9ebf0;color:#596174}.about-credit strong{color:#1e2238}
+.about-version{font-size:12px;color:#9aa0ab;margin-top:18px}
+
+.nci-rnd{width:58px;border-radius:12px;font-size:12px;font-weight:700;color:#1e2238}
+.nci-rnd:focus-visible,.nci-save:focus-visible,.mi:focus-visible,.empty-quick-grid button:focus-visible{outline:2px solid #2f6df6;outline-offset:2px}
+
+.cloud-label{font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#cbd2e0}
+.dash-empty-sales{min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#667085;text-align:center}
+.dash-empty-sales strong{color:#263248;font-size:16px}
+.dash-empty-sales button,.dash-empty-action{margin-top:8px;border:0;border-radius:9px;padding:9px 16px;color:#fff;background:#2f6df6;font-weight:700;cursor:pointer}
+.ip-action-btn{margin-left:8px;border:1px solid #d8e2f2;border-radius:8px;padding:5px 10px;color:#2f6df6;background:#fff;font-weight:700;cursor:pointer}
+.ip-action-btn.danger{color:#d94644;border-color:#f3cccc}
+.scanner-status{cursor:pointer}
+.scanner-status:hover{background:#eaf2ff!important}
+.scanner-status:focus-visible,.pos-search-result:focus-visible{outline:2px solid #2f6df6;outline-offset:2px}
+.pos-inv-search{position:relative}
+.pos-search-dropdown{display:none;position:absolute;top:100%;left:0;right:0;z-index:90;background:#fff;border:1px solid #d8e2f2;border-radius:0 0 12px 12px;box-shadow:0 14px 25px rgba(23,40,79,.15);max-height:360px;overflow:auto}
+.pos-search-dropdown.show{display:block}
+.pos-search-result{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;border:0;border-bottom:1px solid #edf0f5;background:#fff;padding:10px 14px;cursor:pointer;color:#243047}
+.pos-search-result:hover,.pos-search-result.active{background:#eaf2ff}
+.pos-search-result span{display:flex;flex-direction:column;gap:2px}.pos-search-result small{color:#7b8798}.pos-search-empty{padding:15px;color:#7b8798}
+.nci-preview-warning{margin:10px;padding:11px 14px;border-radius:8px;background:#fff4e6;color:#934a06;font-size:13px}
+.nci-slip-btn:disabled{opacity:.5;cursor:not-allowed}
+.keyboard-help-overlay{position:fixed;inset:0;z-index:10001;background:rgba(16,25,44,.55);display:grid;place-items:center;padding:20px}
+.keyboard-help-card{width:min(620px,100%);background:#fff;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.keyboard-help-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.keyboard-help-head h2{margin:0;font-size:22px}.keyboard-help-head button{border:1px solid #d8e2f2;border-radius:8px;background:#fff;padding:8px 12px;cursor:pointer}
+.keyboard-help-grid{display:grid;grid-template-columns:1fr auto;gap:12px 16px;align-items:center;font-size:14px}.keyboard-help-grid kbd{background:#f1f4fa;border:1px solid #d6ddeb;border-radius:6px;padding:5px 8px;white-space:nowrap;font-family:inherit;font-weight:700}
+.keyboard-help-trigger{border:1px solid #d8e2f2;border-radius:8px;background:#fff;color:#2b3850;padding:6px 10px;margin-left:8px;font-size:12px;font-weight:700;cursor:pointer}
+.keyboard-help-trigger:hover{background:#eaf2ff}

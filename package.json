@@ -1,6 +1,6 @@
 {
   "name": "karobar",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "KAROBAR - Billing & POS desktop app",
   "main": "electron/main.js",
   "author": "Hammad Ansar",
@@ -20,7 +20,7 @@
   },
   "build": {
     "appId": "com.karobar.app",
-    "productName": "KAROBAR",
+    "productName": "Karobar",
     "copyright": "Copyright © Hammad Ansar",
     "files": [
       "electron/**/*",
@@ -29,10 +29,12 @@
       "app.js",
       "styles.css",
       "firebase-config.js",
-      "assets/**/*"
+      "assets/**/*",
+      "vendor/**/*"
     ],
     "win": {
       "icon": "assets/icon.ico",
+      "signAndEditExecutable": true,
       "target": [
         {
           "target": "nsis",
@@ -52,8 +54,11 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "KAROBAR",
+      "shortcutName": "Karobar",
       "installerIcon": "assets/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
       "uninstallerIcon": "assets/icon.ico",
       "include": "build/installer.nsh",
       "license": "build/license.txt"

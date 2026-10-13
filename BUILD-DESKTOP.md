@@ -118,7 +118,20 @@ Yeh tab aata tha jab app `file://` se chalti thi (Firebase login file:// par kaa
 
 ## Zaroori baatein
 
-- App internet use karti hai (Firebase cloud sync + barcode/QR libraries CDN se). Offline par
-  local data chalta rahega, internet aate hi sync ho jayega.
+### Thermal invoice printing (Windows desktop)
+
+Open Settings > Print > Thermal Printer, click Refresh printers, select the installed Windows printer, then Save. Test print sends a sample receipt. Invoice Print sends the job directly to that printer and reports whether the Windows spooler accepted it or returned an error. If Windows lists no printer, the app shows an official setup/driver support link and the detected device name when available. A working installed printer needs no extra download. Offline, jammed, and out-of-paper states reported by Windows block the job with a message. The browser version uses the browser print dialog.
+
+Spooler acceptance does not prove paper was physically printed. Windows drivers may not report all hardware faults. Auto cut and cash drawer controls are not implemented through this print path; they require printer-specific commands or driver support. Check those features on the actual device before relying on them.
+
+### Branch login migration and Firestore rules
+
+Branch login now requires its six-digit code plus a password. Before publishing the new `firestore.rules`, sign in as the owner, open **All Branches**, and use **Set Password** on every older branch. New branches receive a password when created. Then publish the rules for Firebase project `karobar-3dad1`. The new rules remove public reads of store data. Existing code-only branch sessions cannot continue until their owner sets a password.
+
+After migration, run `firebase.cmd deploy --only firestore:rules --project karobar-3dad1` on Windows, or publish the contents of `firestore.rules` in Firebase Console. Do not publish before existing branches have passwords.
+
+- Installer mein Firebase, barcode, QR, aur Excel JavaScript libraries bundled hain. Firebase
+  login/cloud sync aur WhatsApp jaisi online services ke liye internet chahiye. Printer driver
+  sirf tab install karna hoga jab Windows mein compatible printer pehle se available na ho.
 - `node_modules/` aur `dist/` git mein push nahi hote (`.gitignore` mein hain) — yeh har machine
   par `npm install` / `npm run dist` se bante hain.
