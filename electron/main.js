@@ -16,6 +16,7 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
+const printing = require('./printing');
 
 // Older Windows (7/8) + some GPUs render Chromium poorly; disabling
 // GPU acceleration makes the app boot reliably everywhere.
@@ -137,6 +138,7 @@ ipcMain.handle('karobar-open-google', function () {
 
 app.whenReady().then(function () {
   Menu.setApplicationMenu(null); // hide the default Electron menu bar
+  printing.register(function () { return mainWindow; });
 
   // During development you can run VS Code Live Server (port 5500)
   // and start Electron with `npm run dev` to load the live URL.

@@ -39,8 +39,8 @@ function defaults(){ return {business:{name:'',phone:'',logo:'',email:'',btype:'
     passcode:false,tin:false,blockNewItem:false,blockNewParty:false,estimate:false,proforma:false,multiFirm:true,stockTransfer:false,txnHistory:true,
     posBillDisc:true,posBillTax:false,posFreeQty:false,posLoyalty:false,posRoundOff:false,posPrimary:'print',posPricing:'without',posCardPayment:true,posQr:true,posBank:true,
     invNo:true,addTime:false,cashSale:true,billingName:true,poDetails:false,quickEntry:false,noPreview:false,passcodeTxn:false,discPayment:true,linkPayments:true,dueDates:false,inclTax:true,showPurchase:false,last5Price:false,freeItemQty:false,countField:true,txnTax:false,txnDiscount:true,roundOff:false,billingType:'lite',
-    printerTab:'thermal',printTheme:5,thermalDefault:true,pageSize:'3inch',textBold:true,autoCut:true,openDrawer:false,coName:true,coAddress:false,coEmail:true,coPhone:true,
-    tSno:true,tUom:true,tMrp:true,tSize:false,tModel:false,tSerial:false,tTotalQty:true,tAmountDec:true,tReceived:true,tBalance:true,tPartyBal:false,tTaxDetails:false,tYouSaved:true,tGrouping:true,tDesc:true,
+    printerTab:'thermal',printTheme:5,thermalDefault:true,pageSize:'3inch',printType:'graphic',customPaperMm:80,customChars:48,textBold:true,autoCut:true,openDrawer:false,extraLines:0,regularPaper:'A4',receiptTitle:'Invoice',coName:true,coAddress:false,coEmail:true,coPhone:true,
+    tSno:true,tUom:true,tMrp:true,tSize:false,tCode:false,tModel:false,tSerial:false,tBarcode:true,tQR:false,tTotalQty:true,tAmountDec:true,tReceived:true,tBalance:true,tPartyBal:false,tTaxDetails:false,tYouSaved:true,tGrouping:true,tDesc:true,tTerms:true,tWords:'english',
     smsParty:true,smsUpdate:false,smsSelf:false,smsBalance:false,smsLink:true,smsSales:true,smsPurchase:true,smsSalesRet:true,smsPurchRet:true,smsPayIn:true,smsPayOut:true,smsSaleOrd:true,smsPurchOrd:false,smsEstimate:false,smsProforma:false,smsChallan:false,smsCancelled:true,
     partyGroup:false,shipAddr:false,partyStatus:true,payReminder:false,loyalty:false,
     enableItem:true,barcodeScan:true,directBarcode:true,stockMaintain:true,manufacturing:false,lowStock:true,itemUnit:true,itemCategory:true,partyWiseRate:false,itemDesc:true,itemTax:false,itemDiscount:true,updatePrice:false,itemQtyDec:2,wholesale:true,sizeField:false}}; }
@@ -1443,8 +1443,12 @@ async function trashPartyById(pid){
   logActivity('return','Moved party "'+p.name+'" to recycle bin');
 }
 function printInvoice(){
+  // Real printing lives in print.js: picks thermal receipt or A4 invoice
+  // per Settings -> Print, and prints silently to the chosen printer in
+  // the desktop app (falls back to the browser's print dialog on web).
+  if(typeof kbPrintInvoice==='function'){ kbPrintInvoice(viewInv); return; }
   const w=window.open('','_blank','width=820,height=900');
-  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
+  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
   w.document.close(); w.focus();
   setTimeout(()=>{
     w.document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
@@ -1493,7 +1497,10 @@ function printAndSaveInvoice(){
   printInvoice();
 }
 function downloadInvoice(){
-  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}<script>setTimeout(()=>{document.querySelectorAll('.inv-barcode-svg').forEach(svg=>{try{JsBarcode(svg,svg.getAttribute('data-code')||'000000',{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});}catch(e){}});window.print();},600)<\/script></body></html>`); w.document.close();
+  // Desktop app: real PDF file via a save dialog. Browser: print dialog
+  // with "Save as PDF" (same as before, just via vendor'd JsBarcode).
+  if(typeof kbSaveInvoicePDF==='function'){ kbSaveInvoicePDF(viewInv); return; }
+  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}<script>setTimeout(()=>{document.querySelectorAll('.inv-barcode-svg').forEach(svg=>{try{JsBarcode(svg,svg.getAttribute('data-code')||'000000',{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});}catch(e){}});window.print();},600)<\/script></body></html>`); w.document.close();
 }
 function printCSS(){ return `body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
 .print-invoice{max-width:760px;margin:auto}
@@ -2195,12 +2202,7 @@ function confirmSaveAndPrint(){
       Object.assign(old,{party:cust,phone,date:saleDate,rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
       persist(); refreshView();
       closeModal('invViewModal');
-      const printContent=document.getElementById('iv_body').innerHTML;
-      const pw=window.open('','','width=800,height=600');
-      pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"></head><body>'+printContent+'</body></html>');
-      pw.document.close();
-      pw.focus();
-      setTimeout(()=>{pw.print();pw.close();},500);
+      if(typeof kbPrintInvoice==='function')kbPrintInvoice(old); else window.print();
       posCloseTab(posActiveTab);
       posEditingId=null;
       toast('Invoice updated & printed!');
@@ -2212,7 +2214,8 @@ function confirmSaveAndPrint(){
   const branchPhone2=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const createdBy2=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
   const createdByName2=store.currentUser?store.currentUser.name:'';
-  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid',branchPhone:branchPhone2,createdBy:createdBy2,createdByName:createdByName2});
+  const newSale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid',branchPhone:branchPhone2,createdBy:createdBy2,createdByName:createdByName2};
+  store.sales.push(newSale);
   store.counters.sale++;
   if(s.stockMaintain!==false)rows.forEach(r=>deductItemStock(r));
   let p=store.parties.find(x=>x.name===cust);
@@ -2222,18 +2225,7 @@ function confirmSaveAndPrint(){
   store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:recv,mode:mode,date:dispDate()});
   persist(); refreshView();
   closeModal('invViewModal');
-  const printContent=document.getElementById('iv_body').innerHTML;
-  const pw=window.open('','','width=800,height=600');
-  pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script></head><body>'+printContent+'</body></html>');
-  pw.document.close();
-  pw.focus();
-  setTimeout(()=>{
-    pw.document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
-      var code=svg.getAttribute('data-code')||'000000';
-      try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12}); }catch(e){}
-    });
-    pw.print();pw.close();
-  },800);
+  if(typeof kbPrintInvoice==='function')kbPrintInvoice(newSale); else window.print();
   posCloseTab(posActiveTab);
   posEditingId=null;
   toast('Invoice saved & printed!');
@@ -3358,15 +3350,16 @@ function printPurchase(idx){
   const p=(store.purchases||[])[idx];
   if(!p)return;
   const rows=(p.rows||[]).map(r=>`<tr><td>${r.item||''}</td><td style="text-align:right">${r.qty||0}</td><td style="text-align:right">${rs(r.price||0)}</td><td style="text-align:right">${rs((r.qty||0)*(r.price||0))}</td></tr>`).join('');
-  const w=window.open('','','width=800,height=600');
-  w.document.write(`<html><head><title>Purchase ${p.no||''}</title><style>body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}th{background:#f5f5f5}.r{text-align:right}.total{font-weight:700;border-top:2px solid #333}</style></head><body>
-    <h2>Purchase Invoice</h2>
+  const body=`<h2>Purchase Invoice</h2>
     <p><b>Party:</b> ${p.party||'-'} | <b>Date:</b> ${p.date||'-'} | <b>Invoice:</b> ${p.no||'-'}</p>
     <table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody>
     <tfoot><tr class="total"><td>Total</td><td></td><td></td><td class="r">${rs(p.total)}</td></tr>
     <tr><td>Received</td><td></td><td></td><td class="r" style="color:green">${rs(p.received||0)}</td></tr>
-    <tr class="total"><td>Balance Due</td><td></td><td></td><td class="r" style="color:red">${rs(p.total-p.received)}</td></tr></tfoot></table>
-    </body></html>`);
+    <tr class="total"><td>Balance Due</td><td></td><td></td><td class="r" style="color:red">${rs(p.total-p.received)}</td></tr></tfoot></table>`;
+  const css='body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}th{background:#f5f5f5}.r{text-align:right}.total{font-weight:700;border-top:2px solid #333}';
+  if(typeof kbPrintSimpleDoc==='function'){ kbPrintSimpleDoc('Purchase '+(p.no||''),css,body); return; }
+  const w=window.open('','','width=800,height=600');
+  w.document.write(`<html><head><title>Purchase ${p.no||''}</title><style>${css}</style></head><body>${body}</body></html>`);
   w.document.close(); w.print();
 }
 
@@ -3402,8 +3395,11 @@ function exportPurchaseExcel(){
 
 function printPurchaseList(){
   const rows=(store.purchases||[]).map(p=>`<tr><td>${p.date||''}</td><td>${p.no||''}</td><td>${p.party||''}</td><td style="text-align:right">${rs(p.total)}</td><td style="text-align:right">${rs(p.total-p.received)}</td><td>${p.total-p.received<=0?'Paid':'Unpaid'}</td></tr>`).join('');
+  const body=`<h2>Purchase Bills Report</h2><table><thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th class="r">Amount</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const css='body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}th{background:#f5f5f5}.r{text-align:right}';
+  if(typeof kbPrintSimpleDoc==='function'){ kbPrintSimpleDoc('Purchase Bills',css,body); return; }
   const w=window.open('','','width=900,height=600');
-  w.document.write(`<html><head><title>Purchase Bills</title><style>body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}th{background:#f5f5f5}.r{text-align:right}</style></head><body><h2>Purchase Bills Report</h2><table><thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th class="r">Amount</th><th class="r">Balance</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+  w.document.write(`<html><head><title>Purchase Bills</title><style>${css}</style></head><body>${body}</body></html>`);
   w.document.close(); w.print();
 }
 function filterPurchaseRows(q){
@@ -3697,7 +3693,7 @@ function showPOPreview(order){
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div onclick="toast('PDF downloading')" style="text-align:center;cursor:pointer;padding:10px;border:1px solid #eee;border-radius:8px;flex:1;min-width:60px"><div style="font-size:24px">📥</div><div style="font-size:11px">PDF</div></div>
-        <div onclick="window.print()" style="text-align:center;cursor:pointer;padding:10px;border:1px solid #eee;border-radius:8px;flex:1;min-width:60px"><div style="font-size:24px">🖨️</div><div style="font-size:11px">Print</div></div>
+        <div onclick="kbPrintView(this)" style="text-align:center;cursor:pointer;padding:10px;border:1px solid #eee;border-radius:8px;flex:1;min-width:60px"><div style="font-size:24px">🖨️</div><div style="font-size:11px">Print</div></div>
       </div>
     </div>
   </div>
@@ -3710,8 +3706,11 @@ function printPurchaseOrder(idx){
   const o=(store.purchaseOrders||[])[idx];
   if(!o)return;
   const rows=(o.rows||[]).map((r,i)=>`<tr><td>${i+1}</td><td>${r.item}</td><td style="text-align:right">${r.qty} ${r.unit||''}</td><td style="text-align:right">${rs(r.price)}</td><td style="text-align:right">${rs((r.qty||0)*(r.price||0)-(r.discA||0))}</td></tr>`).join('');
+  const body=`<h2>Purchase Order #${o.orderNo}</h2><p><b>Party:</b> ${o.party} | <b>Date:</b> ${o.date} | <b>Due:</b> ${o.dueDate}</p><table><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700;border-top:2px solid #333"><td colspan="4">Total</td><td class="r">${rs(o.total)}</td></tr></tfoot></table>`;
+  const css='body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}.r{text-align:right}';
+  if(typeof kbPrintSimpleDoc==='function'){ kbPrintSimpleDoc('PO '+o.orderNo,css,body); return; }
   const w=window.open('','','width=800,height=600');
-  w.document.write(`<html><head><title>PO ${o.orderNo}</title><style>body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid #eee;text-align:left}.r{text-align:right}</style></head><body><h2>Purchase Order #${o.orderNo}</h2><p><b>Party:</b> ${o.party} | <b>Date:</b> ${o.date} | <b>Due:</b> ${o.dueDate}</p><table><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody><tfoot><tr style="font-weight:700;border-top:2px solid #333"><td colspan="4">Total</td><td class="r">${rs(o.total)}</td></tr></tfoot></table></body></html>`);
+  w.document.write(`<html><head><title>PO ${o.orderNo}</title><style>${css}</style></head><body>${body}</body></html>`);
   w.document.close();w.print();
 }
 
@@ -4003,7 +4002,7 @@ function vPurchaseReturn(){
       <div class="hub-action-icon" onclick="toast('Excel coming soon')" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px">
         <span style="font-size:20px">📊</span><span style="font-size:10px;color:var(--muted)">Excel</span>
       </div>
-      <div class="hub-action-icon" onclick="window.print()" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px">
+      <div class="hub-action-icon" onclick="kbPrintView(this)" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px">
         <span style="font-size:20px">🖨️</span><span style="font-size:10px;color:var(--muted)">Print</span>
       </div>
     </div>
@@ -4270,7 +4269,7 @@ function showDebitNotePreview(note){
         <span style="font-size:18px;font-weight:700">Debit Note Preview</span>
         <span style="flex:1"></span>
         <button onclick="navigator.clipboard.writeText(buildDebitNoteText('${note.id}'));toast('Copied!')" style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">📋 Copy</button>
-        <button onclick="window.print()" style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">🖨️ Print</button>
+        <button onclick="kbPrintView(this)" style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">🖨️ Print</button>
         <span style="cursor:pointer;font-size:20px" onclick="vPurchaseReturn()">✕</span>
       </div>
       <div style="padding:24px">
@@ -4415,7 +4414,7 @@ function drawRep(){
         <span style="font-size:15px;font-weight:700">Transactions</span>
         <div style="display:flex;gap:8px;align-items:center">
           <input id="repSaleSearch" placeholder="🔍 Search..." oninput="filterRepSale()" style="padding:7px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px;width:200px">
-          <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+          <span onclick="kbPrintView(this)" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -4503,7 +4502,7 @@ function drawRep(){
         <span style="font-size:15px;font-weight:700">Transactions (${allTxns.length})</span>
         <div style="display:flex;gap:8px;align-items:center">
           <input id="repAllSearch" placeholder="🔍 Search..." oninput="filterRepAllTxn()" style="padding:7px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px;width:200px">
-          <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+          <span onclick="kbPrintView(this)" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -4571,7 +4570,7 @@ function drawRep(){
         <select style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;font-size:13px"><option>ALL FIRMS</option>${firms.map(f=>`<option>${f}</option>`).join('')}</select>
         <span style="flex:1"></span>
         <button onclick="exportDaybookReport()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">📊 Excel Report</button>
-        <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+        <span onclick="kbPrintView(this)" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
       </div>
     </div>
     <div style="background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden">
@@ -4705,7 +4704,7 @@ function drawRep(){
         <input type="date" id="hotTo" value="${repTo.split('/').reverse().join('-')}" onchange="repHotApply()" style="padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">
         <span style="flex:1"></span>
         <button onclick="exportHotSelling()" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:600">📊 Excel Report</button>
-        <span onclick="window.print()" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
+        <span onclick="kbPrintView(this)" style="cursor:pointer;font-size:18px" title="Print">🖨️</span>
       </div>
     </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
@@ -6334,9 +6333,7 @@ function printActivityLog(){
   const logs=store.activityLog||[];
   const typeColors={item:'#1a73e8',party:'#27ae60',invoice:'#ff6b35',user:'#9b59b6',settings:'#e67e22',return:'#e74c3c',exchange:'#3498db',navigation:'#607d8b'};
   const typeIcons={item:'📦',party:'👤',invoice:'📄',user:'👥',settings:'⚙️',return:'↩️',exchange:'🔄',navigation:'🧭'};
-  const win=window.open('','','width=900,height=700');
-  win.document.write(`<html><head><title>Activity Log</title>
-    <style>
+  const css=`
       body{font-family:'Segoe UI',sans-serif;padding:30px;color:#333}
       h1{font-size:22px;margin-bottom:5px}
       .subtitle{color:#666;font-size:13px;margin-bottom:20px;border-bottom:2px solid #e0413e;padding-bottom:10px}
@@ -6345,10 +6342,9 @@ function printActivityLog(){
       td{padding:7px 10px;border-bottom:1px solid #eee}
       .type-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff}
       .user-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff}
-      .print-date{float:right;font-size:12px;color:#666}
-    </style></head><body>
-    <h1>📋 Activity Log</h1>
-    <div class="subtitle">Blue Berry Studios — Full Audit Trail<span class="print-date">Printed: ${new Date().toLocaleString('en-GB')}</span></div>
+      .print-date{float:right;font-size:12px;color:#666}`;
+  const body=`<h1>📋 Activity Log</h1>
+    <div class="subtitle">${escHtml(store.business.name||'Blue Berry Studios')} — Full Audit Trail<span class="print-date">Printed: ${new Date().toLocaleString('en-GB')}</span></div>
     <table><thead><tr><th>#</th><th>Date & Time</th><th>User</th><th>Role</th><th>Type</th><th>Action</th></tr></thead><tbody>
     ${logs.map((l,i)=>{
       const roleColors={owner:'#e74c3c',admin:'#9b59b6',manager:'#1a73e8',cashier:'#27ae60',viewer:'#607d8b'};
@@ -6356,7 +6352,10 @@ function printActivityLog(){
       const tc=typeColors[l.type]||'#888';
       return `<tr><td>${i+1}</td><td>${l.date} ${l.time}</td><td><span class="user-badge" style="background:${rc}">${l.userName||'Owner'}</span></td><td><span class="user-badge" style="background:${rc}">${(l.userRole||'owner').charAt(0).toUpperCase()+(l.userRole||'owner').slice(1)}</span></td><td><span class="type-badge" style="background:${tc}">${(l.type||'').toUpperCase()}</span></td><td>${l.detail}</td></tr>`;
     }).join('')}
-    </tbody></table></body></html>`);
+    </tbody></table>`;
+  if(typeof kbPrintSimpleDoc==='function'){ kbPrintSimpleDoc('Activity Log',css,body); return; }
+  const win=window.open('','','width=900,height=700');
+  win.document.write(`<html><head><title>Activity Log</title><style>${css}</style></head><body>${body}</body></html>`);
   win.document.close();win.print();
 }
 function userRoles(){
@@ -6867,7 +6866,7 @@ function bcUniversalPrint(labelsHtml,totalLabels){
   const sz=bcGetSize();
   const printerType=document.getElementById('bc_printer')?.value||'Regular Printer';
   const fullHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Barcode Labels - Print</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+  <script src="vendor/JsBarcode.all.min.js"><\/script>
   <style>
   *{-webkit-print-color-adjust:exact!important;color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}
   html,body{margin:0;padding:0;font-family:'Segoe UI',Tahoma,Arial,Helvetica,sans-serif;font-size:12px;color:#000;background:#fff}
@@ -6903,6 +6902,14 @@ function bcUniversalPrint(labelsHtml,totalLabels){
   function goPrint(){renderAll();setTimeout(function(){try{window.print();}catch(e){alert('Print failed. Use Ctrl+P to print manually.');}},500);}
   if(document.readyState==='complete')goPrint();else window.onload=goPrint;
   <\/script></body></html>`;
+  // Desktop app: print silently to whichever printer is chosen for
+  // "Regular Printer" / "Label Printer" in this dropdown (barcodes are
+  // rendered locally via vendor/JsBarcode.all.min.js, so this works offline).
+  const kind=printerType==='Label Printer'?'label':'regular';
+  if(typeof kbPrintHtmlDoc==='function'&&typeof kbDesk==='function'&&kbDesk()&&kbDev(kind)){
+    kbPrintHtmlDoc(fullHTML,kind==='label'?{kind:'label',pageWidthMm:sz.w,pageHeightMm:sz.h}:{kind:'regular',pageSize:kbRegPaper()});
+    return;
+  }
   var win=window.open('','_blank','width=1024,height=768');
   if(!win){toast('Popup blocked! Allow popups and try again.');return;}
   try{win.document.write(fullHTML);win.document.close();}catch(e){toast('Could not open print window.');}
@@ -7454,11 +7461,10 @@ function vSettings(){
         <div onclick="store.settings.printerTab='thermal';vSettings()" style="padding:10px 20px;cursor:pointer;font-weight:700;font-size:13px;color:${printTab==='thermal'?'var(--blue)':'var(--muted)'};border-bottom:2px solid ${printTab==='thermal'?'var(--blue)':'transparent'};margin-bottom:-2px">THERMAL PRINTER</div>
       </div>`;
     if(printTab==='thermal'){
-      const lastInv=(store.sales||[]).slice(-1)[0]||{};
-      const invItems=lastInv.rows||[];
-      const invTotal=lastInv.total||0;
-      const invReceived=lastInv.received||0;
-      const invParty=lastInv.party||'Sample Party Name';
+      const customInputs=pSize==='custom'?`<div style="display:flex;gap:10px;margin-top:8px">
+            <div class="sg-currency-row"><label style="font-size:12px">Paper width (mm)</label>${ig}<input type="number" id="set_customPaperMm" value="${s.customPaperMm||80}" min="40" max="120" style="width:60px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;text-align:center"></div>
+            <div class="sg-currency-row"><label style="font-size:12px">Characters/line</label>${ig}<input type="number" id="set_customChars" value="${s.customChars||48}" min="20" max="80" style="width:60px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;text-align:center"></div>
+          </div>`:'';
       body+=`<div class="sp-layout">
       <div class="sp-settings">
       <div class="sg-wrap">
@@ -7469,36 +7475,40 @@ function vSettings(){
                 <div style="width:70px;height:80px;background:#f5f7fa;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center">
                   <div style="width:44px;height:52px;background:#e0e3ea;border-radius:3px"></div>
                 </div>
-                <div style="font-size:10px;margin-top:4px;color:${s.printTheme===n?'var(--blue)':'#555'}">Theme ${n}</div>
+                <div style="font-size:10px;margin-top:4px;color:${s.printTheme===n?'var(--blue)':'#555'}">Theme ${n} &middot; ${(window.KB_THEMES&&KB_THEMES[n])||''}</div>
               </div>`).join('')}
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" id="set_thermalDefault" ${s.thermalDefault?'checked':''} style="width:16px;height:16px;accent-color:var(--blue)"><label for="set_thermalDefault" style="font-size:12px;color:#3b4150">Make Thermal Printer Default</label><span style="color:var(--blue);font-size:11px;cursor:pointer;margin-left:auto">Set default thermal printer</span>${ig}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" id="set_thermalDefault" ${s.thermalDefault?'checked':''} style="width:16px;height:16px;accent-color:var(--blue)" onchange="store.settings.thermalDefault=this.checked;saveSettings();kbRenderPrinterStatus()"><label for="set_thermalDefault" style="font-size:12px;color:#3b4150">Make Thermal Printer Default (used for POS "Save &amp; Print")</label>${ig}</div>
           <div class="sg-section" style="margin-top:12px"><div class="sg-section-title">Page Size</div>
             <div style="display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:8px 0">
-              ${[{k:'2inch',l:'2 Inch',s:'58mm'},{k:'3inch',l:'3 Inch',s:'68mm'},{k:'4inch',l:'4 Inch',s:'88mm'},{k:'custom',l:'Custom',s:'48 (Chars)'}].map(p=>`<div onclick="store.settings.pageSize='${p.k}';vSettings()" style="flex:1;text-align:center;padding:8px 4px;cursor:pointer;background:${pSize===p.k?'var(--blue)':'#fff'};color:${pSize===p.k?'#fff':'#333'};font-size:11px;border-right:1px solid var(--line);transition:.15s"><div style="font-weight:600">${p.l}</div><div style="font-size:9px;opacity:.7">${p.s}</div></div>`).join('')}
+              ${[{k:'2inch',l:'2 Inch',s:'58mm'},{k:'3inch',l:'3 Inch',s:'68mm'},{k:'4inch',l:'4 Inch',s:'88mm'},{k:'custom',l:'Custom',s:'Set below'}].map(p=>`<div onclick="store.settings.pageSize='${p.k}';vSettings()" style="flex:1;text-align:center;padding:8px 4px;cursor:pointer;background:${pSize===p.k?'var(--blue)':'#fff'};color:${pSize===p.k?'#fff':'#333'};font-size:11px;border-right:1px solid var(--line);transition:.15s"><div style="font-weight:600">${p.l}</div><div style="font-size:9px;opacity:.7">${p.s}</div></div>`).join('')}
             </div>
+            ${customInputs}
           </div>
-          <div class="sg-currency-row" style="margin-top:8px"><label style="font-size:12px">Printing Type</label>${ig}<select style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>Text Printing</option><option>Graphical Printing</option></select></div>
+          <div class="sg-currency-row" style="margin-top:8px"><label style="font-size:12px">Printing Type</label>${ig}<select id="set_printType" onchange="applyLiveSettings();kbRefreshThermalPreview()" style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value="graphic" ${s.printType!=='text'?'selected':''}>Graphical Printing</option><option value="text" ${s.printType==='text'?'selected':''}>Text Printing (ESC/POS, sharpest &amp; fastest)</option></select></div>
           ${tg('set_textBold',s.textBold!==false,'Use Text Styling(Bold)')}
           ${tg('set_autoCut',s.autoCut!==false,'Auto Cut Paper After Printing')}
           ${tg('set_openDrawer',s.openDrawer,'Open Cash Drawer After Printing')}
-          <div class="sg-currency-row" style="margin-top:4px"><label style="font-size:12px">Extra lines at the end</label>${ig}<input type="number" value="0" min="0" style="width:44px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;text-align:center"></div>
+          ${tg('set_tBarcode',s.tBarcode!==false,'Print Barcode (Invoice No.)')}
+          ${tg('set_tQR',s.tQR,'Print QR Code (call business number)')}
+          <div class="sg-currency-row" style="margin-top:4px"><label style="font-size:12px">Extra lines at the end</label>${ig}<input type="number" id="set_extraLines" value="${s.extraLines||0}" min="0" max="20" style="width:44px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;text-align:center"></div>
+          ${kbPrinterPickerHTML('thermal')}
         </div>
         <div>
           <div class="sg-section">
             ${tg('set_coName',s.showCoName,'Company Name')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.name||'Blueberry Studio Bahawal')}</div>
-            ${tg('set_coLogo',s.showLogo,'Company Logo')}<span style="color:var(--blue);font-size:11px;margin-left:24px;cursor:pointer">(Change)</span>
+            ${tg('set_coLogo',s.showLogo,'Company Logo')}<span style="color:var(--blue);font-size:11px;margin-left:24px;cursor:pointer" onclick="nav('settings');setTab='company';vSettings()">(Change)</span>
             ${tg('set_coAddress',s.showAddress,'Address')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.address||'Flux Mall Civil Hospital Road Bahawalpur')}</div>
             ${tg('set_coEmail',s.showEmail,'Email')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.email||'blueberryfatraders@gmail.com')}</div>
             ${tg('set_coPhone',s.showCoPhone,'Phone Number')}<div style="font-size:12px;color:#555;margin:2px 0 8px 24px">${escHtml(store.business.phone||'03132020534')}</div>
-            <div style="margin:8px 0"><span style="color:var(--blue);font-size:12px;cursor:pointer">Change Transaction Names &gt;</span></div>
           </div>
           <div class="sg-section"><div class="sg-section-title">Item table</div>
             ${tg('set_tSno',s.tSno!==false,'S.No')}
             ${tg('set_tUom',s.tUom!==false,'Units of Measurement')}
             ${tg('set_tMrp',s.tMrp!==false,'MRP')}
             ${tg('set_tSize',s.tSize,'Size')}
+            ${tg('set_tCode',s.tCode,'Item Code')}
             ${tg('set_tModel',s.tModel,'Model No.')}
             ${tg('set_tSerial',s.tSerial,'Serial No.')}
           </div>
@@ -7513,67 +7523,28 @@ function vSettings(){
             ${tg('set_tTaxDetails',s.tTaxDetails,'Tax Details')}
             ${tg('set_tYouSaved',s.tYouSaved!==false,'You Saved')}
             ${tg('set_tGrouping',s.tGrouping!==false,'Print Amount with Grouping')}
-            <div class="sg-currency-row" style="margin-top:4px"><label style="font-size:12px">Amount in Words</label>${ig}<select style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option selected>English</option><option>Hindi</option><option>Urdu</option></select></div>
+            <div class="sg-currency-row" style="margin-top:4px"><label style="font-size:12px">Amount in Words</label>${ig}<select id="set_tWords" onchange="applyLiveSettings();kbRefreshThermalPreview()" style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px"><option value="english" ${s.tWords!=='none'?'selected':''}>English</option><option value="none" ${s.tWords==='none'?'selected':''}>Don't print</option></select></div>
           </div>
           <div class="sg-section"><div class="sg-section-title">Footer</div>
             ${tg('set_tDesc',s.tDesc!==false,'Print Description')}
-            <div style="margin:6px 0"><span style="color:var(--blue);font-size:12px;cursor:pointer">Terms and Conditions &gt;</span></div>
-          </div>
-          <div class="sg-section"><div class="sg-section-title">Vyapar Printer Setup</div>
-            <div style="display:flex;flex-direction:column;gap:5px;margin-top:6px">
-              ${['2 Inch (VYPRTP2001)','3 Inch (VYPRTP3001)','2 Inch (VYPRTP2002)'].map(p=>`<div style="border:1px solid var(--red);border-radius:8px;padding:7px 12px;color:var(--red);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">${p} - Quick Setup <span>⬇</span></div>`).join('')}
-            </div>
+            ${tg('set_tTerms',s.tTerms!==false,'Print Terms &amp; Conditions')}
+            <div style="margin-top:10px;max-width:400px"><label style="font-size:12px;font-weight:600;color:#3b4150">Terms &amp; Conditions text</label><textarea id="set_terms" rows="2" oninput="applyLiveSettings();kbRefreshThermalPreview()" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:4px;font-size:12px">${escHtml(s.terms||'')}</textarea></div>
           </div>
         </div>
       </div>
       </div>
-      <div class="sp-preview"><div class="sp-invoice">
-        <div style="text-align:center;margin-bottom:12px">
-          ${s.showLogo&&store.business.logo?`<div style="text-align:center;margin-bottom:8px"><img src="${store.business.logo}" style="max-width:160px;max-height:60px;object-fit:contain"></div>`:`<div style="text-align:center;margin-bottom:8px"><span style="font-size:18px;font-weight:700;color:var(--blue);font-family:cursive">${escHtml(store.business.name||'Blueberry Studio')}</span></div>`}
-          ${s.showCoPhone!==false?`<div>Ph.No.: ${escHtml(store.business.phone||'03132020534')}</div>`:''}
-          ${s.showEmail!==false?`<div>Email: ${escHtml(store.business.email||'blueberryfatraders@gmail.com')}</div>`:''}
-        </div>
-        <div style="border-top:1px dashed #999;margin:8px 0"></div>
-        <div style="text-align:center;font-weight:700;margin:6px 0">Invoice</div>
-        <div style="display:flex;justify-content:space-between;margin:4px 0"><span>Invoice No.: ${escHtml(lastInv.no||'Inv12345')}</span><span>Date: ${escHtml(lastInv.date||new Date().toLocaleDateString('en-GB'))}</span></div>
-        <div style="border-top:1px dashed #999;margin:8px 0"></div>
-        <div style="text-align:center;font-weight:600;margin:4px 0">${escHtml(store.business.name||'Vyapar tech solutions')} (${escHtml(invParty)})</div>
-        <div style="text-align:center;margin-bottom:6px">Ph. No.: ${escHtml(store.business.phone||'+91 9333 911 911')}</div>
-        <div style="margin:4px 0"><b>Customer Name:</b></div>
-        <div style="margin-bottom:8px">${escHtml(invParty)}</div>
-        <div style="border-top:1px dashed #999;margin:6px 0"></div>
-        <table style="width:100%;border-collapse:collapse;font-size:10px">
-          <thead><tr style="border-bottom:1px dashed #999">
-            <th style="text-align:left;padding:4px 0">#</th>
-            <th style="text-align:left;padding:4px 2px">Item Name<br><span style="font-weight:400">Qty Discount(%)</span></th>
-            <th style="text-align:right;padding:4px 2px">MRP</th>
-            <th style="text-align:right;padding:4px 2px">Price</th>
-            <th style="text-align:right;padding:4px 0">Amount<br><span style="font-weight:400">Final Amt</span></th>
-          </tr></thead>
-          <tbody>${invItems.length?invItems.map((r,i)=>`<tr style="border-bottom:1px dashed #ddd"><td style="padding:4px 0">${i+1}</td><td style="padding:4px 2px">${escHtml(r.item||'Item')}<br><span style="color:#666">${r.qty||1} units</span></td><td style="text-align:right;padding:4px 2px">${rs(r.price||0)}</td><td style="text-align:right;padding:4px 2px">${rs(r.price||0)}</td><td style="text-align:right;padding:4px 0">${rs((r.qty||1)*(r.price||0))}</td></tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:16px;color:#999">No items yet</td></tr>`}</tbody>
-        </table>
-        <div style="border-top:1px dashed #999;margin:6px 0"></div>
-        <div style="display:flex;justify-content:space-between;font-weight:600;margin:4px 0"><span>Qty: ${invItems.reduce((a,r)=>a+(r.qty||0),0)}</span><span>Items: ${invItems.length}</span><span>${rs(invTotal)}</span></div>
-        <div style="border-top:1px dashed #999;margin:6px 0"></div>
-        <div style="font-size:10px">
-          <div style="display:flex;justify-content:flex-end;gap:4px"><span style="min-width:80px;text-align:right">Total</span><span>:</span><span style="min-width:60px;text-align:right;font-weight:700">${rs(invTotal)}</span></div>
-          <div style="display:flex;justify-content:flex-end;gap:4px"><span style="min-width:80px;text-align:right">Received</span><span>:</span><span style="min-width:60px;text-align:right">${rs(invReceived)}</span></div>
-          <div style="display:flex;justify-content:flex-end;gap:4px"><span style="min-width:80px;text-align:right">Balance</span><span>:</span><span style="min-width:60px;text-align:right">${rs(invTotal-invReceived)}</span></div>
-        </div>
-        <div style="border-top:1px dashed #999;margin:8px 0"></div>
-        <div style="text-align:center;font-size:10px;color:#666;margin:6px 0">Balance to be paid in 3 days</div>
-        <div style="text-align:center;font-weight:700;margin:8px 0">Terms & Conditions</div>
-        <div style="text-align:center;font-size:10px;color:#666">${escHtml(s.terms||'Product Purchase are non Refundable')}</div>
-      </div></div>
+      <div class="sp-preview"><div class="sp-invoice" id="kbThermPreview" style="display:flex;flex-direction:column;align-items:center;background:#e8e8e8;padding:12px">${kbThermalPreviewHTML()}</div></div>
       </div>`;
     } else {
       body+=`<div class="sg-section"><div class="sg-section-title">Regular Printer Settings</div>
+        <div class="sg-currency-row" style="margin:8px 0"><label style="font-size:12px">Paper Size</label>${ig}<select id="set_regularPaper" onchange="applyLiveSettings()" style="padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px">${['A4','A5','Letter','Legal'].map(p=>`<option value="${p}" ${((s.regularPaper||'A4')===p)?'selected':''}>${p}</option>`).join('')}</select></div>
         ${tg('set_showLogo',s.showLogo,'Show Company Logo on Invoice')}
         ${tg('set_showQR',s.showQR,'Show QR Code on Invoice')}
         ${tg('set_showSign',s.showSign,'Show Signature on Invoice')}
         ${tg('set_showTerms',s.showTerms,'Show Terms & Conditions')}
-        <div style="margin-top:10px;max-width:500px"><label style="font-size:12px;font-weight:600;color:#3b4150">Default Terms & Conditions</label><textarea id="set_terms" rows="3" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px;font-size:12px">${s.terms}</textarea></div>
-      </div>`;
+        <div style="margin-top:10px;max-width:500px"><label style="font-size:12px;font-weight:600;color:#3b4150">Default Terms & Conditions</label><textarea id="set_terms" rows="3" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px;font-size:12px">${escHtml(s.terms||'')}</textarea></div>
+      </div>
+      ${kbPrinterPickerHTML('regular')}`;
     }
     body+=`<div style="text-align:right;margin-top:20px"><button onclick="saveSettings()" style="background:#e0413e;color:#fff;border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-size:14px">Save</button></div>`;
   }
@@ -7773,6 +7744,7 @@ function vSettings(){
       <div class="set-tabs">${tabs.map(([k,l])=>`<div class="set-tab ${setTab===k?'active':''}" onclick="setTab='${k}';vSettings()">${l}</div>`).join('')}</div>
       <div class="set-body"><button class="set-close" onclick="nav('home')" title="Close">✕</button>${body}</div>
     </div>`;
+  if(setTab==='print'&&typeof kbRefreshPrinterStatus==='function'){ kbRefreshPrinterStatus(); kbFillDeviceSelects(); }
 }
 function applyLiveSettings(){
   const s=store.settings, g=id=>document.getElementById(id);
@@ -7787,7 +7759,9 @@ function applyLiveSettings(){
   const bt=document.querySelector('input[name="billingType"]:checked');if(bt)s.billingType=bt.value;
   // Print - thermal printer checkboxes
   chk('thermalDefault');num('itemQtyDec');
-  chk('textBold');chk('autoCut');chk('openDrawer');
+  chk('textBold');chk('autoCut');chk('openDrawer');chk('tBarcode');chk('tQR');chk('tCode');chk('tTerms');
+  val('printType');val('tWords');val('regularPaper');num('extraLines');num('customPaperMm');num('customChars');
+  if(typeof kbRefreshThermalPreview==='function')kbRefreshThermalPreview();
   // Company fields - map to keys used by invoice preview (thermal uses set_coLogo, regular uses set_showLogo)
   s.showLogo=!!(g('set_coLogo')&&g('set_coLogo').checked||g('set_showLogo')&&g('set_showLogo').checked);
   s.showCoName=!!(g('set_coName')&&g('set_coName').checked);

@@ -27,9 +27,11 @@
       "index.html",
       "google.html",
       "app.js",
+      "print.js",
       "styles.css",
       "firebase-config.js",
-      "assets/**/*"
+      "assets/**/*",
+      "vendor/**/*"
     ],
     "win": {
       "icon": "assets/icon.ico",

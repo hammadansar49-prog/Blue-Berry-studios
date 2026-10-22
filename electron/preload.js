@@ -9,5 +9,14 @@ contextBridge.exposeInMainWorld('karobarDesktop', {
   // Receive the Google credential (id/access token) captured from the browser.
   onGoogleCredential: function (cb) {
     ipcRenderer.on('google-credential', function (e, data) { cb(data); });
-  }
+  },
+  // ---- Printing (see electron/printing.js) ----
+  // Installed printers with live status: [{name, displayName, isDefault, state, reason, port}]
+  listPrinters: function () { return ipcRenderer.invoke('kb-printers-list'); },
+  // Print an HTML document silently to a printer: {html, deviceName, silent, pageWidthMm, pageHeightMm, pageSize, landscape}
+  printHTML: function (opts) { return ipcRenderer.invoke('kb-print-html', opts); },
+  // Send raw ESC/POS bytes to a printer: {deviceName, data: Uint8Array}
+  printRaw: function (opts) { return ipcRenderer.invoke('kb-print-raw', opts); },
+  // Save an HTML document as PDF via a save dialog: {html, fileName, pageSize}
+  savePDF: function (opts) { return ipcRenderer.invoke('kb-save-pdf', opts); }
 });
