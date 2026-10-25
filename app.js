@@ -140,7 +140,7 @@ function syncOldSalesToPayments(){
   if(!store.payments)store.payments=[];
   let changed=false;
   store.sales.forEach(s=>{
-    if(s.refunded)return;
+    if(s.refunded||!(Number(s.received)>0))return;
     const alreadyHas=store.payments.some(p=>p.saleId===s.id);
     if(alreadyHas)return;
     const mode=s.mode||'Cash';
@@ -1326,7 +1326,7 @@ function localQrDataUrl(value,size=90){
   }catch(e){logDiagnostic('error','QR generation failed: '+e.message);return '';}
 }
 function receiptPaperWidthMm(){
-  return ({'2inch':58,'3inch':80,'4inch':104})[store.settings?.pageSize]||80;
+  return KarobarPrint.options(store.settings,'thermal').width;
 }
 function printPreferenceKey(){
   const user=store.currentUser;
@@ -1359,9 +1359,31 @@ function receiptQrPayload(s){
   if(full.length<=650)return {text:full,complete:true};
   return {text:JSON.stringify({v:1,invoice:s.no,date:s.date,total:s.total,received:s.received,lookup:'Find saved invoice in Karobar by invoice number'}),complete:false};
 }
-function setReceiptPaperSize(size){
+async function setReceiptPaperSize(size){
+  if(size==='custom'){
+    let width=receiptPaperWidthMm();
+    while(true){
+      const answer=await promptAsync('Enter thermal paper width in mm (40–112). Receipt height adjusts to the invoice.',String(width),{title:'Custom Paper Size',type:'number',okLabel:'Apply Size'});
+      if(answer===null){
+        const value=KarobarPrint.options(store.settings,'thermal').customWidth?'custom':({'58':'2inch','80':'3inch','104':'4inch'})[receiptPaperWidthMm()]||'custom';
+        for(const id of ['ivPaperSize','nciPaperSize']){const el=document.getElementById(id);if(el)el.value=value;}
+        return;
+      }
+      width=Number(answer);
+      if(answer.trim()&&Number.isFinite(width)&&width>=40&&width<=112)break;
+      toast('Enter a paper width between 40 and 112 mm');width=receiptPaperWidthMm();
+    }
+    store.settings.printProfiles=store.settings.printProfiles||{};
+    store.settings.printProfiles.thermal={...KarobarPrint.options(store.settings,'thermal'),width,customWidth:true};
+    rememberPrintPreference();
+    if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();
+    else if(viewInv)refreshInvoicePreview();
+    return;
+  }
   if(!['2inch','3inch','4inch'].includes(size))return;
   store.settings.pageSize=size;
+  store.settings.printProfiles=store.settings.printProfiles||{};
+  store.settings.printProfiles.thermal={...KarobarPrint.options(store.settings,'thermal'),width:({'2inch':58,'3inch':80,'4inch':104})[size],customWidth:false};
   const selected=document.getElementById('set_printerName')?.value;
   if(selected)store.settings.thermalPrinterName=selected;
   rememberPrintPreference();
@@ -1375,12 +1397,19 @@ function refreshInvoicePreview(){
   const body=document.getElementById('iv_body');if(!body)return;
   const scroll=body.scrollTop;
   body.innerHTML=buildInvoiceHTML(viewInv);
+  if(hasPermission('edit','invoice')&&(viewInv.rows||[]).length){
+    const editor=document.createElement('details');editor.className='iv-item-editor';
+    const summary=document.createElement('summary');summary.textContent='Edit invoice items';editor.appendChild(summary);
+    viewInv.rows.forEach((row,index)=>{const button=document.createElement('button');button.type='button';button.className='btn btn-outline';button.textContent=(index+1)+'. '+row.item;button.onclick=()=>editInvItem(index);editor.appendChild(button);});
+    body.appendChild(editor);
+  }
   renderInvoiceBarcodes();body.scrollTop=scroll;
   const type=document.getElementById('ivPrintType');if(type)type.value=store.settings.printerTab==='regular'?'regular':'thermal';
   const size=document.getElementById('ivPaperSize');if(size){
     const thermal=store.settings.printerTab!=='regular';
-    size.innerHTML=thermal?'<option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option>':'<option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option>';
-    size.value=thermal?store.settings.pageSize||'3inch':store.settings.standardPageSize||'a4';
+    size.innerHTML=thermal?'<option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option><option value="custom">Custom…</option>':'<option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option>';
+    if(thermal)size.querySelector('[value=custom]').textContent='Custom ('+receiptPaperWidthMm()+' mm)…';
+    size.value=thermal&&KarobarPrint.options(store.settings,'thermal').customWidth?'custom':thermal?({'58':'2inch','80':'3inch','104':'4inch'})[receiptPaperWidthMm()]||'custom':KarobarPrint.options(store.settings,'regular').paper;
   }
   const logoButton=document.getElementById('ivLogoButton');if(logoButton)logoButton.textContent=store.business.logo?'Change business logo':'Add business logo';
 }
@@ -1391,7 +1420,7 @@ function setInvoicePreviewPrintType(type){
 function setInvoicePreviewPaperSize(size){
   if(store.settings.printerTab==='regular'){
     if(!['a4','a5','letter'].includes(size))return;
-    store.settings.standardPageSize=size;rememberPrintPreference();refreshInvoicePreview();
+    store.settings.standardPageSize=size;store.settings.printProfiles=store.settings.printProfiles||{};store.settings.printProfiles.regular={...KarobarPrint.options(store.settings,'regular'),paper:size};rememberPrintPreference();refreshInvoicePreview();
   }else setReceiptPaperSize(size);
 }
 function setReceiptPreviewPrintType(type){
@@ -1401,7 +1430,7 @@ function setReceiptPreviewPrintType(type){
 function setReceiptPreviewPaperSize(size){
   if(store.settings.printerTab==='regular'){
     if(!['a4','a5','letter'].includes(size))return;
-    store.settings.standardPageSize=size;rememberPrintPreference();nciShowSlip();
+    store.settings.standardPageSize=size;store.settings.printProfiles=store.settings.printProfiles||{};store.settings.printProfiles.regular={...KarobarPrint.options(store.settings,'regular'),paper:size};rememberPrintPreference();nciShowSlip();
   }else setReceiptPaperSize(size);
 }
 async function uploadInvoiceLogo(input){
@@ -1411,50 +1440,9 @@ async function uploadInvoiceLogo(input){
   if(await saveBusinessImage(file)){refreshInvoicePreview();if(document.getElementById('nciSlipModal')?.classList.contains('show'))nciShowSlip();input.value='';}
 }
 function buildInvoiceHTML(s){
-  const b=store.business, st=store.settings||{};
-  const rows=(s.rows&&s.rows.length)?s.rows:[{item:'Sale',qty:1,price:s.total}];
-  const lineAmt=r=>r.qty*r.price*(1-((r.disc||0)/100));
-  const sub=rows.reduce((a,r)=>a+r.qty*r.price,0);
-  const discTotal=sub-s.total;
-  const invoicePhone=s.branchPhone||b.phone||'';
-  const qrPayload=receiptQrPayload(s);
-  const qrSrc=(st.printerTab==='thermal'||st.showQR!==false)?localQrDataUrl(qrPayload.text,256):'';
-  const invoiceAddress=receiptBranchAddress(s)||b.address||'';
-  const totalQty=rows.reduce((a,r)=>a+r.qty,0);
-  return `<div class="print-invoice ${receiptPaperClass()}">
-    <div class="pi-top">
-      ${b.logo?`<div class="pi-logo"><img src="${b.logo}" alt="Business logo"></div>`:''}
-      <div class="pi-co"><div class="pi-name">${b.name||'My Company'}</div>
-        <div class="pi-sub">${invoiceAddress}</div><div class="pi-sub">Phone: ${invoicePhone||'-'}</div></div>
-      <div class="pi-title">INVOICE</div>
-    </div>
-    <div class="pi-meta">
-      <div><b>Customer Name</b><br>${s.party}<br>${s.phone?'+92 '+s.phone:''}</div>
-      <div style="text-align:right"><b>Invoice No:</b> ${s.no}<br><b>Date:</b> ${s.date}</div>
-    </div>
-    <table class="pi-tbl"><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Discount</th><th class="r">Amount</th><th></th></tr></thead>
-      <tbody>${rows.map((r,i)=>{
-        const it=store.items.find(x=>x.name===r.item);
-        const desc=it&&it.desc?`<div class="pi-item-desc">${it.desc}</div>`:'';
-        const rDisc=r.qty*r.price*(r.disc||0)/100;
-        return `<tr><td>${i+1}</td><td>${r.item}${r.size?' <span style="color:#888;font-size:12px">('+r.size+')</span>':''}${desc}</td><td class="r">${r.qty}</td><td class="r">${rs(r.price)}</td><td class="r">${r.disc?r.disc+'% ('+rs(rDisc)+')':'-'}</td><td class="r">${rs(lineAmt(r))}</td><td class="pi-edit-cell"><span class="pi-row-pencil" onclick="editInvItem(${i})" title="Edit item">✏️</span></td></tr>`;
-      }).join('')}</tbody></table>
-    <div class="pi-bottom">
-      <div class="pi-words"><b>Amount in words:</b><br>${words(s.total)} Rupees only
-        ${qrSrc?`<br><img class="pi-qr" src="${qrSrc}" alt="Receipt data QR"><small>${qrPayload.complete?'Scan for receipt details':'Scan for invoice reference'}</small>`:''}</div>
-      <div class="pi-tot">
-        <div class="tr"><span>Sub Total</span><span>${rs(sub)}</span></div>
-        ${discTotal>0?`<div class="tr" style="color:var(--red)"><span>Discount</span><span>-${rs(discTotal)}</span></div>`:''}
-        <div class="tr g"><span>Total (${totalQty} items)</span><span>${rs(s.total)}</span></div>
-        <div class="tr"><span>Amount Received</span><span>${rs(s.received)}</span></div>
-        <div class="tr"><span><b>${s.total-s.received<0?'Return Amount':'Balance Due'}</b></span><span><b style="color:${s.total-s.received>0?'var(--red)':'#27ae60'}">${rs(Math.abs(s.total-s.received))}</b></span></div>
-      </div>
-    </div>
-    ${st.showTerms!==false?`<div class="pi-terms"><b>Terms &amp; Conditions:</b> ${st.terms||'Thanks for doing business with us!'}</div>`:''}
-    <div class="pi-barcode"><svg class="inv-barcode-svg" data-code="${s.no}"></svg>
-      <div class="pi-barcode-label">${s.no} · Scan to find saved invoice</div></div>
-    ${st.showSign!==false?`<div class="pi-sign">For ${b.name||'My Company'}<br><br>Authorised Signatory</div>`:''}
-  </div>`;
+  const o=KarobarPrint.options(store.settings);
+  return KarobarPrint.render(s,{business:store.business,settings:store.settings,items:store.items,parties:store.parties,
+    branchAddress:receiptBranchAddress(s),qrData:o.qr?localQrDataUrl(receiptQrPayload(s).text,256):''});
 }
 function editInvItem(idx){
   const s=viewInv; if(!s||!s.rows||!s.rows[idx])return;
@@ -1505,7 +1493,7 @@ function showInvoiceView(s){ viewInv=s; refreshInvoicePreview();
 function renderInvoiceBarcodes(){
   document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
     var code=svg.getAttribute('data-code')||'000000';
-    try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12}); }catch(e){ svg.innerHTML=''; }
+    try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:false,margin:0,fontSize:12}); }catch(e){ svg.innerHTML=''; }
   });
 }
 function toggleItemAction(idx,ev){
@@ -1695,61 +1683,10 @@ async function refreshThermalPrinters(){
     showStatus();
   }catch(e){status.textContent='Printer check failed: '+e.message;}
 }
-async function testThermalPrinter(){
-  const printerName=document.getElementById('set_printerName')?.value;
-  const status=document.getElementById('set_printerStatus');
-  if(!window.karobarDesktop?.printInvoice){toast('Test print requires the Windows desktop app.');return;}
-  if(!printerName){toast('Select a Windows printer first.');return;}
-  if(status)status.textContent='Sending test print to '+printerName+'...';
-  const width=receiptPaperWidthMm()+'mm';
-  const html='<html><head><meta charset="utf-8"><style>@page{margin:2mm}body{box-sizing:border-box;width:calc('+width+' - 4mm);font:13px Arial;text-align:center;margin:0}</style></head><body><h3>Karobar</h3><p>Thermal printer test</p><p>'+new Date().toLocaleString()+'</p><p>--------------------</p></body></html>';
-  try{
-    const result=await window.karobarDesktop.printInvoice({printerName,html,paperWidthMm:receiptPaperWidthMm()});
-    const message=result.ok?'Test job accepted by Windows spooler. Check the receipt.':'Test print failed: '+result.error;
-    if(status)status.textContent=message;
-    toast(message);
-    logDiagnostic('print','Test print → '+printerName+': '+message);
-  }catch(e){
-    const message='Test print failed: '+e.message;
-    if(status)status.textContent=message;
-    toast(message);
-    logDiagnostic('print','Test print → '+printerName+': '+message);
-  }
-}
+async function testThermalPrinter(){return printSettingsTest();}
 async function printInvoice(){
-  if(!viewInv){toast('No invoice to print.');logDiagnostic('print','Invoice print blocked: no invoice selected');return;}
-  if(store.settings.printerTab==='thermal'&&window.karobarDesktop?.printInvoice){
-    const printerName=store.settings.thermalPrinterName;
-    if(!printerName){toast('Select and save a thermal printer in Print settings.');logDiagnostic('print','Invoice '+viewInv.no+': no thermal printer selected');return;}
-    const invoice=document.createElement('div');
-    invoice.innerHTML=buildInvoiceHTML(viewInv);
-    invoice.querySelectorAll('.inv-barcode-svg').forEach(svg=>{
-      const code=svg.getAttribute('data-code')||viewInv.no;
-      try{if(window.JsBarcode)JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});
-        else svg.outerHTML='<div>'+logText(code)+'</div>';}
-      catch(e){svg.outerHTML='<div>'+logText(code)+'</div>';}
-    });
-    const width=receiptPaperWidthMm()+'mm';
-    const html=`<html><head><meta charset="utf-8"><title>Invoice</title><style>${printCSS()} @page{margin:2mm}body{padding:0}.print-invoice{width:calc(${width} - 4mm);max-width:none}</style></head><body>${invoice.innerHTML}</body></html>`;
-    try{
-      const result=await window.karobarDesktop.printInvoice({printerName,html,paperWidthMm:receiptPaperWidthMm()});
-      toast(result.ok?'Print job accepted by Windows spooler.':'Print failed: '+result.error);
-      logDiagnostic('print','Invoice '+viewInv.no+' → '+printerName+': '+(result.ok?'accepted by Windows spooler':'failed: '+result.error));
-    }catch(e){toast('Print failed: '+e.message);logDiagnostic('print','Invoice '+viewInv.no+': failed: '+e.message);}
-    return;
-  }
-  const w=window.open('','_blank','width=820,height=900');
-  if(!w){toast('Print window was blocked.');logDiagnostic('print','Invoice '+viewInv.no+': print window blocked');return;}
-  logDiagnostic('print','Invoice '+viewInv.no+': opened browser print preview');
-  w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}</body></html>`);
-  w.document.close(); w.focus();
-  setTimeout(()=>{
-    w.document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
-      var code=svg.getAttribute('data-code')||'000000';
-      try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12 }); }catch(e){}
-    });
-    w.print();
-  },600);
+  if(!viewInv){toast('No invoice to print.');return;}
+  return printSaleDocument(viewInv);
 }
 function saveInvoiceFromPreview(){
   if(!viewInv)return;
@@ -1764,8 +1701,8 @@ function saveInvoiceFromPreview(){
   const createdByName4=store.currentUser?store.currentUser.name:'';
   const savedInv={
     id:newId,no:invNo,party:viewInv.party,phone:viewInv.phone||'',date:saleDate,
-    rows:(viewInv.rows||[]).map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),
-    total:viewInv.total,received:viewInv.received||0,mode:mode,
+    rows:snapshotPrintRows(viewInv.rows||[]),
+    total:viewInv.total,received:viewInv.received||0,mode:mode,discount:viewInv.discount,tax:viewInv.tax,charges:viewInv.charges,rounding:viewInv.rounding,description:viewInv.description,
     status:viewInv.received>=viewInv.total?'paid':'unpaid',
     branchPhone:branchPhone4,branchAddress:receiptBranchAddress(),createdBy:createdBy4,createdByName:createdByName4
   };
@@ -1790,47 +1727,15 @@ function printAndSaveInvoice(){
   printInvoice();
 }
 function downloadInvoice(){
-  const w=window.open('','_blank'); w.document.write(`<html><head><title>Invoice ${viewInv.no}</title><style>${printCSS()}</style><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>${buildInvoiceHTML(viewInv)}<script>setTimeout(()=>{document.querySelectorAll('.inv-barcode-svg').forEach(svg=>{try{JsBarcode(svg,svg.getAttribute('data-code')||'000000',{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12});}catch(e){}});window.print();},600)<\/script></body></html>`); w.document.close();
+  if(viewInv)return downloadSalePDF(viewInv);
 }
-function printCSS(){ const pageRule=store.settings.printerTab==='regular'?`@page{size:${({a4:'A4',a5:'A5',letter:'letter'})[store.settings.standardPageSize]||'A4'};margin:10mm}`:'';return `${pageRule}body{font-family:Arial,sans-serif;color:#222;padding:24px;margin:0}
-.print-invoice{max-width:760px;margin:auto}
-.pi-top{display:flex;align-items:center;gap:16px;border-bottom:2px solid #333;padding-bottom:14px;margin-bottom:14px}
-.pi-logo{width:80px;height:80px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
-.pi-logo img{max-width:100%;max-height:100%;object-fit:contain}
-.pi-co{flex:1}.pi-name{font-size:24px;font-weight:800}.pi-sub{color:#666;font-size:13px}
-.pi-title{font-size:26px;font-weight:800;color:#333}
-.pi-meta{display:flex;justify-content:space-between;font-size:14px;margin-bottom:16px}
-.pi-tbl{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px}
-.pi-tbl th{background:#eef0f3;padding:9px;text-align:left;border:1px solid #dcdfe5}
-.pi-tbl td{padding:9px;border:1px solid #eef0f3}
-.pi-tbl .r{text-align:right}
-.pi-edit-cell,.pi-row-pencil{display:none}
-.pi-bottom{display:flex;justify-content:space-between;gap:20px;font-size:14px}
-.pi-qr{display:block;width:28mm;height:28mm;object-fit:contain;margin:10px auto 0}
-.pi-words small{display:block;text-align:center;color:#666;font-size:10px}
-.pi-barcode{text-align:center;margin:12px auto 0;max-width:100%}
-.pi-barcode svg{display:block;max-width:100%;margin:auto}
-.pi-barcode-label{font-size:10px;color:#666;margin-top:4px}
-.pi-tot{min-width:260px}
-.pi-tot .tr{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee}
-.pi-tot .tr.g{background:#eef0f3;font-weight:700;padding:7px 6px}
-.pi-terms{margin-top:18px;font-size:13px;color:#444;border-top:1px solid #eee;padding-top:12px}
-.pi-sign{text-align:right;margin-top:24px;font-size:13px;font-weight:600}
-.receipt-paper-58,.receipt-paper-80,.receipt-paper-104{font-size:11px}
-.receipt-paper-58 .pi-top,.receipt-paper-80 .pi-top,.receipt-paper-104 .pi-top{gap:7px;padding-bottom:7px;margin-bottom:8px}
-.receipt-paper-58 .pi-logo{width:24px;height:24px}.receipt-paper-80 .pi-logo{width:34px;height:34px}.receipt-paper-104 .pi-logo{width:44px;height:44px}
-.receipt-paper-58 .pi-name{font-size:14px}.receipt-paper-80 .pi-name{font-size:17px}.receipt-paper-104 .pi-name{font-size:19px}
-.receipt-paper-58 .pi-title{font-size:12px}.receipt-paper-80 .pi-title,.receipt-paper-104 .pi-title{font-size:15px}
-.receipt-paper-58 .pi-sub,.receipt-paper-80 .pi-sub,.receipt-paper-104 .pi-sub{font-size:10px;overflow-wrap:anywhere}
-.receipt-paper-58 .pi-meta,.receipt-paper-80 .pi-meta,.receipt-paper-104 .pi-meta{font-size:10px;margin-bottom:8px}
-.receipt-paper-58 .pi-tbl,.receipt-paper-80 .pi-tbl,.receipt-paper-104 .pi-tbl{font-size:10px;margin-bottom:8px;table-layout:fixed}
-.receipt-paper-58 .pi-tbl th,.receipt-paper-58 .pi-tbl td,.receipt-paper-80 .pi-tbl th,.receipt-paper-80 .pi-tbl td,.receipt-paper-104 .pi-tbl th,.receipt-paper-104 .pi-tbl td{padding:3px 2px;overflow-wrap:anywhere}
-.receipt-paper-58 .pi-tbl th:nth-child(5),.receipt-paper-58 .pi-tbl td:nth-child(5){display:none}
-.receipt-paper-58 .pi-bottom,.receipt-paper-80 .pi-bottom,.receipt-paper-104 .pi-bottom{display:flex;flex-direction:column;gap:7px;font-size:10px}
-.receipt-paper-58 .pi-tot,.receipt-paper-80 .pi-tot,.receipt-paper-104 .pi-tot{min-width:0}
-.receipt-paper-58 .pi-terms,.receipt-paper-80 .pi-terms,.receipt-paper-104 .pi-terms{font-size:10px;margin-top:8px;padding-top:6px}
-.receipt-paper-58 .pi-qr{width:18mm;height:18mm}.receipt-paper-80 .pi-qr{width:22mm;height:22mm}.receipt-paper-104 .pi-qr{width:26mm;height:26mm}
-.receipt-paper-58 .pi-sign,.receipt-paper-80 .pi-sign,.receipt-paper-104 .pi-sign{margin-top:12px;font-size:10px}`; }
+function printCSS(){
+  const o=KarobarPrint.options(store.settings);
+  const sheet=Array.from(document.styleSheets).find(s=>s.href&&s.href.includes('invoice-print.css'));
+  const css=sheet?Array.from(sheet.cssRules,r=>r.cssText).join('\n'):'';
+  return css+' @page{'+(o.mode==='thermal'?'size:'+o.width+'mm auto;margin:2mm':'size:'+o.paper+' '+o.orientation+';margin:10mm')+'}';
+}
+
 
 /* ============ CREATE INVOICE MODAL ============ */
 let posRows=[], posSelectedIdx=-1, posEditingId=null;
@@ -1895,6 +1800,7 @@ function posRestoreTabState(){
   posCalcTotal();
 }
 function openSale(){
+  if(store.settings.defaultPrinterType)store.settings.printerTab=store.settings.defaultPrinterType;
   if(!hasPermission('create','invoices')){showNoAccess();return;}
   const s=store.settings||{};
   if(!posTabs.length||posActiveTab>=posTabs.length){
@@ -2442,6 +2348,22 @@ function reReturnType(idx,type){
     },'EXCHANGE');
   }
 }
+function posInvoicePrintData(rows,total){
+  const st=store.settings||{};
+  const net=rows.reduce((sum,r)=>sum+r.qty*r.price*(1-(r.disc||0)/100),0);
+  const tax=st.posBillTax!==false&&st.posPricing!=='with'?net*(+(st.taxRate||0))/100:0;
+  const discount=posBillDisc+posLoyalty+(+document.getElementById('pos_disc')?.value||0);
+  const charges=posAdditional;
+  return {tax,taxRate:tax?+(st.taxRate||0):0,discount,charges,rounding:total-(net+tax+charges-discount),description:posRemarksTxt||''};
+}
+function snapshotPrintRows(rows){
+  return rows.map(row=>{
+    const item=store.items.find(i=>i.id===row.itemId||i.name===(row.item||row.name))||{};
+    const snapshot={};
+    ['desc','unit','mrp','hsn','batch','batchNo','expiry','expDate','manufacturing','mfgDate','model','modelNo','serial','serialNo'].forEach(k=>{if(item[k]!=null)snapshot[k]=item[k];});
+    return {...snapshot,...row};
+  });
+}
 function posSaveBill(){
   const cust=document.getElementById('pos_cust').value.trim();
   if(!cust){toast('Enter Customer Name');document.getElementById('pos_cust')?.focus();return;}
@@ -2473,7 +2395,7 @@ function posSaveBill(){
       if(!p){p={id:id(),name:cust,phone:phone,type:'customer',balance:0};store.parties.push(p);}
       else if(phone)p.phone=phone;
       p.balance+=total-recv;
-      Object.assign(old,{party:cust,phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
+      Object.assign(old,{party:cust,phone,date:dispDate(),rows:snapshotPrintRows(rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''}))),...posInvoicePrintData(rows,total),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
       persist();refreshView();posCloseTab(posActiveTab);posEditingId=null;toast('Invoice updated');return;
     }
   }
@@ -2483,7 +2405,7 @@ function posSaveBill(){
   const createdByName=store.currentUser?store.currentUser.name:'';
   if(saveDirect){
     const saleId=id();
-    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid',branchPhone:branchPhone,branchAddress:receiptBranchAddress(),createdBy:createdBy,createdByName:createdByName});
+    store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:dispDate(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:snapshotPrintRows(rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''}))),...posInvoicePrintData(rows,total),total,received:recv,mode:mode,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid',branchPhone:branchPhone,branchAddress:receiptBranchAddress(),createdBy:createdBy,createdByName:createdByName});
     store.counters.sale++;
     if(s.stockMaintain!==false)rows.forEach(r=>deductItemStock(r));
     let p=store.parties.find(x=>x.name===cust);
@@ -2501,7 +2423,7 @@ function posSaveBill(){
     }
     return;
   }
-  const tmpInv={id:'tmp_'+Date.now(),no:invNo,party:cust,phone:phone,date:dispDate(),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,status:isPaid?'paid':'unpaid',_posMode:mode};
+  const tmpInv={id:'tmp_'+Date.now(),no:invNo,party:cust,phone:phone,date:dispDate(),rows:snapshotPrintRows(rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''}))),...posInvoicePrintData(rows,total),total,received:recv,status:isPaid?'paid':'unpaid',_posMode:mode};
   showInvoiceView(tmpInv);
   document.getElementById('iv_body').insertAdjacentHTML('beforeend',`<div style="padding:16px 24px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end">
     <button onclick="closeModal('invViewModal');posCloseTab(posActiveTab)" style="padding:10px 20px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:600;cursor:pointer;font-size:13px">Cancel</button>
@@ -2550,15 +2472,10 @@ function confirmSaveAndPrint(){
       if(!p){p={id:id(),name:cust,phone:phone,type:'customer',balance:0};store.parties.push(p);}
       else if(phone)p.phone=phone;
       p.balance+=total-recv;
-      Object.assign(old,{party:cust,phone,date:saleDate,rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
+      Object.assign(old,{party:cust,phone,date:saleDate,rows:snapshotPrintRows(rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''}))),...posInvoicePrintData(rows,total),total,received:recv,flatDisc:+document.getElementById('pos_disc')?.value||0,status:isPaid?'paid':'unpaid'});
       persist(); refreshView();
       closeModal('invViewModal');
-      const printContent=document.getElementById('iv_body').innerHTML;
-      const pw=window.open('','','width=800,height=600');
-      pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"></head><body>'+printContent+'</body></html>');
-      pw.document.close();
-      pw.focus();
-      setTimeout(()=>{pw.print();pw.close();},500);
+      viewInv=old;printInvoice();
       posCloseTab(posActiveTab);
       posEditingId=null;
       toast('Invoice updated & printed!');
@@ -2570,7 +2487,7 @@ function confirmSaveAndPrint(){
   const branchPhone2=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const createdBy2=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
   const createdByName2=store.currentUser?store.currentUser.name:'';
-  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''})),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid',branchPhone:branchPhone2,branchAddress:receiptBranchAddress(),createdBy:createdBy2,createdByName:createdByName2});
+  store.sales.push({id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:snapshotPrintRows(rows.map(r=>({item:r.item,qty:r.qty,price:r.price,disc:r.disc||0,size:r.size||''}))),...posInvoicePrintData(rows,total),total,received:recv,mode:mode,status:isPaid?'paid':'unpaid',branchPhone:branchPhone2,branchAddress:receiptBranchAddress(),createdBy:createdBy2,createdByName:createdByName2});
   store.counters.sale++;
   if(s.stockMaintain!==false)rows.forEach(r=>deductItemStock(r));
   let p=store.parties.find(x=>x.name===cust);
@@ -2580,18 +2497,7 @@ function confirmSaveAndPrint(){
   store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:recv,mode:mode,date:dispDate()});
   persist(); refreshView();
   closeModal('invViewModal');
-  const printContent=document.getElementById('iv_body').innerHTML;
-  const pw=window.open('','','width=800,height=600');
-  pw.document.write('<html><head><title>Print Invoice</title><link rel="stylesheet" href="styles.css"><script src="vendor/JsBarcode.all.min.js"><\/script></head><body>'+printContent+'</body></html>');
-  pw.document.close();
-  pw.focus();
-  setTimeout(()=>{
-    pw.document.querySelectorAll('.inv-barcode-svg').forEach(function(svg){
-      var code=svg.getAttribute('data-code')||'000000';
-      try{ JsBarcode(svg,code,{format:'CODE128',width:1.5,height:40,displayValue:true,margin:0,fontSize:12}); }catch(e){}
-    });
-    pw.print();pw.close();
-  },800);
+  viewInv=store.sales.find(sale=>sale.id===saleId);printInvoice();
   posCloseTab(posActiveTab);
   posEditingId=null;
   toast('Invoice saved & printed!');
@@ -3203,6 +3109,30 @@ function openItem(){
   if(sizeBtn) sizeBtn.style.display=s.sizeField!==false?'':'none';
   showModal('itemModal');
 }
+// Follow the visible form order, including category and selection buttons.
+function itemFormFields(){
+ return Array.from(document.querySelectorAll('#itemModal .im-body input:not([type=hidden]),#itemModal .im-body textarea,#itemModal .im-body button,#i_catfield')).filter(el=>el.id!=='i_catsearch'&&!el.disabled&&!el.readOnly&&el.getClientRects().length);
+}
+function focusNextItemField(field,back=false){
+ const fields=itemFormFields(),index=fields.indexOf(field);if(index<0)return;
+ const next=fields[index+(back?-1:1)];
+ if(next){next.focus();next.select?.();}else if(!back)document.querySelector('#itemModal .im-foot button:last-child')?.focus();
+}
+document.getElementById('itemModal').addEventListener('keydown',event=>{
+ if(event.key!=='Enter'||event.isComposing||event.ctrlKey||event.altKey||event.metaKey)return;
+ const field=event.target;
+ if(field.id==='i_catfield'){event.preventDefault();event.stopPropagation();toggleCatDD();if(document.getElementById('i_catpanel').classList.contains('show'))document.getElementById('i_catsearch').focus();return;}
+ if(field.id==='i_catsearch'){
+  event.preventDefault();event.stopPropagation();
+  const query=field.value.trim().toLowerCase(),matches=store.categories.filter(c=>c.toLowerCase().includes(query));
+  if(matches.length)pickCat(matches.find(c=>c.toLowerCase()===query)||matches[0]);
+  else if(!query){closeCatDD();document.getElementById('i_unitbtn').focus();}
+  return;
+ }
+ if(!field.matches('input:not([type=hidden]),textarea'))return;
+ if(field.tagName==='TEXTAREA'&&event.shiftKey)return;
+ event.preventDefault();event.stopPropagation();focusNextItemField(field,event.shiftKey);
+});
 function toggleDiscountField(){ const r=document.getElementById('i_discRow'); r.style.display=r.style.display==='none'?'flex':'none'; calcItemDiscount(); }
 function calcItemDiscount(){
   const price=parseFloat(document.getElementById('i_price').value)||0;
@@ -3225,7 +3155,7 @@ function renderCatDD(){
   const list=store.categories.filter(c=>c.toLowerCase().includes(q));
   document.getElementById('i_catlist').innerHTML=list.length?list.map(c=>`<div class="cat-item" onclick="pickCat('${c.replace(/'/g,"\\'")}')">${c}</div>`).join(''):`<div class="cat-item muted">No match</div>`;
 }
-function pickCat(c){ document.getElementById('i_cat').value=c; const l=document.getElementById('i_catlabel'); l.textContent=c; l.classList.remove('ph'); document.getElementById('i_catpanel').classList.remove('show'); }
+function pickCat(c){ document.getElementById('i_cat').value=c; const l=document.getElementById('i_catlabel'); l.textContent=c; l.classList.remove('ph'); document.getElementById('i_catpanel').classList.remove('show'); document.getElementById('i_unitbtn').focus(); }
 function addNewCatInline(){
   const q=document.getElementById('i_catsearch').value.trim();
   formModal('Add New Category',`<div class="field"><label>Category Name</label><input id="nc_name" value="${q}" autofocus></div>`,
@@ -3246,7 +3176,7 @@ function openUnit(){
   ()=>{ const b=document.getElementById('u_base').value, s=document.getElementById('u_sec').value;
     document.getElementById('i_unit').value=b+'|'+s;
     document.getElementById('i_unitbtn').textContent = b==='None'?'Select Unit':b.replace(/ \(.*/,'');
-    closeModal('formModal'); }, 'SAVE');
+    closeModal('formModal'); focusNextItemField(document.getElementById('i_unitbtn')); }, 'SAVE');
 }
 const SIZES=['XS','S','M','L','XL','XXL','XXXL'];
 function openSize(){
@@ -5758,56 +5688,54 @@ function doImportParties(){
 }
 
 
+let paymentInFilters={query:'',period:'all',from:'',to:'',firm:'',user:''};
+function paymentDateISO(value){
+ const v=String(value||'').split(' ')[0];let m=v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+ if(m)return v;m=v.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+ return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):'';
+}
+function paymentInData(){return (store.payments||[]).filter(p=>p.dir==='in').map(p=>{
+ const sale=(store.sales||[]).find(s=>s.id===p.saleId)||{};
+ return {...p,firm:p.firm||sale.firm||store.business.name||'Main Business',user:p.createdByName||sale.createdByName||p.createdBy||sale.createdBy||'Unspecified',invoice:sale.no||'',iso:paymentDateISO(p.date)};
+});}
+function filteredPaymentIn(){const f=paymentInFilters,q=f.query.trim().toLowerCase();return paymentInData().filter(p=>(!q||[p.party,p.receipt,p.invoice,p.mode,p.amount,p.desc].join(' ').toLowerCase().includes(q))&&(!f.from||p.iso>=f.from)&&(!f.to||p.iso&&p.iso<=f.to)&&(!f.firm||p.firm===f.firm)&&(!f.user||p.user===f.user)).reverse();}
+function paymentInPeriod(value){
+ const f=paymentInFilters;f.period=value;const now=new Date(),iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+ if(value==='all'){f.from='';f.to='';}
+ if(value==='today')f.from=f.to=iso(now);
+ if(value==='month'){f.from=iso(new Date(now.getFullYear(),now.getMonth(),1));f.to=iso(new Date(now.getFullYear(),now.getMonth()+1,0));}
+ if(value==='last'){f.from=iso(new Date(now.getFullYear(),now.getMonth()-1,1));f.to=iso(new Date(now.getFullYear(),now.getMonth(),0));}
+ vPaymentIn();
+}
+function renderPaymentInRows(){
+ const rows=filteredPaymentIn(),e=KarobarPrint.escape,f=paymentInFilters;
+ document.getElementById('piTotal').textContent=rs(rows.reduce((sum,p)=>sum+(Number(p.amount)||0),0));
+ document.getElementById('piCount').textContent=rows.length+' payments';
+ document.getElementById('piRows').innerHTML=f.from&&f.to&&f.from>f.to?'<tr><td colspan="7" role="alert">From date must be on or before To date.</td></tr>':rows.length?rows.map(p=>`<tr><td>${e(p.party)}</td><td>${e(p.date)}</td><td>${e(p.receipt||p.invoice||'—')}</td><td>${e(p.mode)}</td><td>${e(p.user)}</td><td class="right">${rs(Number(p.amount)||0)}</td><td>${hasPermission('delete','payment-in')?`<button class="btn btn-outline" data-payment-id="${e(p.id)}" onclick="deletePaymentIn(this.dataset.paymentId)">Delete</button>`:''}</td></tr>`).join(''):'<tr><td colspan="7">No payments match these filters.</td></tr>';
+}
 function vPaymentIn(){
-  const rows=store.payments.filter(p=>p.dir==='in').reverse();
-  const totalAmt=rows.reduce((a,b)=>a+b.amount,0);
-  content.innerHTML=`<div class="pos-page">
-    <div class="pos-topbar">
-      <div class="pos-search">🔍 Search Transactions</div>
-      <div class="pos-top-actions">
-        <button class="pos-action-btn red-outline" onclick="openSale()">+ Add Sale</button>
-        <button class="pos-action-btn green-outline" onclick="nav('purchaseform')">+ Add Purchase</button>
-        <button class="pos-action-btn icon-btn">⊕</button>
-        <button class="pos-action-btn icon-btn">🖨️</button>
-        <button class="pos-action-btn icon-btn">⋮</button>
-      </div>
-    </div>
-    <div class="pos-header">
-      <div class="pos-title">Payment-In <span class="dropdown-arrow">▾</span></div>
-    </div>
-    <div class="pos-filters">
-      <span class="filter-label">Filter by :</span>
-      <div class="filter-chip active">This Month <span class="chip-arrow">▾</span></div>
-      <div class="filter-dates">📅 01/06/2026 To 30/06/2026</div>
-      <div class="filter-chip">All Firms <span class="chip-arrow">▾</span></div>
-      <div class="filter-chip">All Users <span class="chip-arrow">▾</span></div>
-    </div>
-    <div class="pos-summary-row">
-      <div class="pos-summary-card">
-        <div class="psc-label">Total Amount</div>
-        <div class="psc-amount">${rs(totalAmt)}</div>
-        <div class="psc-sub">Received: ${rs(rows.reduce((a,b)=>a+b.amount,0))}</div>
-        <div class="psc-change">0% ↗<br><span>vs last month</span></div>
-      </div>
-    </div>
-    <div class="pos-body">
-      ${rows.length?`<table class="data"><thead><tr><th>Party</th><th>Date</th><th>Type</th><th class="right">Amount</th></tr></thead><tbody>
-        ${rows.map(p=>`<tr><td class="bold">${p.party}</td><td>${p.date}</td><td>${p.mode}</td><td class="right">${rs(p.amount)}</td></tr>`).join('')}
-      </tbody></table>`
-      :`<div class="payment-empty-widgets"><div class="empty-widget-grid">
-          <div class="empty-widget"><span>Payments received</span><strong>0</strong></div>
-          <div class="empty-widget"><span>Total received</span><strong>${rs(0)}</strong></div>
-          <div class="empty-widget"><span>Quick action</span><button class="btn btn-red" onclick="addPayment('in')" ${hasPermission('create','payment-in')?'':'disabled'}>Add Payment-In</button></div>
-        </div><p>No transactions yet. Add a payment to see it here.</p></div>`}
-    </div>
-    <div class="pos-bottom-actions">
-      <button class="pos-act-btn" onclick="nav('sale')">Sale</button>
-      <button class="pos-act-btn" onclick="nav('purchaseform')">Purchase</button>
-      <button class="pos-act-btn" onclick="nav('expenses')">Expense</button>
-      <button class="pos-act-btn active" onclick="nav('paymentin')">Payment-In</button>
-      <button class="pos-act-btn" onclick="nav('paymentout')">Payment-Out</button>
-    </div>
-  </div>`;
+ const e=KarobarPrint.escape,f=paymentInFilters,data=paymentInData(),options=(key,label)=>`<option value="">${label}</option>`+[...new Set(data.map(p=>p[key]))].sort().map(v=>`<option value="${e(v)}" ${f[key]===v?'selected':''}>${e(v)}</option>`).join('');
+ content.innerHTML=`<div class="pos-page"><div class="pos-topbar"><input class="pos-search" aria-label="Search Transactions" placeholder="Search party, receipt, invoice or amount" value="${e(f.query)}" oninput="paymentInFilters.query=this.value;renderPaymentInRows()"><div class="pos-top-actions"><button class="pos-action-btn red-outline" onclick="addPayment('in')" ${hasPermission('create','payment-in')?'':'disabled'}>+ Add Payment-In</button><button class="pos-action-btn" onclick="openSale()">+ Add Sale</button><button class="pos-action-btn" onclick="nav('purchaseform')">+ Add Purchase</button></div></div><h2>Payment-In</h2>
+ <div class="pos-filters"><label>Period <select aria-label="Payment period" onchange="paymentInPeriod(this.value)">${[['all','All Time'],['today','Today'],['month','This Month'],['last','Last Month'],['custom','Custom']].map(([v,l])=>`<option value="${v}" ${f.period===v?'selected':''}>${l}</option>`).join('')}</select></label>
+ <label>From <input aria-label="From date" type="date" value="${f.from}" onchange="paymentInFilters.from=this.value;paymentInFilters.period='custom';vPaymentIn()"></label><label>To <input aria-label="To date" type="date" value="${f.to}" onchange="paymentInFilters.to=this.value;paymentInFilters.period='custom';vPaymentIn()"></label>
+ <select aria-label="Firm" onchange="paymentInFilters.firm=this.value;renderPaymentInRows()">${options('firm','All Firms')}</select><select aria-label="User" onchange="paymentInFilters.user=this.value;renderPaymentInRows()">${options('user','All Users')}</select><button class="btn btn-outline" onclick="paymentInFilters={query:'',period:'all',from:'',to:'',firm:'',user:''};vPaymentIn()">Reset filters</button></div>
+ <div class="pos-summary-row"><div class="pos-summary-card"><div class="psc-label">Total Received</div><div class="psc-amount" id="piTotal"></div><div id="piCount"></div></div></div>
+ <div class="pos-body" style="overflow-x:auto"><table class="data"><thead><tr><th>Party</th><th>Date</th><th>Receipt / Invoice</th><th>Mode</th><th>User</th><th>Amount</th><th>Action</th></tr></thead><tbody id="piRows"></tbody></table></div>
+ <div class="pos-bottom-actions"><button class="pos-act-btn" onclick="nav('sale')">Sale</button><button class="pos-act-btn" onclick="nav('purchaseform')">Purchase</button><button class="pos-act-btn" onclick="nav('expenses')">Expense</button><button class="pos-act-btn active" onclick="nav('paymentin')">Payment-In</button><button class="pos-act-btn" onclick="nav('paymentout')">Payment-Out</button></div></div>`;
+ renderPaymentInRows();
+}
+async function deletePaymentIn(paymentId){
+ if(!hasPermission('delete','payment-in'))return showNoAccess();
+ const payment=store.payments.find(p=>p.id===paymentId&&p.dir==='in');if(!payment)return;
+ if(!await confirmAsync('Delete this payment of '+KarobarPrint.escape(rs(payment.amount))+' from '+KarobarPrint.escape(payment.party)+'? The customer balance and linked invoice receipt will be adjusted.',{title:'Delete Payment-In',yesLabel:'Delete'}))return;
+ const index=store.payments.findIndex(p=>p.id===paymentId);if(index<0)return;
+ const before=JSON.parse(JSON.stringify({payments:store.payments,parties:store.parties,sales:store.sales}));
+ const amount=Number(payment.amount)||0,party=store.parties.find(p=>p.name===payment.party),sale=store.sales.find(s=>s.id===payment.saleId);
+ if(party)party.balance=(Number(party.balance)||0)+amount;
+ if(sale){sale.received=Math.max(0,(Number(sale.received)||0)-amount);if(!sale.refunded)sale.status=sale.received>=sale.total?'paid':'unpaid';}
+ store.payments.splice(index,1);
+ try{persist();}catch(error){Object.assign(store,before);return;}
+ logActivity('payment','Deleted Payment-In '+paymentId+' | '+payment.party+' | '+amount);toast('Payment deleted');vPaymentIn();
 }
 function vPaymentOut(){
   const s=store.settings||{};
@@ -6080,12 +6008,13 @@ function nciTotals(){
   return {sub,discAmt,taxAmt,total,received,balance};
 }
 function vCreateInvoice(){
+  if(store.settings.defaultPrinterType)store.settings.printerTab=store.settings.defaultPrinterType;
   if(!nciRows.length)nciRows=[{name:'',item:'',qty:1,price:0,size:''}];
   const t=nciTotals();
   content.innerHTML=`<div class="nci-wrap">
     <div class="nci-head">
       <div class="nci-head-left"><b>Sale</b>
-        <span class="nci-mode">Switch to Full Mode <label class="nci-switch"><input type="checkbox" onchange="nciSwitchFull()"><i></i></label></span>
+        <span class="nci-mode">Switch to Full Mode <label class="nci-switch"><input type="checkbox" aria-label="Switch to Full Mode" onchange="nciSwitchFull(this)"><i></i></label></span>
       </div>
       <span class="nci-x" onclick="nav('sale')">✕</span>
     </div>
@@ -6144,7 +6073,8 @@ function vCreateInvoice(){
       <div class="nci-right">
         <div class="nci-preview" id="nciPreview"></div>
         <div class="nci-actions">
-          <button class="nci-save" onclick="nciSave('new')">Save &amp; New</button>
+          <button class="nci-save" type="button" onclick="nciSave()">Save</button>
+          <button class="nci-save nci-save-new" type="button" onclick="nciSave('new')">Save &amp; New</button>
           <button class="nci-rnd wa" type="button" onclick="nciSave('whatsapp')" title="Save and share invoice">Share</button>
           <button class="nci-rnd" type="button" onclick="nciShowSlip()" title="Preview invoice before printing">Print</button>
           <button class="nci-rnd" type="button" onclick="nciSave('download')" title="Save and download invoice">PDF</button>
@@ -6234,52 +6164,16 @@ function nciPreview(){
   const previewPhone=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:b.phone;
   const branchAddress=receiptBranchAddress();
   const previewAddress=branchAddress||b.address||'';
-  const previewSale={no:invNo,date:dispDate(),party:cust,phone,rows:rows.map(r=>({item:r.name||r.item||'',qty:+r.qty||0,price:+r.price||0,disc:0,size:r.size||''})),total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,branchAddress,branchPhone:previewPhone};
-  if(st.printerTab==='regular'){
-    pv.innerHTML=buildInvoiceHTML(previewSale);
-    renderInvoiceBarcodes();
-    return;
-  }
-  const qrPayload=receiptQrPayload(previewSale);
-  const qrSrc=localQrDataUrl(qrPayload.text,256);
-  const bizName=b.name||'My Business';
-  pv.innerHTML=`<div class="nci-inv ${receiptPaperClass()}">
-    <div class="nci-inv-head">
-      ${b.logo?`<div class="nci-inv-logo"><img src="${b.logo}" alt="Business logo"></div>`:''}
-      <div class="nci-inv-bizinfo">
-        <div class="nci-inv-bizname">${bizName}</div>
-        ${previewPhone?`<div class="nci-inv-bizline">Ph: ${previewPhone}</div>`:''}
-        ${b.email?`<div class="nci-inv-bizline">${b.email}</div>`:''}
-        ${previewAddress?`<div class="nci-inv-bizline">${previewAddress}</div>`:''}
-      </div>
-    </div>
-    <div class="nci-dash"></div>
-    <div class="nci-inv-title">Invoice</div>
-    <div class="nci-inv-meta"><span>Invoice No.: ${invNo}</span><span>Date: ${dispDate()}</span></div>
-    <div class="nci-dash"></div>
-    ${cust?`<div class="nci-inv-billto"><b>Customer Name:</b> ${cust}${phone?' (+92 '+phone+')':''}</div>`:''}
-    ${rows.length?`<table class="nci-inv-tbl"><thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Price</th><th>Amt</th></tr></thead><tbody>
-      ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name||r.item||'-'}</td><td>${r.qty}</td><td>${nciFmt(r.price)}</td><td>${nciFmt((+r.qty||0)*(+r.price||0))}</td></tr>`).join('')}</tbody></table>
-      <div class="nci-dash"></div>`:''}
-    <div class="nci-inv-tot">
-      <div class="nci-inv-tot-row"><span>Total</span><span>:</span><span>${nciFmt(t.total)}</span></div>
-      <div class="nci-inv-tot-row"><span>Received</span><span>:</span><span>${nciFmt(t.received)}</span></div>
-      <div class="nci-inv-tot-row"><span>Balance</span><span>:</span><span>${nciFmt(t.balance)}</span></div>
-    </div>
-    <div class="nci-dash"></div>
-    <div class="nci-inv-codes">
-      <svg class="nci-inv-barcode" id="nciBarcodeSvg"></svg>
-      <div class="nci-inv-code-lbl">${invNo} · Scan to find saved invoice</div>
-      ${qrSrc?`<img class="nci-inv-qr" src="${qrSrc}" alt="Receipt data QR"><div class="nci-inv-code-lbl">${qrPayload.complete?'Scan for receipt details':'Scan for invoice reference'}</div>`:''}
-    </div>
-    <div class="nci-dash"></div>
-    ${st.showTerms!==false?`<div class="nci-inv-terms"><b>Terms &amp; Conditions</b><div>${st.terms||'Thanks for doing business with us!'}</div></div>`:''}
-  </div>`;
-  // CODE128 identifies the saved invoice; the QR embeds receipt details when they fit.
-  try{ if(window.JsBarcode){ JsBarcode('#nciBarcodeSvg', invNo, {format:'CODE128',width:1.5,height:42,fontSize:11,margin:0,displayValue:false}); } }catch(e){}
+  const previewSale={no:invNo,date:dispDate(),party:cust,phone,rows:rows.map(r=>({item:r.name||r.item||'',qty:+r.qty||0,price:+r.price||0,disc:0,size:r.size||''})),total:t.total,received:t.received,discount:t.discAmt,tax:t.taxAmt,taxRate:nciTaxRate,mode:nciPayMode,branchAddress,branchPhone:previewPhone};
+  pv.innerHTML=buildInvoiceHTML(previewSale);
+  renderInvoiceBarcodes();
 }
-function nciSwitchFull(){ openSale(); }
-// "Save & New" -> open a full slip preview popup with Save and Print buttons.
+function nciSwitchFull(toggle){
+  openSale();
+  // This opens a separate full-mode editor; reset the launcher for the next visit.
+  if(toggle)toggle.checked=false;
+}
+// Printing opens a preview; direct saving does not require the preview.
 function nciShowSlip(){
   if(!hasPermission('create','invoices')){showNoAccess();return;}
   const cust=(document.getElementById('nciCust')?.value||'').trim();
@@ -6300,8 +6194,9 @@ function nciShowSlip(){
   const previewTitle=document.querySelector('#nciSlipModal .nci-slip-head b');if(previewTitle)previewTitle.textContent=store.settings.printerTab==='regular'?'Invoice Preview':'Receipt Preview';
   const sizeSelect=document.getElementById('nciPaperSize');if(sizeSelect){
     const thermal=store.settings.printerTab!=='regular';
-    sizeSelect.innerHTML=thermal?'<option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option>':'<option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option>';
-    sizeSelect.value=thermal?store.settings.pageSize||'3inch':store.settings.standardPageSize||'a4';
+    sizeSelect.innerHTML=thermal?'<option value="2inch">58 mm</option><option value="3inch">80 mm</option><option value="4inch">104 mm</option><option value="custom">Custom…</option>':'<option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option>';
+    if(thermal)sizeSelect.querySelector('[value=custom]').textContent='Custom ('+receiptPaperWidthMm()+' mm)…';
+    sizeSelect.value=thermal&&KarobarPrint.options(store.settings,'thermal').customWidth?'custom':thermal?({'58':'2inch','80':'3inch','104':'4inch'})[receiptPaperWidthMm()]||'custom':KarobarPrint.options(store.settings,'regular').paper;
   }
   showModal('nciSlipModal');
   if(body)body.scrollTop=0;
@@ -6353,7 +6248,9 @@ function nciSave(action){
     if(unknown)return toast('New items blocked in settings. Add items from Items page first.');
   }
   if(s.blockNewParty&&!store.parties.find(p=>p.name===cust))return toast('New parties blocked in settings. Add party from Parties page first.');
+  if(nciRows.some(r=>(r.name||r.item)&&(!Number.isFinite(+r.qty)||+r.qty<=0||!Number.isFinite(+r.price)||+r.price<0)))return toast('Enter a valid quantity and price for every item');
   const t=nciTotals();
+  if(!Number.isFinite(t.total)||!Number.isFinite(t.received)||t.received<0)return toast('Enter valid invoice and received amounts');
   if(t.total<=0){toast('Enter item price before saving');document.querySelector('.nci-row-price input')?.focus();return;}
   if(s.negativeStock!==false){
     const negItem=rows.find(r=>{const it=store.items.find(x=>x.name===r.item);if(!it||typeof it.stock!=='number')return false;
@@ -6363,29 +6260,31 @@ function nciSave(action){
   }
   const invNo=(s.invPrefix||'INV-')+String(store.counters.sale).padStart(2,'0');
   const saleDate=s.addTime?dispDate()+' '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):dispDate();
-  const saleRows=rows.map(r=>({item:r.name||r.item,qty:+r.qty||0,price:+r.price||0,disc:0,size:r.size||''}));
+  const saleRows=snapshotPrintRows(rows.map(r=>({item:r.name||r.item,qty:+r.qty||0,price:+r.price||0,disc:0,size:r.size||''})));
   const saleId=id();
   // A paid mode (Cash/Bank/QR/Card Payment) with no "Received" entered = bill fully paid via that mode.
   const effRecv=t.received;
   const branchPhone3=store.currentUser&&store.currentUser.branchPhone?store.currentUser.branchPhone:'';
   const createdBy3=store.currentUser&&store.currentUser.role==='branch'?store.currentUser.branchCode:'admin';
   const createdByName3=store.currentUser?store.currentUser.name:'';
-  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid',branchPhone:branchPhone3,branchAddress:receiptBranchAddress(),createdBy:createdBy3,createdByName:createdByName3};
+  const sale={id:saleId,no:invNo,party:cust,phone:phone,date:saleDate,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),rows:saleRows,total:t.total,received:effRecv,discount:t.discAmt,tax:t.taxAmt,taxRate:nciTaxRate,mode:nciPayMode,status:effRecv>=t.total?'paid':'unpaid',branchPhone:branchPhone3,branchAddress:receiptBranchAddress(),createdBy:createdBy3,createdByName:createdByName3};
+  const before=JSON.parse(JSON.stringify({sales:store.sales,counters:store.counters,items:store.items,parties:store.parties,payments:store.payments}));
   store.sales.push(sale);
   store.counters.sale++;
   if(s.stockMaintain!==false)saleRows.forEach(r=>deductItemStock(r));
   let p=store.parties.find(x=>x.name===cust);
   if(!p){ p={id:id(),name:cust,phone:phone,type:'customer',balance:0}; store.parties.push(p); }
   else if(phone)p.phone=phone;
-  p.balance+=t.total-effRecv;
-  store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:effRecv,mode:nciPayMode,date:dispDate()});
-  persist();
+  p.balance=(Number(p.balance)||0)+t.total-effRecv;
+  if(effRecv>0)store.payments.push({id:id(),saleId:saleId,dir:'in',party:cust,amount:effRecv,mode:nciPayMode,date:dispDate()});
+  try{persist();}catch(error){Object.assign(store,before);toast('Invoice was not saved. Your form is retained; please retry after fixing storage.');return;}
   viewInv=sale;
   toast('Invoice saved! '+invNo);
   if(action==='print')printInvoice();
   else if(action==='download')downloadInvoice();
   else if(action==='whatsapp')nciWhatsApp(sale);
-  nciReset(); vCreateInvoice();
+  nciReset();
+  if(!action)nav('sale');else vCreateInvoice();
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('.nci-item-cell'))document.querySelectorAll('.nci-item-cell .nci-drop').forEach(d=>d.classList.remove('show'));
@@ -6562,7 +6461,7 @@ function savePaymentOut(dir){
   const formattedDate=dateParts?dateParts[2]+'/'+dateParts[1]+'/'+dateParts[0]:dispDate();
   const finalAmount=amount-disc;
   if(!Number.isFinite(amount)||!Number.isFinite(disc)||amount<=0||disc<0||disc>=amount) return toast('Enter valid paid and discount amounts');
-  store.payments.push({id:id(),dir,party,amount:finalAmount,mode,date:formattedDate,receipt,desc,disc,createdBy:pmCurBranchCode(),createdByName:pmCurBranchName()});
+  store.payments.push({id:id(),dir,party,amount:finalAmount,mode,date:formattedDate,receipt,desc,disc,firm:store.business.name||'Main Business',createdBy:pmCurBranchCode(),createdByName:pmCurBranchName()});
   const pt=store.parties.find(x=>x.name===party);
   if(pt) pt.balance+=dir==='in'?-finalAmount:finalAmount;
   persist();
@@ -7848,6 +7747,7 @@ function saveProfile(){
 /* SETTINGS + LOGO */
 let setTab='general';
 function vSettings(){
+  if(setTab==='print'){renderPrintSettings();return;}
   const s=store.settings;
   const tabs=[['general','GENERAL'],['transaction','TRANSACTION'],['print','PRINT'],['taxes','TAXES'],['txnmsg','TRANSACTION MESSAGE'],['party','PARTY'],['item','ITEM'],['about','ABOUT']];
   const ig=`<span class="info-icon" title="More info">i</span>`;
@@ -7968,46 +7868,6 @@ function vSettings(){
       </div>
       <div style="text-align:right;margin-top:20px"><button onclick="saveSettings()" style="background:#e0413e;color:#fff;border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-size:14px">Save</button></div>
     </div>`;
-  }
-  if(setTab==='print'){
-    const tg=(id,on,lbl)=>`<div class="sg-check-row"><input type="checkbox" id="${id}" ${on?'checked':''}><label for="${id}">${lbl}</label>${ig}</div>`;
-    const printTab=store.settings.printerTab||'thermal';
-    const pSize=store.settings.pageSize||'3inch';
-    body=`<div>
-      <div style="display:flex;gap:0;margin-bottom:18px;border-bottom:2px solid var(--line)">
-        <div onclick="store.settings.printerTab='regular';vSettings()" style="padding:10px 20px;cursor:pointer;font-weight:700;font-size:13px;color:${printTab==='regular'?'var(--blue)':'var(--muted)'};border-bottom:2px solid ${printTab==='regular'?'var(--blue)':'transparent'};margin-bottom:-2px">REGULAR PRINTER</div>
-        <div onclick="store.settings.printerTab='thermal';vSettings()" style="padding:10px 20px;cursor:pointer;font-weight:700;font-size:13px;color:${printTab==='thermal'?'var(--blue)':'var(--muted)'};border-bottom:2px solid ${printTab==='thermal'?'var(--blue)':'transparent'};margin-bottom:-2px">THERMAL PRINTER</div>
-      </div>`;
-    if(printTab==='thermal'){
-      const lastInv=(store.sales||[]).slice(-1)[0]||{};
-      body+=`<div class="sp-layout">
-        <div class="sp-settings">
-          <div class="sg-section"><div class="sg-section-title">Windows thermal printer</div>
-            <select id="set_printerName" style="max-width:100%;padding:8px"></select>
-            <button type="button" onclick="refreshThermalPrinters()">Refresh printers</button>
-            <button type="button" onclick="testThermalPrinter()">Test print</button>
-            <div id="set_printerStatus" style="font-size:12px;margin-top:8px" role="status">Checking printers...</div>
-          </div>
-          <div class="sg-section"><div class="sg-section-title">Paper width</div>
-            <div style="display:flex;gap:6px;margin-top:8px">
-              ${[{k:'2inch',l:'58 mm'},{k:'3inch',l:'80 mm'},{k:'4inch',l:'104 mm'}].map(p=>`<button type="button" onclick="setReceiptPaperSize('${p.k}')" style="padding:8px;background:${pSize===p.k?'var(--blue)':'#fff'};color:${pSize===p.k?'#fff':'#333'};border:1px solid var(--line);border-radius:6px">${p.l}</button>`).join('')}
-            </div>
-            <div style="font-size:11px;color:#777;margin-top:7px">Use the width loaded in your printer. 58 and 80 mm are common receipt rolls; 104 mm needs a compatible model.</div>
-          </div>
-          <div style="font-size:12px;color:#666">Install the printer in Windows first. Auto cut and cash drawer depend on the printer driver/model.</div>
-        </div>
-        <div class="sp-preview">${lastInv.id?buildInvoiceHTML(lastInv):'<div class="sg-section">Create an invoice to see its print preview here.</div>'}</div>
-      </div>`;
-    } else {
-      body+=`<div class="sg-section"><div class="sg-section-title">Regular Printer Settings</div>
-        ${tg('set_showLogo',s.showLogo,'Show Company Logo on Invoice')}
-        ${tg('set_showQR',s.showQR,'Show QR Code on Invoice')}
-        ${tg('set_showSign',s.showSign,'Show Signature on Invoice')}
-        ${tg('set_showTerms',s.showTerms,'Show Terms & Conditions')}
-        <div style="margin-top:10px;max-width:500px"><label style="font-size:12px;font-weight:600;color:#3b4150">Default Terms & Conditions</label><textarea id="set_terms" rows="3" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px;font-size:12px">${s.terms}</textarea></div>
-      </div>`;
-    }
-    body+=`<div style="text-align:right;margin-top:20px"><button onclick="saveSettings()" style="background:#e0413e;color:#fff;border:none;padding:10px 28px;border-radius:6px;cursor:pointer;font-size:14px">Save</button></div>`;
   }
   if(setTab==='taxes'){
     body=`<div class="sg-section"><div class="sg-section-title">Tax Settings</div>
@@ -8230,16 +8090,8 @@ function applyLiveSettings(){
   chk('thermalDefault');num('itemQtyDec');
   const printerSelect=g('set_printerName');if(printerSelect&&printerSelect.value)s.thermalPrinterName=printerSelect.value;
   chk('textBold');chk('autoCut');chk('openDrawer');
-  // Company fields - map to keys used by invoice preview (thermal uses set_coLogo, regular uses set_showLogo)
-  s.showLogo=!!(g('set_coLogo')&&g('set_coLogo').checked||g('set_showLogo')&&g('set_showLogo').checked);
-  s.showCoName=!!(g('set_coName')&&g('set_coName').checked);
-  s.showAddress=!!(g('set_coAddress')&&g('set_coAddress').checked);
-  s.showEmail=!!(g('set_coEmail')&&g('set_coEmail').checked);
-  s.showCoPhone=!!(g('set_coPhone')&&g('set_coPhone').checked);
-  // Regular printer fields
-  s.showQR=!!g('set_showQR')&&g('set_showQR').checked;
-  s.showSign=!!g('set_showSign')&&g('set_showSign').checked;
-  s.showTerms=!!g('set_showTerms')&&g('set_showTerms').checked;
+  // Only touch settings whose controls exist in the active screen.
+  ['showLogo','showCoName','showAddress','showEmail','showCoPhone','showQR','showSign','showTerms'].forEach(chk);
   // Item table
   chk('tSno');chk('tUom');chk('tMrp');chk('tSize');chk('tModel');chk('tSerial');
   chk('tTotalQty');chk('tAmountDec');chk('tReceived');chk('tBalance');chk('tPartyBal');chk('tTaxDetails');chk('tYouSaved');chk('tGrouping');chk('tDesc');
@@ -9025,55 +8877,19 @@ async function saveBranch() {
     const sec = worker.auth();
     const cred = await sec.createUserWithEmailAndPassword(branchCode + '@branch.karobar.app', pass);
     const branchId = cred.user.uid;
-    await sec.signOut();
-
-    // Save branch data to Firestore
-    await window.fbDB.collection('branches').doc(branchId).set({
-      branchCode: branchCode,
-      authUid: branchId,
-      name: name,
-      phone: phone,
-      address: address,
-      ownerUid: ownerUid,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'active'
-    });
-
-    // Map the authenticated branch account to its owner's store.
-    await window.fbDB.collection('branchMap').doc(branchId).set({
-      ownerUid: ownerUid,
-      branchCode: branchCode,
-      branchName: name,
-      phone: phone,
-      address: address
-    });
-
-    // Lookup is used by stock views and legacy branch migration.
-    await window.fbDB.collection('branchLookup').doc(branchCode).set({
-      branchId: branchId,
-      ownerUid: ownerUid,
-      branchName: name,
-      phone: phone,
-      address: address,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Try to save to globalBranchCodes (optional - for global uniqueness)
+    // Publish the account mapping and its access grant together, or publish none.
     try {
-      await window.fbDB.collection('globalBranchCodes').doc(branchCode).set({
-        branchId: branchId,
-        ownerUid: ownerUid,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    } catch (globalErr) {
-      console.warn('Could not save to globalBranchCodes: - app.js:8248', globalErr.message);
-      // Continue - this is optional
-    }
-
-    // Grant this authenticated branch access to the owner's store.
-    await window.fbDB.collection('users').doc(ownerUid).update({
-      memberUids: firebase.firestore.FieldValue.arrayUnion(branchId)
-    });
+      const batch=window.fbDB.batch();
+      batch.set(window.fbDB.collection('branches').doc(branchId),{branchCode,authUid:branchId,name,phone,address,ownerUid,createdAt:firebase.firestore.FieldValue.serverTimestamp(),status:'active'});
+      batch.set(window.fbDB.collection('branchMap').doc(branchId),{ownerUid,branchCode,branchName:name,phone,address});
+      batch.set(window.fbDB.collection('branchLookup').doc(branchCode),{branchId,ownerUid,branchName:name,phone,address,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      batch.set(window.fbDB.collection('globalBranchCodes').doc(branchCode),{branchId,ownerUid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      batch.set(window.fbDB.collection('users').doc(ownerUid),{memberUids:firebase.firestore.FieldValue.arrayUnion(branchId)},{merge:true});
+      await batch.commit();
+    } catch(error) {
+      try{await cred.user.delete();}catch(cleanupError){logDiagnostic('branch','Incomplete branch account '+branchCode+' needs owner review: '+cleanupError.code);}
+      throw error;
+    } finally {await sec.signOut();}
 
     errEl.textContent = '';
     closeModal('addBranchModal');
@@ -9350,7 +9166,7 @@ function fbBranchDoLogin() {
   var pass=document.getElementById('branchPassInput').value||'';
   var errEl=document.getElementById('branchAuthError');
   if(!code){errEl.textContent='Enter branch code';return;}
-  if(code.length!==6){errEl.textContent='Code must be 6 digits';return;}
+  if(!/^\d{6}$/.test(code)){errEl.textContent='Code must be 6 digits';return;}
   if(!pass){errEl.textContent='Enter branch password';return;}
   errEl.textContent='Logging in...';
   errEl.style.color='#888';
@@ -9531,8 +9347,9 @@ function fbBranchDoLogin() {
       // 1) Am I a staff member of someone else's store? Check the mapping.
       const branchDetails=isBranchSession
         ? window.fbDB.collection('branches').doc(authUid).get().then(function(snap){
-            if(snap.exists)branchData={...branchData,...snap.data()};
-          }).catch(function(e){logDiagnostic('branch','Could not load branch address: '+(e.code||e.message));})
+            if(!snap.exists||snap.data().status==='inactive'||snap.data().status==='disabled')throw {code:'user-deleted'};
+            branchData={...branchData,...snap.data()};
+          })
         : Promise.resolve();
       return branchDetails.then(function(){return window.fbDB.collection('staffMap').doc(authUid).get();}).then(function(mapSnap){
         if(version!==sessionVersion)return;
@@ -9817,6 +9634,8 @@ function fbBranchDoLogin() {
       .catch(function(e) {
         var msg = 'Invalid branch code or password.';
         if (e.code === 'auth/network-request-failed') msg = 'Please check your internet connection and try again.';
+        else if(e.code==='auth/too-many-requests')msg='Too many login attempts. Please wait and try again.';
+        else if(e.code==='auth/user-disabled')msg='This branch account is disabled. Contact the owner.';
         if (onErr) onErr(msg);
       });
   };

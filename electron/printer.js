@@ -22,9 +22,24 @@ function checkPrinter(printers, name) {
 }
 
 function receiptPageSize(widthMm, heightPx) {
-  if (![58, 80, 104].includes(widthMm)) throw new Error('Unsupported receipt paper width.');
+  if (!Number.isFinite(widthMm) || widthMm < 40 || widthMm > 112) throw new Error('Unsupported receipt paper width.');
   const heightMm = Math.max(80, Math.min(2000, Math.ceil(Number(heightPx || 0) * 25.4 / 96 + 10)));
   return { width: widthMm * 1000, height: heightMm * 1000 };
 }
 
-module.exports = { availablePrinters, checkPrinter, receiptPageSize };
+function printJobOptions(job) {
+  const copies=job.copies == null ? 1 : job.copies;
+  if(!Number.isInteger(copies)||copies<1||copies>10)throw new Error('Copies must be between 1 and 10.');
+  if(job.printingType!=null&&!['text','image'].includes(job.printingType))throw new Error('Unsupported printing type.');
+  if(job.paperWidthMm!=null)receiptPageSize(job.paperWidthMm,0);
+  return {copies,printingType:job.printingType||'text',autoCut:job.autoCut===true,openDrawer:job.openDrawer===true};
+}
+
+function peripheralCommands(options) {
+  const bytes=[];
+  if(options.autoCut)bytes.push(0x1b,0x64,3,0x1d,0x56,0); // Feed three lines, full cut.
+  if(options.openDrawer)bytes.push(0x1b,0x70,0,25,250); // Drawer pin 2 pulse.
+  return Buffer.from(bytes);
+}
+
+module.exports = { availablePrinters, checkPrinter, receiptPageSize, printJobOptions, peripheralCommands };

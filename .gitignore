@@ -5,3 +5,9 @@ release/
 Setup/
 Installer/
 npm-debug.log*
+
+web-dist/
+.firebase/
+firebase-debug.log*
+
+final software/

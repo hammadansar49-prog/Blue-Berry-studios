@@ -18,8 +18,12 @@ const http = require('http');
 const fs = require('fs');
 const url = require('url');
 const { execFile } = require('child_process');
-const { availablePrinters, checkPrinter, receiptPageSize } = require('./printer');
+const { availablePrinters, checkPrinter, receiptPageSize, printJobOptions } = require('./printer');
+const { sendPeripheralCommands } = require('./printer-peripherals');
 const { listenPersistent } = require('./local-origin');
+const {trialState}=require('./trial');
+const trialHours=Number(require('../package.json').trialHours)||0;
+let trialExpired=false;
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
 
@@ -164,13 +168,13 @@ ipcMain.handle('karobar-printer-hints', function () {
 });
 
 ipcMain.handle('karobar-print-invoice', async function (_event, job) {
+  if(enforceTrial())return {ok:false,error:'Testing period completed. Contact the developer.'};
   if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'App window is unavailable.' };
   if (!job || typeof job.html !== 'string' || !job.html.trim() || job.html.length > 2000000 || typeof job.printerName !== 'string') {
     return { ok: false, error: 'Invalid print job.' };
   }
-  if (job.paperWidthMm != null && ![58, 80, 104].includes(job.paperWidthMm)) {
-    return { ok: false, error: 'Unsupported receipt paper width.' };
-  }
+  let jobOptions;
+  try { jobOptions=printJobOptions(job); } catch(e) {return {ok:false,error:e.message};}
   let printers;
   try { printers = await mainWindow.webContents.getPrintersAsync(); }
   catch (e) { return { ok: false, error: 'Could not query Windows printers: ' + e.message }; }
@@ -179,16 +183,31 @@ ipcMain.handle('karobar-print-invoice', async function (_event, job) {
   const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   try {
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(job.html));
-    const printOptions = { silent: true, printBackground: true, deviceName: job.printerName };
+    await win.webContents.executeJavaScript('Promise.all(Array.from(document.images,image=>image.decode().catch(()=>{}))).then(()=>document.fonts.ready).then(()=>true)');
+    const printOptions = { silent: true, printBackground: true, deviceName: job.printerName, copies: jobOptions.copies, margins:{marginType:'none'} };
     if (job.paperWidthMm) {
+      const width=Math.ceil(job.paperWidthMm*96/25.4);
+      win.setContentSize(width,800);
       const pixels = await win.webContents.executeJavaScript('Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)');
       printOptions.pageSize = receiptPageSize(job.paperWidthMm, pixels);
+      if(jobOptions.printingType==='image'){
+        if(pixels>7500)throw new Error('Receipt too long for image printing. Select Text Printing for this invoice.');
+        win.setContentSize(width,Math.ceil(pixels));
+        await new Promise(resolve=>setTimeout(resolve,150));
+        const capture=await win.webContents.capturePage({x:0,y:0,width,height:Math.ceil(pixels)});
+        const data=capture.toDataURL();
+        await win.webContents.executeJavaScript(`document.body.innerHTML='';var image=document.createElement('img');image.src=${JSON.stringify(data)};image.style.width='${job.paperWidthMm}mm';image.style.display='block';document.body.appendChild(image);image.decode().then(()=>true)`);
+      }
     }
     const result = await new Promise(resolve => {
       win.webContents.print(printOptions, (success, reason) => {
         resolve(success ? { ok: true } : { ok: false, error: reason || 'Windows rejected the print job.' });
       });
     });
+    if(result.ok&&(jobOptions.autoCut||jobOptions.openDrawer)){
+      try{await sendPeripheralCommands(job.printerName,jobOptions);}
+      catch(e){return {ok:true,warning:'Receipt queued, but cut/drawer command failed: '+e.message};}
+    }
     return result;
   } catch (e) {
     return { ok: false, error: 'Print failed: ' + e.message };
@@ -197,8 +216,21 @@ ipcMain.handle('karobar-print-invoice', async function (_event, job) {
   }
 });
 
+function enforceTrial(){
+ if(!trialHours)return false;
+ let state;try{state=trialState(path.join(app.getPath('appData'),'KarobarTrial','trial.json'),trialHours);}catch(e){state={expired:true};}
+ if(!state.expired)return false;
+ if(trialExpired)return true;trialExpired=true;
+ if(localServer){try{localServer.close();}catch(e){}}
+ if(!mainWindow||mainWindow.isDestroyed())mainWindow=new BrowserWindow({width:760,height:480,webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true}});
+ const html='<html><head><title>Testing period completed</title></head><body style="font:18px Segoe UI;background:#f4f7fc;color:#172a47;padding:60px;line-height:1.7"><h1>2-day testing period completed</h1><p>Please report to the developer whether everything is working correctly, and share any issues you found.</p><p>Developer ko report karein ke software theek chal raha hai ya nahi. Feedback ke baad final software diya jayega.</p><p>Your saved data has not been deleted.</p></body></html>';
+ mainWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));mainWindow.show();return true;
+}
+
 app.whenReady().then(function () {
   if (!primaryInstance) return;
+  if(enforceTrial())return;
+  if(trialHours)setInterval(enforceTrial,15000);
   Menu.setApplicationMenu(null); // hide the default Electron menu bar
 
   // During development you can run VS Code Live Server (port 5500)

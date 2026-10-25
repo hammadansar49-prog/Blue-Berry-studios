@@ -20,7 +20,7 @@ function harness(cache = new Map(), docs = new Map()) {
   context.window = context;
   context.fbAuth = { getRedirectResult: () => Promise.resolve(), onAuthStateChanged: fn => {auth=fn;}, signOut: async () => auth(null) };
   context.fbDB = { collection: collection => ({ doc: id => ({
-    get: () => { const value=snap(collection==='users'?docs.get(id):null); if(collection==='users'&&delayed){const fn=delayed;delayed=null;return new Promise(resolve=>fn(()=>resolve(value)));} return Promise.resolve(value); },
+    get: () => { const value=snap(collection==='users'?docs.get(id):docs.get(collection+'/'+id)); if(collection==='users'&&delayed){const fn=delayed;delayed=null;return new Promise(resolve=>fn(()=>resolve(value)));} return Promise.resolve(value); },
     set: async data => { if(fail) throw {code:'unavailable'}; docs.set(id,data); if(writeDelay){const fn=writeDelay;writeDelay=null;await new Promise(r=>fn(r));} },
     onSnapshot: fn => {listener=fn;return ()=>{listener=null;};}
   }) }) };
@@ -31,7 +31,7 @@ function harness(cache = new Map(), docs = new Map()) {
   };
   vm.createContext(context); vm.runInContext(source,context);
   return { context, cache, docs, base, elements,
-    login: async id => { auth({uid:id,email:id+'@example.com'}); await drain(); },
+    login: async (id,email=id+'@example.com') => { auth({uid:id,email}); await drain(); },
     logout: async () => {await context.fbLogout();await drain();},
     edit: (field,value) => {context.store.business[field]=value;context.cloudPush();},
     tick: async () => {const jobs=[...timers.values()];timers.clear();jobs.forEach(fn=>fn());await drain();},
@@ -113,4 +113,31 @@ test('pending saves from two tabs survive closing both before upload',async()=>{
   a.edit('logo','tab-a-logo');b.edit('phone','tab-b-phone');
   const next=harness(a.cache,a.docs);await next.login('a');await next.tick();
   const saved=JSON.parse(next.docs.get('a').data);assert.equal(saved.business.logo,'tab-a-logo');assert.equal(saved.business.phone,'tab-b-phone');
+});
+
+test('branch account loads owner store and writes back to the owner, not a new store',async()=>{
+ const docs=new Map(),owner={business:{name:'Owner shop'},settings:{},users:[],sales:[]};
+ docs.set('owner',{data:JSON.stringify(owner)});
+ docs.set('branchMap/branch-user',{ownerUid:'owner',branchCode:'123456',branchName:'Lahore'});
+ docs.set('branches/branch-user',{ownerUid:'owner',branchCode:'123456',name:'Lahore',status:'active',address:'Lahore Road'});
+ const h=harness(new Map(),docs);await h.login('branch-user','123456@branch.karobar.app');
+ assert.equal(h.context.store.currentUser.role,'branch');assert.equal(h.context.store.currentUser.branchAddress,'Lahore Road');assert.equal(h.context.store.business.name,'Owner shop');
+ h.context.store.sales.push({id:'branch-sale',total:100});h.context.cloudPush();await h.tick();
+ assert.equal(JSON.parse(docs.get('owner').data).sales[0].id,'branch-sale');assert.equal(docs.has('branch-user'),false);
+});
+test('disabled and missing branch records never become owner sessions',async()=>{
+ for(const status of ['disabled','missing']){
+  const docs=new Map([['owner',{data:JSON.stringify({business:{name:'Private owner shop'},settings:{},users:[]})}],['branchMap/branch-user',{ownerUid:'owner',branchCode:'123456'}]]);
+  if(status==='disabled')docs.set('branches/branch-user',{status:'disabled'});
+  const h=harness(new Map(),docs);await h.login('branch-user','123456@branch.karobar.app');
+  assert.notEqual(h.context.store.currentUser?.role,'branch');assert.notEqual(h.context.store.business.name,'Private owner shop');
+ }
+});
+test('simultaneous device sales remain in the shared store',async()=>{
+ const a=harness();await a.login('owner');a.context.store.sales=[];a.context.cloudPush();await a.tick();
+ const b=harness(new Map(),a.docs);await b.login('owner');
+ a.context.store.sales.push({id:'device-a-sale',total:100});a.context.cloudPush();
+ b.context.store.sales.push({id:'device-b-sale',total:200});b.context.cloudPush();
+ await a.tick();await b.tick();
+ assert.deepEqual(JSON.parse(a.docs.get('owner').data).sales.map(s=>s.id).sort(),['device-a-sale','device-b-sale']);
 });

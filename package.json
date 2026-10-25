@@ -10,7 +10,12 @@
     "dev": "set ELECTRON_START_URL=http://localhost:5500&& electron .",
     "icon": "node scripts/make-icon.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "test:print": "node --test scripts/print-engine.test.cjs electron/printer.test.js",
+    "preview": "node scripts/local-preview.cjs",
+    "build:web": "node scripts/build-web.cjs",
+    "test": "node --test scripts/sync.test.cjs scripts/payment-in.test.cjs scripts/print-engine.test.cjs electron/printer.test.js electron/local-origin.test.js electron/trial.test.js",
+    "dist:trial": "electron-builder --win --config trial-build.json"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.58",
@@ -21,7 +26,7 @@
   "build": {
     "appId": "com.karobar.app",
     "productName": "Karobar",
-    "copyright": "Copyright © Hammad Ansar",
+    "copyright": "Copyright \u00a9 Hammad Ansar",
     "files": [
       "electron/**/*",
       "index.html",
@@ -30,7 +35,11 @@
       "styles.css",
       "firebase-config.js",
       "assets/**/*",
-      "vendor/**/*"
+      "vendor/**/*",
+      "print-engine.js",
+      "print-settings.js",
+      "print-settings.css",
+      "invoice-print.css"
     ],
     "win": {
       "icon": "assets/icon.ico",

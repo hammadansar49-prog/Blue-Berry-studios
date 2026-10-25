@@ -124,7 +124,7 @@ Open Settings > Print > Thermal Printer, click Refresh printers, select the inst
 
 Paper width can be selected as 58 mm or 80 mm, with 104 mm for compatible models, in both Print Settings and the receipt preview. The chosen width is saved and sent to Electron's print job. An uploaded business logo prints at the top of the receipt; branch invoices show the branch address saved with the invoice. The centered Code 128 barcode identifies the saved invoice for lookup. The QR includes receipt details when they fit; large invoices use a smaller invoice reference payload, while the full transaction remains in Karobar.
 
-Spooler acceptance does not prove paper was physically printed. Windows drivers may not report all hardware faults. Auto cut and cash drawer controls are not implemented through this print path; they require printer-specific commands or driver support. Check those features on the actual device before relying on them.
+Spooler acceptance does not prove paper was physically printed. Windows drivers may not report all hardware faults. Auto cut and cash drawer options send ESC/POS commands through Windows RAW spooling after the receipt job is accepted. Enable these only for a compatible printer and connected drawer. Verify them on the actual device. See [Print settings](docs/print-settings.md) for themes, profile controls and verification.
 
 ### Branch login migration and Firestore rules
 
