@@ -23,6 +23,18 @@ const fields=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,field(v)]))
  const updated=await req(base+'/'+ownerPath,'GET',null,owner.idToken);assert.equal(JSON.parse(updated.fields.data.stringValue).sales[0].id,'qa-branch-sale');
  let denied=false;try{await req(base+'/'+ownerPath);}catch(e){denied=e.message.includes('permission')||e.message.includes('PERMISSION');}assert.ok(denied,'Anonymous access must be denied');
  console.log('PASS live Firebase: atomic branch setup, branch password login, owner-store read/write, anonymous access denied');
+ // Exercise the actual application merge on two stale device snapshots against live Firestore.
+ const vm=require('node:vm'),source=fs.readFileSync('app.js','utf8');
+ const mergeCode=source.slice(source.indexOf('  function recoverFields('),source.indexOf('  function queueChanges()'));
+ const initial={...data,items:[{id:'qa-item',stock:10}],parties:[{id:'qa-party',balance:0}],sales:[],counters:{sale:1}};
+ const devices=['device-a','device-b'].map(id=>{const c={store:JSON.parse(JSON.stringify(initial)),crypto};vm.createContext(c);vm.runInContext(mergeCode,c);c.store.items[0].stock--;c.store.parties[0].balance+=100;c.store.counters.sale++;c.store.sales.push({id,total:100});c.recordAccounting(initial);return c;});
+ await req(base+'/'+ownerPath+'?updateMask.fieldPaths=data','PATCH',{fields:fields({data:JSON.stringify(initial)})},owner.idToken);
+ for(const device of devices){const snap=await req(base+'/'+ownerPath,'GET',null,login.idToken);const remote=JSON.parse(snap.fields.data.stringValue);const merged=device.recoverChanges(initial,device.store,remote);await req(base+'/'+ownerPath+'?updateMask.fieldPaths=data','PATCH',{fields:fields({data:JSON.stringify(merged)})},login.idToken);}
+ const finalSnap=await req(base+'/'+ownerPath,'GET',null,owner.idToken),final=JSON.parse(finalSnap.fields.data.stringValue);
+ assert.equal(final.items[0].stock,8);assert.equal(final.parties[0].balance,200);assert.equal(final.counters.sale,3);assert.equal(final.sales.length,2);
+ const replay=devices[0].recoverChanges(initial,devices[0].store,final);assert.equal(replay.items[0].stock,8);
+ console.log('PASS live stale-device accounting: stock 8, balance 200, counter 3; replay unchanged');
+
  }finally{
  if(owner)for(const p of created.reverse()){try{await req(base+'/'+p,'DELETE',null,owner.idToken);}catch(e){cleanupErrors.push(p+': '+e.message);}}
  for(const account of accounts.reverse()){try{await auth('delete',{idToken:account.idToken});}catch(e){cleanupErrors.push('Temporary account '+account.localId+': '+e.message);}}

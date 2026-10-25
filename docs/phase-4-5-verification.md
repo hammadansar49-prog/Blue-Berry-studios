@@ -1,3 +1,5 @@
+Version 3.0.1 resolves the concurrent accounting defect using deduplicated operations. 38 automated tests pass. All selling devices must update. Historical discrepancies need separate reconciliation.
+
 # Audit correction
 
 See `client-requirements-audit.md`: concurrent sales preserve records but can lose stock/balance/counter updates. Phase 4 is not fully complete.

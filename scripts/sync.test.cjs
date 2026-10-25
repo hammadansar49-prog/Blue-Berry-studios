@@ -141,3 +141,29 @@ test('simultaneous device sales remain in the shared store',async()=>{
  await a.tick();await b.tick();
  assert.deepEqual(JSON.parse(a.docs.get('owner').data).sales.map(s=>s.id).sort(),['device-a-sale','device-b-sale']);
 });
+async function accountingPair(){const a=harness();await a.login('owner');Object.assign(a.context.store,{items:[{id:'item',stock:10,sizes:[{size:'M',stock:10}]}],parties:[{id:'party',balance:0}],sales:[],counters:{sale:1}});a.context.cloudPush();await a.tick();const b=harness(new Map(),a.docs);await b.login('owner');return {a,b};}
+function sell(h,id){h.context.store.sales.push({id,total:100});h.context.store.items[0].stock--;h.context.store.items[0].sizes[0].stock--;h.context.store.parties[0].balance+=100;h.context.store.counters.sale++;h.context.cloudPush();}
+test('concurrent sales merge stock, size stock, customer balance and counter',async()=>{const {a,b}=await accountingPair();sell(a,'a');sell(b,'b');await a.tick();await b.tick();const s=JSON.parse(a.docs.get('owner').data);assert.equal(s.sales.length,2);assert.equal(s.items[0].stock,8);assert.equal(s.items[0].sizes[0].stock,8);assert.equal(s.parties[0].balance,200);assert.equal(s.counters.sale,3);});
+test('retry/restart does not apply accounting twice',async()=>{const {a,b}=await accountingPair();sell(a,'a');sell(b,'b');await a.tick();b.fail(true);await b.tick();const restarted=harness(b.cache,a.docs);await restarted.login('owner');await restarted.tick();await restarted.context.cloudRefresh(false);await drain();await restarted.tick();const s=JSON.parse(a.docs.get('owner').data);assert.equal(s.items[0].stock,8);assert.equal(s.parties[0].balance,200);});
+
+test('lost acknowledgement replay preserves later remote deductions',async()=>{
+ const {a,b}=await accountingPair();sell(a,'a');const pendingCopy=new Map(a.cache);await a.tick();sell(b,'b');await b.tick();
+ const restarted=harness(pendingCopy,a.docs);await restarted.login('owner');await restarted.tick();
+ const s=JSON.parse(a.docs.get('owner').data);assert.equal(s.items[0].stock,8);assert.equal(s.parties[0].balance,200);assert.equal(s.counters.sale,3);
+});
+test('three offline sales and shared-tab recovery count every operation once',async()=>{
+ const {a,b}=await accountingPair();sell(a,'a1');sell(a,'a2');sell(b,'b1');await b.tick();await a.tick();
+ let s=JSON.parse(a.docs.get('owner').data);assert.equal(s.items[0].stock,7);assert.equal(s.parties[0].balance,300);assert.equal(s.counters.sale,4);
+ const c=harness(a.cache,a.docs);await c.login('owner');await a.context.cloudRefresh(false);await drain();sell(a,'a3');sell(c,'c1');await c.tick();await a.tick();
+ s=JSON.parse(a.docs.get('owner').data);assert.equal(s.items[0].stock,5);assert.equal(s.parties[0].balance,500);assert.equal(s.sales.length,5);
+});
+
+test('concurrent receipt adjustments merge and recalculate payment status',async()=>{
+ const {a,b}=await accountingPair();a.context.store.sales=[{id:'existing',total:200,received:0,status:'unpaid'}];a.context.cloudPush();await a.tick();await b.context.cloudRefresh(false);await drain();
+ for(const h of [a,b]){h.context.store.sales[0].received+=100;h.context.store.parties[0].balance-=100;h.context.cloudPush();}
+ await a.tick();await b.tick();const s=JSON.parse(a.docs.get('owner').data);assert.equal(s.sales[0].received,200);assert.equal(s.sales[0].status,'paid');assert.equal(s.parties[0].balance,-200);
+});
+test('ordinary numeric configuration is not summed and repeat cloudPush is idempotent',async()=>{
+ const {a,b}=await accountingPair();a.context.store.settings.taxRate=5;b.context.store.settings.taxRate=10;sell(a,'a');a.context.cloudPush();a.context.cloudPush();sell(b,'b');await a.tick();await b.tick();
+ const s=JSON.parse(a.docs.get('owner').data);assert.equal(s.items[0].stock,8);assert.equal(s.settings.taxRate,10);assert.equal(s.accountingOps.length,2);
+});

@@ -1,3 +1,9 @@
+# Accounting fix update — version 3.0.1
+
+The concurrent accounting defect recorded below is fixed with unique, replay-safe accounting operations. Regression tests now cover stock, size stock, party balances, counters, receipt status, offline restart, shared tabs and lost acknowledgements. All devices must update to 3.0.1; older clients still contain the overwrite bug. Existing incorrect balances are not rewritten automatically because there is no safe way to infer historical opening balances.
+
+The remainder of the original audit is preserved below; its other gaps remain pending.
+
 # Client requirements audit â€” 2026-10-25
 
 This audit supersedes the earlier broad claim that Phase 4 was complete. Existing 30 tests pass, but an additional two-device accounting probe reproduced a critical gap not covered by those tests.

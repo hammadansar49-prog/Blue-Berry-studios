@@ -9199,11 +9199,11 @@ function fbBranchDoLogin() {
   function cloudJSON(){ var c = {}; for(var k in store){ if(k!=='currentUser') c[k]=store[k]; } return JSON.stringify(c); }
   function pendingKey(){return KEY+':pending:'+fbUser.uid+':'+dataUid;}
   // Reapply only locally changed fields when recovering against a newer cloud copy.
-  function recoverChanges(base, local, remote){
+  function recoverFields(base, local, remote){
     if(JSON.stringify(base)===JSON.stringify(local))return remote;
     if(JSON.stringify(base)===JSON.stringify(remote)||JSON.stringify(local)===JSON.stringify(remote))return local;
     if(Array.isArray(base)&&Array.isArray(local)&&Array.isArray(remote)){
-      var identity=function(value){return value&&typeof value==='object'?(value.id!=null?'id:'+value.id:null):JSON.stringify(value);};
+      var identity=function(value){return value&&typeof value==='object'?(value.id!=null?'id:'+value.id:value.size!=null?'size:'+value.size:null):JSON.stringify(value);};
       var lists=[base,local,remote].map(function(values){
         var map=new Map();values.forEach(function(value){var id=identity(value);if(id==null||map.has(id))throw new Error('Conflicting list edits. Local changes are retained; export a backup before resolving.');map.set(id,value);});return map;
       });
@@ -9212,7 +9212,7 @@ function fbBranchDoLogin() {
         var before=lists[0].get(id),ours=lists[1].get(id),theirs=lists[2].get(id);
         if(!lists[1].has(id)){if(!lists[0].has(id)||JSON.stringify(before)!==JSON.stringify(theirs))merged.push(theirs);return;}
         if(!lists[2].has(id)){if(!lists[0].has(id)||JSON.stringify(before)!==JSON.stringify(ours))merged.push(ours);return;}
-        merged.push(recoverChanges(before,ours,theirs));
+        merged.push(recoverFields(before,ours,theirs));
       });
       return merged;
     }
@@ -9220,13 +9220,62 @@ function fbBranchDoLogin() {
       var result=Object.assign({},remote);
       new Set(Object.keys(base).concat(Object.keys(local))).forEach(function(k){
         if(!Object.prototype.hasOwnProperty.call(local,k)){delete result[k];return;}
-        result[k]=recoverChanges(base[k],local[k],remote[k]);
+        result[k]=recoverFields(base[k],local[k],remote[k]);
       });
       return result;
     }
     return local;
   }
+  // Numeric changes are immutable operations, so transaction retries and other
+  // devices cannot overwrite or apply the same stock/balance adjustment twice.
+  function accountingValues(data){
+    var values=new Map();
+    function add(path,value){if(typeof value==='number'&&Number.isFinite(value))values.set(JSON.stringify(path),value);}
+    Object.keys(data.counters||{}).forEach(function(key){add(['counters',key],data.counters[key]);});
+    ['items','parties','sales'].forEach(function(kind){(data[kind]||[]).forEach(function(row){
+      if(row.id==null)return;
+      add([kind,String(row.id),kind==='items'?'stock':kind==='parties'?'balance':'received'],row[kind==='items'?'stock':kind==='parties'?'balance':'received']);
+      if(kind==='items')(row.sizes||[]).forEach(function(size){add(['items',String(row.id),'sizes',String(size.size),'stock'],size.stock);});
+    });});
+    return values;
+  }
+  function accountingTarget(data,path){
+    if(path[0]==='counters')return data.counters&&[data.counters,path[1]];
+    var row=(data[path[0]]||[]).find(function(r){return String(r.id)===path[1];});
+    if(!row)return null;
+    if(path[2]==='sizes'){row=(row.sizes||[]).find(function(r){return String(r.size)===path[3];});return row&&[row,'stock'];}
+    return [row,path[2]];
+  }
+  function recordAccounting(before){
+    var old=accountingValues(before),changes=[];
+    accountingValues(store).forEach(function(value,key){if(old.has(key)&&value!==old.get(key))changes.push({path:JSON.parse(key),delta:value-old.get(key)});});
+    if(!changes.length)return;
+    var opId=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2);
+    store.accountingOps=(store.accountingOps||[]).concat([{id:opId,changes:changes}]);
+  }
+  function recoverChanges(base,local,remote){
+    var result=JSON.parse(JSON.stringify(recoverFields(base,local,remote)));
+    var operations=new Map();
+    (remote.accountingOps||[]).concat(local.accountingOps||[]).forEach(function(op){operations.set(op.id,op);});
+    if(operations.size)result.accountingOps=Array.from(operations.values());
+    var known=new Set((remote.accountingOps||[]).map(function(op){return op.id;}));
+    var deltas=new Map();
+    (remote.accountingOps||[]).forEach(function(op){(op.changes||[]).forEach(function(change){deltas.set(JSON.stringify(change.path),0);});});
+    (local.accountingOps||[]).forEach(function(op){
+      if(known.has(op.id))return;known.add(op.id);
+      (op.changes||[]).forEach(function(change){if(!Number.isFinite(change.delta))return;var key=JSON.stringify(change.path);deltas.set(key,(deltas.get(key)||0)+change.delta);});
+    });
+    // Start at the remote value, not the recursively merged scalar. Each new
+    // operation is applied once even when two devices made identical changes.
+    deltas.forEach(function(delta,key){var path=JSON.parse(key),from=accountingTarget(remote,path),to=accountingTarget(result,path);
+      if(from&&to&&typeof from[0][from[1]]==='number')to[0][to[1]]=Math.round((from[0][from[1]]+delta)*1e8)/1e8;
+    });
+    // A received-amount operation must also update the derived invoice status.
+    (result.sales||[]).forEach(function(sale){if(!sale.refunded&&['paid','unpaid'].includes(sale.status))sale.status=Number(sale.received)>=Number(sale.total)?'paid':'unpaid';});
+    return result;
+  }
   function queueChanges(){
+    recordAccounting(JSON.parse(pending?pending.json:lastPushedJSON||'{}'));
     var json=cloudJSON();
     if(!pending && json===lastPushedJSON)return;
     var next={base:pending?pending.base:lastPushedJSON,json:json};

@@ -1,6 +1,6 @@
 {
   "name": "karobar",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "KAROBAR - Billing & POS desktop app",
   "main": "electron/main.js",
   "author": "Hammad Ansar",
